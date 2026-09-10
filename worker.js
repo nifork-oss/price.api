@@ -170,22 +170,6 @@ export default {
     }
 
     try {
-      // ВРЕМЕННЫЙ диагностический эндпоинт — покажет, что реально отвечает JSONBin.
-      // Удалите этот блок, когда всё заработает.
-      if (path === "/debug" && request.method === "GET") {
-        const upstream = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-          headers: { "X-Master-Key": env.JSONBIN_KEY || "" },
-        });
-        const text = await upstream.text();
-        return json({
-          jsonbinStatus: upstream.status,
-          jsonbinOk: upstream.ok,
-          keyIsSet: !!env.JSONBIN_KEY,
-          keyLength: env.JSONBIN_KEY ? env.JSONBIN_KEY.length : 0,
-          bodyPreview: text.slice(0, 500),
-        });
-      }
-
       // Публичный прайс-лист (без входа) — для index.html
       if (path === "/public" && request.method === "GET") {
         const record = await readBin(env);
