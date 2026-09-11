@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Счёт — Кабинет мастера</title>
+<style>
+* { box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 16px; color: #0f172a; }
+.container { max-width: 640px; margin: 0 auto; }
+.loader { text-align: center; color: #64748b; padding: 60px 0; font-size: 14px; }
+.error-box { background: #fff; border: 1px solid #fecaca; border-radius: 14px; padding: 24px; text-align: center; color: #b91c1c; font-size: 14px; margin-top: 40px; }
+.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 14px; }
+.doc-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.doc-title { font-size: 20px; font-weight: 800; color: #4f46e5; margin: 0; }
+.doc-badge { background: #fef9c3; color: #a16207; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.meta-row { font-size: 13px; color: #475569; margin: 4px 0; }
+.meta-row b { color: #0f172a; }
+.note-box { background: #f8fafc; border-left: 4px solid #4f46e5; border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #334155; margin-top: 10px; }
+table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 13px; }
+th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
+th { background: #f8fafc; font-size: 11px; color: #64748b; text-transform: uppercase; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.total-box { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: #fff; border-radius: 10px; padding: 14px 16px; margin-top: 14px; font-weight: 700; font-size: 16px; }
+.attachment-chip-wrap { display: flex; align-items: center; gap: 4px; }
+.attachment-thumb { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: #e2e8f0; }
+.attachment-link { text-decoration: none; }
+.attachment-download-btn { background: #e0e7ff; color: #4338ca; border: none; border-radius: 6px; width: 30px; height: 30px; font-size: 13px; cursor: pointer; flex-shrink: 0; }
+.attachment-download-btn:disabled { opacity: 0.6; }
+.footer-link { display: block; text-align: center; font-size: 12px; color: #94a3b8; margin-top: 18px; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="container">
+<div id="loadingState" class="loader">⏳ Загрузка счёта...</div>
+<div id="errorState" class="error-box" style="display:none;"></div>
+<div id="contentState" style="display:none;"></div>
+</div>
+
+<script>
+const WORKER_URL = "https://price-api.nifork.workers.dev";
+
+function escapeHtml(str) {
+return String(str ?? '')
+.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+.replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+
+function getIdFromUrl() {
+return new URLSearchParams(window.location.search).get('id');
+}
+
+function showError(msg) {
+document.getElementById('loadingState').style.display = 'none';
+const box = document.getElementById('errorState');
+box.textContent = msg;
+box.style.display = 'block';
+}
+
+function renderAttachmentsHtml(attachments) {
+if (!Array.isArray(attachments) || attachments.length === 0) return '';
+const chips = attachments.map(att => {
+const isImage = att.type && att.type.startsWith('image/');
+const downloadBtn = `<button type="button" class="attachment-download-btn" data-url="${escapeHtml(att.url)}" data-name="${escapeHtml(att.name)}" onclick="downloadAttachment(this)" title="Скачать">⬇️</button>`;
+if (isImage) {
+return `<div class="attachment-chip-wrap"><a href="${att.url}" target="_blank" rel="noopener" class="attachment-link"><img src="${att.url}" class="attachment-thumb" alt="${escapeHtml(att.name)}" title="${escapeHtml(att.name)}"></a>${downloadBtn}</div>`;
+}
+return `<div class="attachment-chip-wrap"><a href="${att.url}" target="_blank" rel="noopener" class="attachment-link" style="display:flex; align-items:center; gap:4px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; padding:6px 10px; font-size:12px; color:#334155;">📄 ${escapeHtml(att.name)}</a>${downloadBtn}</div>`;
+}).join('');
+return `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">${chips}</div>`;
+}
+
+async function downloadAttachment(btn) {
+const url = btn.dataset.url;
+const name = btn.dataset.name || 'file';
+if (!url) return;
+const originalHtml = btn.innerHTML;
+btn.disabled = true;
+btn.innerHTML = '⏳';
+try {
+const res = await fetch(url);
+if (!res.ok) throw new Error('HTTP ' + res.status);
+const blob = await res.blob();
+const link = document.createElement('a');
+link.href = URL.createObjectURL(blob);
+link.download = name;
+document.body.appendChild(link);
+link.click();
+document.body.removeChild(link);
+URL.revokeObjectURL(link.href);
+} catch (e) {
+console.error('Не удалось скачать файл:', e);
+alert('Не удалось скачать файл — можно открыть его по ссылке и сохранить вручную.');
+} finally {
+btn.disabled = false;
+btn.innerHTML = originalHtml;
+}
+}
+
+function renderInvoice(rec) {
+document.getElementById('loadingState').style.display = 'none';
+const isEstimate = rec.docType === 'estimate';
+const items = rec.items || [];
+let rows = '';
+items.forEach(i => {
+const sum = (Number(i.qty) || 0) * (Number(i.price) || 0);
+rows += `
+<tr>
+<td>${escapeHtml(i.name)}${i.location ? `<br><span style="font-size:11px; color:#6366f1;">📍 ${escapeHtml(i.location)}</span>` : ''}</td>
+<td class="num">${i.qty}</td>
+<td class="num">${escapeHtml(i.unit)}</td>
+<td class="num">${Number(i.price).toLocaleString('ru-RU')} ₽</td>
+<td class="num">${sum.toLocaleString('ru-RU')} ₽</td>
+</tr>`;
+});
+
+const content = document.getElementById('contentState');
+content.innerHTML = `
+<div class="card">
+<div class="doc-header">
+<h1 class="doc-title">${isEstimate ? '📋 Предварительный расчёт' : '🧾 Счёт'}</h1>
+${isEstimate ? '<span class="doc-badge">Не счёт на оплату</span>' : ''}
+</div>
+<div class="meta-row">📅 <b>Дата:</b> ${escapeHtml(rec.date || '')}</div>
+${rec.objectName ? `<div class="meta-row">🏠 <b>Объект:</b> ${escapeHtml(rec.objectName)}</div>` : ''}
+${rec.client ? `<div class="meta-row">👤 <b>Заказчик:</b> ${escapeHtml(rec.client)}</div>` : ''}
+${rec.address ? `<div class="meta-row">📍 <b>Адрес:</b> ${escapeHtml(rec.address)}</div>` : ''}
+${rec.note ? `<div class="note-box">📝 ${escapeHtml(rec.note)}</div>` : ''}
+</div>
+
+<div class="card">
+<table>
+<thead>
+<tr><th>Наименование</th><th class="num">Кол-во</th><th class="num">Ед.</th><th class="num">Цена</th><th class="num">Сумма</th></tr>
+</thead>
+<tbody>${rows || '<tr><td colspan="5" style="text-align:center; color:#94a3b8;">Нет позиций</td></tr>'}</tbody>
+</table>
+<div class="total-box">
+<div>${isEstimate ? 'Итого по расчёту' : 'Итого'}</div>
+<div>${Number(rec.total || 0).toLocaleString('ru-RU')} ₽</div>
+</div>
+</div>
+
+${Array.isArray(rec.attachments) && rec.attachments.length > 0 ? `
+<div class="card">
+<div style="font-weight:700; font-size:13px; color:#334155; margin-bottom:4px;">📎 Фото и файлы отчёта</div>
+${renderAttachmentsHtml(rec.attachments)}
+</div>
+` : ''}
+`;
+content.style.display = 'block';
+}
+
+async function loadInvoice() {
+const id = getIdFromUrl();
+if (!id) {
+showError('Ссылка на счёт некорректна — не указан номер счёта.');
+return;
+}
+try {
+const res = await fetch(`${WORKER_URL}/invoice?id=${encodeURIComponent(id)}`);
+let data = null;
+try { data = await res.json(); } catch (e) { /* пусто */ }
+if (!res.ok) {
+showError((data && data.error) || 'Не удалось найти этот счёт.');
+return;
+}
+renderInvoice(data);
+} catch (e) {
+console.error('Ошибка загрузки счёта:', e);
+showError('Не удалось загрузить счёт — проверьте подключение к интернету и попробуйте обновить страницу.');
+}
+}
+
+loadInvoice();
+</script>
+</body>
+</html>
