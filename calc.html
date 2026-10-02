@@ -470,6 +470,131 @@ svg.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-wid
 .update-banner-btn { background: #23408e; border-radius: 8px; }
 .calc-details { border-radius: 10px; background: #ffffff; }
 .file-pick-btn { border-style: solid; border-radius: 8px; background: #ffffff; }
+
+/* ===== Строгий вариант: белый лист, линейки, почти прямые углы =====
+   Цвет — только у суммы долга и у выбранного. Заливка — одна, у главной кнопки. */
+:root { --s-ink: #161c24; --s-ink2: #5a6470; --s-ink3: #8a929c; --s-line: #d9dde2; --s-acc: #1f3a82; --s-due: #9c2f1d; --s-ok: #1f6442; }
+body { background: #ffffff; color: var(--s-ink); }
+.container { border: none; border-radius: 0; padding-top: 14px; }
+h1 { font-size: 24px; letter-spacing: -0.015em; margin-top: 18px; }
+h2 { font-size: 16px; }
+/* шапка: линейка под ней */
+.app-header { padding-bottom: 12px; border-bottom: 2px solid var(--s-ink); margin-bottom: 4px; }
+.nav-btn { background: none; border: none; padding: 8px 0; min-height: 38px; color: var(--s-ink2); font-weight: 500; }
+.user-chip { background: none; border: none; padding: 8px 0; color: var(--s-ink); font-weight: 600; }
+.user-chip[aria-expanded="true"] { background: none; }
+.user-menu { border-radius: 4px; border-color: var(--s-ink); box-shadow: 0 8px 24px rgba(22, 28, 36, 0.12); }
+.menu-item { border-radius: 2px; }
+.menu-item.active { background: none; color: var(--s-ink); box-shadow: inset 2px 0 0 var(--s-ink); }
+/* поля и кнопки */
+.form-group input, .form-group select, .form-group textarea, .search-box, .auth-container input, .location-input,
+.unit-row input, .unit-row select, .pay-field input, .pay-field select, .pay-field textarea, .mp-in, .mp-name-in, .mp-meta input, .mp-meta select { border-radius: 3px; }
+.btn, .btn-sm, .hc-btn, .calc-bar-save, .calc-bar-more, .mp-btn, .mp-add, .measure-open-btn, .mp-mini, .chip, .role-toggle-btn,
+.room-selbar-btn, .wp-surface, .update-banner-btn, .draft-offer-btns button, .file-pick-btn, .mp-type, .mp-del, .btn-delete-item { border-radius: 3px; }
+.btn-primary, .hc-btn-primary, .calc-bar-save, .mp-btn-primary, .draft-continue, .update-banner-btn { background: var(--s-ink); border-color: var(--s-ink); color: #ffffff; }
+.btn-success { background: var(--s-ink); }
+.btn-danger { background: #ffffff; color: var(--s-due); border: 1px solid var(--s-due); }
+.btn-warning { background: #ffffff; color: var(--s-ink); border: 1px solid var(--s-ink); }
+.measure-open-btn, .mp-add, .file-pick-btn { background: #ffffff; border: 1px solid var(--s-ink); color: var(--s-ink); }
+.mp-mini { border-color: var(--s-line); color: var(--s-ink); }
+/* фильтры — вкладки с линией */
+.chips { gap: 18px; border-bottom: 1px solid var(--s-line); padding-bottom: 0; margin-bottom: 2px; }
+.chip { background: none; border: none; border-radius: 0; padding: 8px 0 9px; min-height: 0; color: var(--s-ink2); font-weight: 500; }
+.chip.active { background: none; color: var(--s-ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--s-ink); }
+.mp-tabs { border-bottom: none; }
+.room-select-all { gap: 18px; border-bottom: none; }
+.room-select-all .chip { color: var(--s-acc); padding: 4px 0; }
+/* сводка — таблица */
+.sum-table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 0 0 14px; }
+.sum-table td { padding: 7px 0; border-bottom: 1px solid var(--s-line); }
+.sum-table td:last-child { text-align: right; font-weight: 600; }
+.sum-table tr:last-child td { border-bottom: none; }
+.sum-table .sum-due td { color: var(--s-due); font-weight: 600; }
+.object-stats { gap: 0; }
+.object-stat-box { background: none !important; border: none; border-radius: 0; border-bottom: 1px solid var(--s-line); padding-left: 0; padding-right: 0; }
+/* счёт — отбит жирной линейкой, без рамки */
+.history-card { border: none; border-radius: 0; border-bottom: 2px solid var(--s-ink); padding: 16px 0 14px; margin-bottom: 0; }
+.hc-name { font-size: 17px; }
+.hc-th { display: flex; justify-content: space-between; font-size: 12px; color: var(--s-ink3); padding: 0 0 5px; border-bottom: 1px solid var(--s-ink); margin-top: 6px; }
+.hc-th + .hc-line, .hc-th + div > .hc-line { border-top: none; }
+.hc-line { border-top-color: var(--s-line); }
+.rooms-breakdown { color: var(--s-ink2); }
+.hc-room > summary { color: var(--s-ink); }
+.measure-note { color: var(--s-acc); }
+/* остаток — текстом, без заливки */
+.pay-balance-line { background: none !important; padding: 10px 0 4px; border-radius: 0; margin: 4px 0 0; font-size: 13px; }
+.pay-balance-owes { color: var(--s-due); font-weight: 600; }
+.pay-balance-paid { color: var(--s-ok); }
+.pay-balance-over { color: var(--s-acc); }
+.pay-balance-line .btn-delete-item { background: #ffffff !important; color: var(--s-ink); border: 1px solid var(--s-ink) !important; font-weight: 600; }
+.pay-history-item { border-top-style: solid; border-top-color: var(--s-line); }
+/* кнопки счёта — одним блоком */
+.hc-actions { gap: 0; border: 1px solid var(--s-ink); border-radius: 3px; overflow: hidden; margin-top: 12px; }
+.hc-actions .hc-btn { border: none; border-radius: 0; background: #ffffff; color: var(--s-ink); }
+.hc-actions .hc-btn + .hc-btn { border-left: 1px solid var(--s-ink); }
+.hc-actions .hc-btn-primary { background: var(--s-ink); color: #ffffff; flex: 2; }
+/* объекты, помещения — без подложек */
+.object-card, .room-card { border: none; border-radius: 0; border-bottom: 1px solid var(--s-line); padding: 14px 0; margin: 0; }
+.object-card:active { background: none; }
+.obj-pill { background: none; padding: 0; border-radius: 0; color: var(--s-ink2); font-weight: 500; }
+.obj-pill + .obj-pill::before { content: "·"; margin-right: 6px; color: var(--s-ink3); }
+.obj-pill-owes { color: var(--s-due); font-weight: 600; }
+.obj-pill-paid { color: var(--s-ok); }
+.room-row { border: none; border-bottom: 1px solid var(--s-line); border-radius: 0; margin: 0; padding: 4px 0; background: none; }
+.room-row.on { background: none; border-color: var(--s-line); }
+.mp-foot .mp-btn-primary, .room-selbar-btn { background: #ffffff; border-color: #ffffff; color: var(--s-ink); }
+.mp-foot .mp-btn { border-color: #4a525c; }
+.room-row.on .room-name { color: var(--s-acc); }
+.room-check input { accent-color: var(--s-ink); }
+.room-selbar { background: var(--s-ink); border-radius: 3px; }
+.room-selbar-btn { color: var(--s-ink); }
+.accordion-category { border: none; border-bottom: 1px solid var(--s-line); border-radius: 0; margin-bottom: 0; }
+.accordion-header { padding-left: 0; padding-right: 0; background: none; }
+.accordion-category.open .accordion-header { background: none; }
+.accordion-content { border-top: 1px solid var(--s-line); padding-left: 0; padding-right: 0; }
+.service-card { border-radius: 0; border: none; border-bottom: 1px solid var(--s-line); margin: 0; padding-left: 0; padding-right: 0; }
+.calc-details { background: none; border: none; border-top: 1px solid var(--s-line); border-bottom: 1px solid var(--s-line); border-radius: 0; }
+.calc-details > summary { padding-left: 0; padding-right: 0; }
+.calc-details-body { padding-left: 0; padding-right: 0; }
+.draft-offer { background: #ffffff; border: 1px solid var(--s-ink); border-radius: 3px; }
+.draft-offer-text { color: var(--s-ink); }
+.draft-discard { border-color: var(--s-line); }
+.profile-box, .user-card { border-radius: 0; border: none; border-bottom: 1px solid var(--s-line); padding-left: 0; padding-right: 0; }
+.tab-menu { background: none; border: none; border-bottom: 1px solid var(--s-line); border-radius: 0; padding: 0; gap: 18px; }
+.tab-btn { border-radius: 0; padding: 8px 0 9px; flex: 0 0 auto; color: var(--s-ink2); font-weight: 500; }
+.tab-btn.active { background: none; box-shadow: inset 0 -2px 0 var(--s-ink); color: var(--s-ink); font-weight: 600; }
+.role-toggle-btn.active, .doc-type-btn.active { background: var(--s-ink); border-color: var(--s-ink); }
+/* нижние панели */
+.bottom-nav { background: #ffffff; border-top: 1px solid var(--s-ink); box-shadow: none; padding-top: 0; }
+.nav-tab { border-radius: 0; color: var(--s-ink2); font-weight: 500; padding-top: 9px; }
+.nav-tab.active { background: none; color: var(--s-ink); font-weight: 600; box-shadow: inset 0 2px 0 var(--s-ink); }
+.calc-bar { background: var(--s-ink); }
+.calc-bar-save { background: #ffffff; color: var(--s-ink); border-color: #ffffff; }
+.calc-bar-more { border-color: #4a525c; }
+/* шторка, окна */
+.sheet { border-radius: 8px 8px 0 0; }
+.sheet::before { border-radius: 0; }
+.sheet-item { border-radius: 0; border-bottom: 1px solid #eef0f2; }
+.sheet-cancel { border-radius: 3px; background: #ffffff; border: 1px solid var(--s-ink); color: var(--s-ink); }
+.pay-modal-box { border-radius: 6px; }
+.add-toast { border-radius: 3px; }
+.update-banner { border-radius: 4px; background: var(--s-ink); }
+/* замер */
+.measure-panel { background: #ffffff; }
+.mp-head { border-bottom: 2px solid var(--s-ink); }
+.mp-sec { border: none; border-bottom: 1px solid var(--s-line); border-radius: 0; padding: 14px 0; margin: 0; }
+.mp-open, .wp-item { border-radius: 3px; }
+.mp-calc { background: none; border-left: 2px solid var(--s-ink); border-radius: 0; padding: 4px 0 4px 10px; }
+.mp-foot { background: var(--s-ink); }
+.mp-pick button { border-radius: 3px; }
+.mp-pick button.active { background: #ffffff; border-color: #ffffff; color: var(--s-ink); }
+.wp-surface { background: #ffffff; border-color: var(--s-ink); color: var(--s-ink); }
+.wp-surface small { color: var(--s-ink2); }
+.wp-surface.suggested { background: var(--s-ink); border-color: var(--s-ink); }
+.wp-surface.suggested small { color: #c3c8ce; }
+.mp-del { background: none; color: var(--s-ink3); }
+.mp-del:hover { color: var(--s-due); }
+.badge { border-radius: 3px; }
 </style>
 </head>
 <body>
@@ -2571,7 +2696,7 @@ ${showAddress ? `<div class="hc-meta"><span class="meta-k">Адрес</span> ${e
 ${isCurrentAdmin() ? `<div class="hc-meta"><span class="meta-k">Мастер</span> ${escapeHtml(masterName)}</div>` : ''}
 ${rec.note ? `<div class="hc-meta"><span class="meta-k">Пояснение</span> ${escapeHtml(rec.note)}</div>` : ''}
 ${renderAttachmentsHtml(rec.attachments)}
-<div class="hc-items">${itemsHtml || '<span style="color:#8d97a5;">Нет позиций</span>'}</div>
+<div class="hc-items">${itemsHtml ? `<div class="hc-th"><span>Работа</span><span>Сумма</span></div>${itemsHtml}` : '<span style="color:#8d97a5;">Нет позиций</span>'}</div>
 ${!isEstimate ? renderPaymentSectionHtml(rec, recordId) : ''}
 <div class="hc-actions">
 <button type="button" class="hc-btn hc-btn-primary" onclick="sendHistoryRecordPDF('${recordId}')"><svg class="ic"><use href="#i-send"/></svg> Отправить PDF</button>
@@ -2723,7 +2848,7 @@ const paymentsHtml = payments.length === 0 ? '' : payments.map(p => `
 <div class="pay-history-item">
 <span>${p.date} — ${Number(p.amount).toLocaleString('ru-RU')} ₽ <span style="color:#8d97a5;">(${escapeHtml(p.method)})</span></span>
 <span style="display:flex; gap:6px;">
-<button type="button" onclick="resendPaymentReceipt('${recordId}', '${p.id}')" title="Отправить чек ещё раз" style="border:none; background:none; cursor:pointer; font-size:13px;">📤</button>
+<button type="button" onclick="resendPaymentReceipt('${recordId}', '${p.id}')" title="Отправить чек ещё раз" aria-label="Отправить чек ещё раз" style="border:none; background:none; cursor:pointer; color:#5d6878; padding:2px;"><svg class="ic" style="width:16px;height:16px;"><use href="#i-send"/></svg></button>
 ${!isCurrentClient() ? `<button type="button" onclick="deletePayment('${recordId}', '${p.id}')" title="Удалить" style="border:none; background:none; cursor:pointer; font-size:13px; color:#a5321f;">✕</button>` : ''}
 </span>
 </div>
@@ -2805,13 +2930,14 @@ const info = getBalanceInfo(r);
 if (info.status === 'owes') owed += info.balance;
 if (info.status === 'over') overpaid += info.balance;
 });
+const rub = n => n.toLocaleString('ru-RU') + ' ₽';
 box.innerHTML = `
-<div class="object-stats" style="margin-bottom:14px;">
-<div class="object-stat-box">Выставлено<b>${totalInvoiced.toLocaleString('ru-RU')} ₽</b></div>
-<div class="object-stat-box" style="background:#eef6f1;">Оплачено<b style="color:#23704a;">${totalPaid.toLocaleString('ru-RU')} ₽</b></div>
-${owed > 0 ? `<div class="object-stat-box" style="background:#fbeeea;">Должны заказчики<b style="color:#a5321f;">${owed.toLocaleString('ru-RU')} ₽</b></div>` : ''}
-${overpaid > 0 ? `<div class="object-stat-box" style="background:#eef2f9;">Переплата<b style="color:#23408e;">${overpaid.toLocaleString('ru-RU')} ₽</b></div>` : ''}
-</div>
+<table class="sum-table">
+<tr><td>Выставлено</td><td>${rub(totalInvoiced)}</td></tr>
+<tr><td>Оплачено</td><td>${rub(totalPaid)}</td></tr>
+${owed > 0 ? `<tr class="sum-due"><td>Должны заказчики</td><td>${rub(owed)}</td></tr>` : ''}
+${overpaid > 0 ? `<tr><td>Переплата</td><td>${rub(overpaid)}</td></tr>` : ''}
+</table>
 `;
 }
 

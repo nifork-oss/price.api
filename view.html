@@ -78,6 +78,29 @@ body { background: #f4f6f8; }
 .total-box { background: #1d2733; border-radius: 8px; font-weight: 600; }
 .pay-box { border-radius: 8px; }
 .attachment-download-btn { border-radius: 8px; }
+
+/* ===== Строгий вариант: белый лист, линейки, почти прямые углы ===== */
+:root { --s-ink: #161c24; --s-ink2: #5a6470; --s-ink3: #8a929c; --s-line: #d9dde2; --s-acc: #1f3a82; --s-due: #9c2f1d; --s-ok: #1f6442; }
+body { background: #ffffff; color: var(--s-ink); }
+h1 { letter-spacing: -0.015em; }
+
+.container { max-width: 640px; }
+.card { border: none; border-radius: 0; padding: 18px 0; margin-bottom: 0; }
+.card + .card { border-top: 2px solid var(--s-ink); }
+.doc-header { padding-bottom: 12px; border-bottom: 2px solid var(--s-ink); margin-bottom: 12px; }
+.doc-title { color: var(--s-ink); font-size: 26px; }
+.doc-badge { border-radius: 2px; background: none; border: 1px solid currentColor; }
+.note-box { background: none; border: none; border-left: 2px solid var(--s-ink); border-radius: 0; padding: 4px 0 4px 12px; }
+.item-row { border-bottom-color: var(--s-line); }
+.item-rooms { color: var(--s-ink2); }
+.total-box { background: none; color: var(--s-ink); border-radius: 0; border-top: 2px solid var(--s-ink); padding: 12px 0 0; font-size: 18px; }
+.pay-box { background: none !important; border-radius: 0; padding: 10px 0 0; }
+.pay-box-owes { color: var(--s-due); }
+.pay-box-paid { color: var(--s-ok); }
+.pay-list { border-top: 1px solid var(--s-line); color: var(--s-ink2); }
+.attachment-download-btn { border-radius: 3px; background: #ffffff; border: 1px solid var(--s-line); }
+.attachment-thumb { border-radius: 2px; }
+body { padding-top: 24px; }
 </style>
 </head>
 <body>

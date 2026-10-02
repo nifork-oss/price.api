@@ -164,6 +164,38 @@ svg.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-wid
 .sheet-item-danger .sheet-item-icon { color: inherit; }
 .update-banner { background: #1d2733; border-radius: 10px; }
 .update-banner-btn { background: #23408e; border-radius: 8px; }
+
+/* ===== Строгий вариант: белый лист, линейки, почти прямые углы ===== */
+:root { --s-ink: #161c24; --s-ink2: #5a6470; --s-ink3: #8a929c; --s-line: #d9dde2; --s-acc: #1f3a82; --s-due: #9c2f1d; --s-ok: #1f6442; }
+body { background: #ffffff; color: var(--s-ink); }
+h1 { letter-spacing: -0.015em; }
+
+.container { border: none; border-radius: 0; padding-top: 14px; }
+.site-header { border-bottom: 2px solid var(--s-ink); }
+.site-logo-icon { background: var(--s-ink); border-radius: 3px; }
+.header-status { background: none; border: none; padding: 0; color: var(--s-ok); font-weight: 500; }
+.nav-btn { border-radius: 3px; background: #ffffff; border: 1px solid var(--s-ink); color: var(--s-ink); }
+.tab-menu { background: none; border: none; border-bottom: 1px solid var(--s-line); border-radius: 0; padding: 0; gap: 18px; }
+.tab-btn { flex: 0 0 auto; border-radius: 0; padding: 8px 0 9px; color: var(--s-ink2); font-weight: 500; }
+.tab-btn.active { background: none; box-shadow: inset 0 -2px 0 var(--s-ink); color: var(--s-ink); font-weight: 600; }
+.admin-controls { border: none; border-top: 1px solid var(--s-line); border-bottom: 1px solid var(--s-line); border-radius: 0; padding: 12px 0; }
+.btn, .btn-sm, .row-more, .history-toggle-btn, .search-box, .lock-btn, .sheet-cancel { border-radius: 3px; }
+.btn-primary, .btn-success { background: var(--s-ink); border-color: var(--s-ink); color: #ffffff; }
+.btn-ghost { border-color: var(--s-ink); color: var(--s-ink); }
+.history-toggle-btn { background: #ffffff; border-color: var(--s-ink); }
+.badge-new { border-radius: 2px; background: var(--s-due); }
+.accordion-category { border: none; border-bottom: 1px solid var(--s-line); border-radius: 0; margin-bottom: 0; }
+.accordion-header { padding-left: 0; padding-right: 0; background: none; }
+.accordion-category.open .accordion-header { background: none; }
+.accordion-content { padding-left: 0; padding-right: 0; border-top: 1px solid var(--s-line); }
+.service-card { border: none; border-bottom: 1px solid var(--s-line); border-radius: 0; margin: 0; padding-left: 0; padding-right: 0; }
+.service-card:last-child { border-bottom: none; }
+.row-more { border-color: var(--s-line); }
+.sheet { border-radius: 8px 8px 0 0; }
+.sheet-item { border-radius: 0; border-bottom: 1px solid #eef0f2; }
+.sheet-cancel { background: #ffffff; border: 1px solid var(--s-ink); color: var(--s-ink); }
+.update-banner { border-radius: 4px; background: var(--s-ink); }
+.update-banner-btn { border-radius: 3px; background: #ffffff; color: var(--s-ink); }
 </style>
 </head>
 <body>
@@ -205,7 +237,7 @@ svg.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-wid
 
 <div class="nav-header">
 <a href="calc.html" class="nav-btn">Личный кабинет для мастера и заказчика</a>
-<div id="adminBadge" style="font-size:12px; font-weight:600; color:#9a5f12; display:none;">Режим редактирования</div>
+<div id="adminBadge" style="font-size:12px; font-weight:500; color:#5a6470; display:none;">Режим редактирования</div>
 </div>
 
 <div class="tab-menu">
