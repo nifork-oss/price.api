@@ -1,3 +1,16 @@
 name = "price-api"
 main = "worker.js"
 compatibility_date = "2025-01-01"
+
+# Ограничение частоты запросов (встроенный Rate Limiting Cloudflare).
+# Вход и регистрация: не больше 10 попыток в минуту с одного IP и на один аккаунт.
+[[ratelimits]]
+name = "AUTH_LIMITER"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+# Публичное сохранение расчётов «пирог»: не больше 5 в минуту с одного IP.
+[[ratelimits]]
+name = "PUBLIC_LIMITER"
+namespace_id = "1002"
+simple = { limit = 5, period = 60 }

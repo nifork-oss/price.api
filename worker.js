@@ -107,21 +107,85 @@ async function sha256Hex(str) {
   return toHex(buf);
 }
 
+// Пароли хэшируются через PBKDF2 (много тысяч проходов SHA-256) — подбор
+// по украденной базе становится в десятки тысяч раз медленнее, чем при
+// одном проходе. Формат: p2$<проходы>$<соль>$<хэш>.
+// Число проходов умеренное, чтобы вход укладывался в лимит процессорного
+// времени бесплатного тарифа Cloudflare. Если его поменять, пароли сами
+// перехэшируются при следующем входе каждого пользователя.
+const PBKDF2_ITERATIONS = 20000;
+
+async function pbkdf2Hex(password, saltHex, iterations) {
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt: new TextEncoder().encode(saltHex), iterations },
+    key,
+    256
+  );
+  return toHex(bits);
+}
+
+// Сравнение строк без раннего выхода — время не зависит от того,
+// на каком символе нашлось различие.
+function safeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 async function hashPassword(password) {
   const salt = randomHex();
-  const hash = await sha256Hex(salt + password);
-  return `s2$${salt}$${hash}`;
+  const hash = await pbkdf2Hex(password, salt, PBKDF2_ITERATIONS);
+  return `p2$${PBKDF2_ITERATIONS}$${salt}$${hash}`;
 }
 
 async function verifyPassword(password, stored) {
-  if (!stored) return false;
-  if (typeof stored === "string" && stored.startsWith("s2$")) {
+  if (!stored || typeof stored !== "string") return false;
+  if (stored.startsWith("p2$")) {
+    const [, iterStr, salt, hash] = stored.split("$");
+    const iterations = Number(iterStr);
+    if (!Number.isInteger(iterations) || iterations < 1 || iterations > 100000) return false;
+    return safeEqual(await pbkdf2Hex(password, salt, iterations), hash);
+  }
+  if (stored.startsWith("s2$")) {
+    // Прежний формат (один проход SHA-256) — проверяем, а при входе
+    // пароль будет перехэширован в новый формат.
     const [, salt, hash] = stored.split("$");
-    const check = await sha256Hex(salt + password);
-    return check === hash;
+    return safeEqual(await sha256Hex(salt + password), hash);
   }
   // Старый пароль в открытом виде (ещё не мигрировал) — сравниваем как есть.
-  return stored === password;
+  return safeEqual(stored, password);
+}
+
+// Нужно ли перехэшировать пароль (старый формат или другое число проходов).
+function needsRehash(stored) {
+  return !(typeof stored === "string" && stored.startsWith(`p2$${PBKDF2_ITERATIONS}$`));
+}
+
+/* ============== ограничение частоты запросов ============== */
+
+// Использует встроенный Rate Limiting Cloudflare (привязки AUTH_LIMITER и
+// PUBLIC_LIMITER в wrangler.toml). Если привязки нет — ограничение просто
+// не действует, а сайт продолжает работать как раньше.
+async function isRateLimited(limiter, key) {
+  if (!limiter || typeof limiter.limit !== "function") return false;
+  try {
+    const { success } = await limiter.limit({ key });
+    return !success;
+  } catch (e) {
+    return false;
+  }
+}
+
+function clientIp(request) {
+  return request.headers.get("CF-Connecting-IP") || "unknown";
+}
+
+function tooManyRequests() {
+  return json({ error: "Слишком много попыток. Подождите минуту и попробуйте снова." }, 429);
 }
 
 function b64url(buf) {
@@ -305,7 +369,11 @@ const handler = {
       // Публичное сохранение расчёта "1м² / пирог" (доступно без входа —
       // так уже было устроено на сайте: посетитель считает смету без логина)
       if (path === "/pirog" && request.method === "POST") {
-        const body = await request.json();
+        if (await isRateLimited(env.PUBLIC_LIMITER, "pirog:" + clientIp(request))) return tooManyRequests();
+        const rawBody = await request.text();
+        if (rawBody.length > 100000) return json({ error: "Слишком большой расчёт" }, 413);
+        let body;
+        try { body = JSON.parse(rawBody); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
         const record = await readBin(env);
         const newRecord = {
           id: "pirog_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
@@ -329,6 +397,7 @@ const handler = {
 
       // Регистрация нового пользователя (мастер или заказчик)
       if (path === "/register" && request.method === "POST") {
+        if (await isRateLimited(env.AUTH_LIMITER, "register:" + clientIp(request))) return tooManyRequests();
         const body = await request.json();
         const login = String(body.login || "").trim();
         const email = String(body.email || "").trim();
@@ -360,6 +429,14 @@ const handler = {
         const body = await request.json();
         const idVal = String(body.login || "").trim().toLowerCase();
         const password = String(body.password || "").trim();
+        // Два ограничения: по IP (один человек перебирает много аккаунтов)
+        // и по аккаунту (много адресов перебирают один аккаунт).
+        if (
+          (await isRateLimited(env.AUTH_LIMITER, "login-ip:" + clientIp(request))) ||
+          (await isRateLimited(env.AUTH_LIMITER, "login-acc:" + idVal))
+        ) {
+          return tooManyRequests();
+        }
         const record = await readBin(env);
         const user = record.users.find(
           (u) => u.login.toLowerCase() === idVal || (u.email && u.email.toLowerCase() === idVal)
@@ -367,8 +444,8 @@ const handler = {
         if (!user || !(await verifyPassword(password, user.pass))) {
           return json({ error: "Неверный логин/email или пароль" }, 401);
         }
-        // Мягкая миграция: если пароль ещё хранился в открытом виде — хэшируем при первом входе.
-        if (!(typeof user.pass === "string" && user.pass.startsWith("s2$"))) {
+        // Мягкая миграция: пароль в открытом виде или в старом формате — перехэшируем при входе.
+        if (needsRehash(user.pass)) {
           user.pass = await hashPassword(password);
           await writeBin(env, record);
         }
