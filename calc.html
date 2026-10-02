@@ -287,6 +287,12 @@ body.measure-open { overflow: hidden; }
 .mp-sec-title { font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
 .mp-hint { font-size: 12px; color: #64748b; margin: -4px 0 8px; line-height: 1.4; }
 .mp-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.mp-row-label-sm { flex-basis: 58px !important; }
+.mp-in-h { flex: 0 0 74px; font-size: 15px; }
+.mp-name-in { flex: 1; min-width: 0; min-height: 38px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; font-weight: 600; color: #0f172a; background: #ffffff; }
+.mp-dims-2 { grid-template-columns: 1fr auto 1fr; }
+.mp-pick button { line-height: 1.15; font-size: 12px; font-weight: 600; text-align: left; }
+.mp-pick button b { font-size: 16px; }
 .mp-row-label { flex: 0 0 72px; font-size: 13px; color: #475569; font-weight: 600; }
 .mp-in { flex: 1; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 17px; font-weight: 600; color: #0f172a; background: #ffffff; text-align: center; }
 .mp-in:focus { border-color: #6366f1; outline: 2px solid #c7d2fe; }
@@ -3602,8 +3608,9 @@ function newMeasure(objectId) {
 return {
 id: 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
 room: '', objectId: objectId || '',
-height: '', walls: [''],
+height: '', walls: [''], wallHeights: [''],
 openings: [],
+parts: [],
 ceiling: [{ l: '', w: '' }],
 narrow: ['']
 };
@@ -3671,14 +3678,22 @@ const slopeSidesText = (h, w) => `левый ${fmtMin(h)} + правый ${fmtMi
 function computeMeasure(m) {
 const r = { lines: {} };
 const H = mNum(m.height);
-const walls = m.walls.map(mNum).filter(v => v > 0);
-const perim = walls.reduce((a, b) => a + b, 0);
+// У стены может быть своя высота (мансарда, перегородка не до потолка);
+// не указана — берётся общая высота помещения.
+const wh = Array.isArray(m.wallHeights) ? m.wallHeights : [];
+const wallList = m.walls.map((w, i) => ({ l: mNum(w), h: mNum(wh[i]) })).filter(w => w.l > 0);
+const perim = wallList.reduce((a, w) => a + w.l, 0);
 r.perimeter = perim;
-r.wallsGross = H > 0 ? perim * H : 0;
-if (walls.length && H > 0) {
-r.lines.walls = `Стены: (${walls.map(mFmt).join(' + ')}) × ${mFmt(H)} = ${mFmt(r.wallsGross)} м²`;
-} else if (walls.length) {
-r.lines.walls = `Периметр: ${walls.map(mFmt).join(' + ')} = ${mFmt(perim)} м · укажите высоту стен`;
+const common = wallList.filter(w => !w.h);
+const own = wallList.filter(w => w.h);
+r.wallsGross = (H > 0 ? common.reduce((a, w) => a + w.l, 0) * H : 0) + own.reduce((a, w) => a + w.l * w.h, 0);
+const partsText = [];
+if (common.length && H > 0) partsText.push(common.length > 1 ? `(${common.map(w => mFmt(w.l)).join(' + ')}) × ${mFmt(H)}` : `${mFmt(common[0].l)} × ${mFmt(H)}`);
+own.forEach(w => partsText.push(`${mFmt(w.l)} × ${mFmt(w.h)}`));
+if (partsText.length && (!common.length || H > 0)) {
+r.lines.walls = `Стены: ${partsText.join(' + ')} = ${mFmt(r.wallsGross)} м²`;
+} else if (wallList.length) {
+r.lines.walls = `Периметр: ${wallList.map(w => mFmt(w.l)).join(' + ')} = ${mFmt(perim)} м · укажите высоту стен`;
 }
 
 const ops = m.openings.map(o => ({ type: o.type, w: mNum(o.w), h: mNum(o.h), n: mCount(o.n), slopes: o.slopes !== false }))
@@ -3710,6 +3725,19 @@ if (slopeParts.length) {
 r.lines.slopesLen = `Откосы: ${slopeParts.join(' + ')} = ${mFmt(r.slopesLen)} пог. м${r.slopesHasMin ? MIN_NOTE : ''}`;
 }
 
+// Участки стен: часть стены под отдельную работу (плитка до 1,5 м, фартук…)
+const parts = (Array.isArray(m.parts) ? m.parts : []).map(p => ({ name: String(p.name || '').trim(), l: mNum(p.l), h: mNum(p.h) }))
+.filter(p => p.l > 0 && p.h > 0);
+r.parts = parts.reduce((a, p) => a + p.l * p.h, 0);
+if (parts.length) {
+r.lines.parts = `Участки стен: ${parts.map(p => `${p.name ? p.name + ' ' : ''}${mFmt(p.l)}×${mFmt(p.h)}`).join(' + ')} = ${mFmt(r.parts)} м²`;
+}
+const wallsBase = r.openingsArea > 0 ? r.wallsNet : r.wallsGross;
+r.wallsMinusParts = Math.max(0, wallsBase - r.parts);
+if (parts.length && wallsBase > 0) {
+r.lines.wallsMinusParts = `Стены без участков: ${mFmt(wallsBase)} − ${mFmt(r.parts)} = ${mFmt(r.wallsMinusParts)} м²`;
+}
+
 const ceil = m.ceiling.map(c => ({ l: mNum(c.l), w: mNum(c.w) })).filter(c => c.l > 0 && c.w > 0);
 r.ceiling = ceil.reduce((a, c) => a + c.l * c.w, 0);
 if (ceil.length) r.lines.ceiling = `Потолок: ${ceil.map(c => `${mFmt(c.l)}×${mFmt(c.w)}`).join(' + ')} = ${mFmt(r.ceiling)} м²`;
@@ -3727,6 +3755,11 @@ if (tab === 'walls') {
 const v = r.openingsArea > 0 ? r.wallsNet : r.wallsGross;
 return { value: v, unit: 'м²', label: r.openingsArea > 0 ? 'Стены без проёмов' : 'Площадь стен',
 text: [r.lines.walls, r.lines.openings, r.lines.net].filter(Boolean).join('\n') };
+}
+if (tab === 'parts') return { value: r.parts, unit: 'м²', label: 'Участки стен', text: r.lines.parts || '' };
+if (tab === 'wallsMinus') {
+return { value: r.parts > 0 ? r.wallsMinusParts : 0, unit: 'м²', label: 'Стены без участков',
+text: [r.lines.walls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts].filter(Boolean).join('\n') };
 }
 if (tab === 'ceiling') return { value: r.ceiling, unit: 'м²', label: 'Потолок', text: r.lines.ceiling || '' };
 if (tab === 'slopes') return { value: r.slopesLen, unit: 'пог. м', label: 'Откосы', text: r.lines.slopesLen || '' };
@@ -3753,7 +3786,7 @@ return false;
 }
 function isMeasureEmpty(m) {
 const r = computeMeasure(m);
-return !(r.perimeter || r.openingsArea || r.ceiling || r.narrow || mNum(m.height));
+return !(r.perimeter || r.openingsArea || r.ceiling || r.narrow || r.parts || mNum(m.height));
 }
 
 /* ---------- открыть / закрыть ---------- */
@@ -3843,7 +3876,10 @@ return '';
 
 /* ---------- отрисовка ---------- */
 function mIn(path, value, placeholder, extra = '') {
-return `<input class="mp-in" type="text" inputmode="decimal" autocomplete="off" data-path="${path}" value="${escapeHtml(value || '')}" placeholder="${placeholder}" ${extra}>`;
+const m = /class-extra="([^"]*)"/.exec(extra);
+const cls = m ? ' ' + m[1] : '';
+extra = extra.replace(/class-extra="[^"]*"/, '');
+return `<input class="mp-in${cls}" type="text" inputmode="decimal" autocomplete="off" data-path="${path}" value="${escapeHtml(value || '')}" placeholder="${escapeHtml(placeholder)}" ${extra}>`;
 }
 
 function renderMeasure() {
@@ -3858,8 +3894,8 @@ html += `<section class="mp-sec">
 </section>
 <section class="mp-sec">
 <div class="mp-sec-title">Длина стен</div>
-<div class="mp-hint">Каждую стену отдельно. Можно вписать сразу сумму: 3,2+4,1</div>
-${m.walls.map((w, i) => `<div class="mp-row"><span class="mp-row-label">Стена ${i + 1}</span>${mIn('walls.' + i, w, '0,00')}<span class="mp-unit">м</span>${m.walls.length > 1 ? `<button type="button" class="mp-del" onclick="removeMeasureRow('walls', ${i})" aria-label="Убрать стену">✕</button>` : ''}</div>`).join('')}
+<div class="mp-hint">Длина каждой стены. Высоту справа — только если у стены своя (мансарда, перегородка), иначе берётся общая.</div>
+${m.walls.map((w, i) => `<div class="mp-row"><span class="mp-row-label mp-row-label-sm">Стена ${i + 1}</span>${mIn('walls.' + i, w, 'длина')}<span class="mp-x">×</span>${mIn('wallHeights.' + i, (m.wallHeights || [])[i], m.height ? '↕ ' + m.height : '↕ высота', 'aria-label="Своя высота стены" class-extra="mp-in-h"')}${m.walls.length > 1 ? `<button type="button" class="mp-del" onclick="removeMeasureRow('walls', ${i})" aria-label="Убрать стену">✕</button>` : ''}</div>`).join('')}
 <div class="mp-add-row"><button type="button" class="mp-add" onclick="addMeasureRow('walls')">+ Стена</button></div>
 <div class="mp-calc" id="mpCalcWalls"></div>
 </section>
@@ -3884,6 +3920,23 @@ ${m.openings.map((o, i) => `<div class="mp-open">
 </div>
 <div class="mp-calc" id="mpCalcOpenings"></div>
 ${m.openings.length ? `<button type="button" class="mp-link-btn" onclick="setMeasureTab('slopes')">Посчитать откосы этих проёмов →</button>` : ''}
+</section>
+<section class="mp-sec">
+<div class="mp-sec-title">Участки стен</div>
+<div class="mp-hint">Часть стены под отдельную работу: плитка до 1,5 м, фартук, акцентная стена. Стены при этом не меняются — при выборе работы будут и «Участки», и «Стены без участков».</div>
+${(m.parts || []).map((pt, i) => `<div class="mp-open">
+<div class="mp-open-top">
+<input class="mp-name-in" type="text" data-path="parts.${i}.name" value="${escapeHtml(pt.name || '')}" placeholder="Название: плитка, фартук…" autocomplete="off">
+<span class="mp-open-area" id="mpPartArea${i}"></span>
+<button type="button" class="mp-del" onclick="removeMeasureRow('parts', ${i})" aria-label="Убрать участок">✕</button>
+</div>
+<div class="mp-dims mp-dims-2">
+<label>Длина ↔${mIn(`parts.${i}.l`, pt.l, '3,2+4,1')}</label><span class="mp-x">×</span>
+<label>Высота ↕${mIn(`parts.${i}.h`, pt.h, '1,5')}</label>
+</div>
+</div>`).join('')}
+<div class="mp-add-row"><button type="button" class="mp-add" onclick="addMeasureRow('parts')">+ Участок стены</button></div>
+<div class="mp-calc" id="mpCalcParts"></div>
 </section>`;
 } else if (measureTab === 'ceiling') {
 html += `<section class="mp-sec">
@@ -3929,6 +3982,11 @@ const set = (id, v) => { const el = document.getElementById(id); if (el) el.inne
 set('mpCalcWalls', r.lines.walls ? escapeHtml(r.lines.walls) : '');
 set('mpCalcOpenings', [r.lines.openings, r.lines.net].filter(Boolean).map(escapeHtml).join('<br>'));
 set('mpCalcCeiling', r.lines.ceiling ? escapeHtml(r.lines.ceiling) : '');
+set('mpCalcParts', [r.lines.parts, r.lines.wallsMinusParts].filter(Boolean).map(escapeHtml).join('<br>'));
+(measure.parts || []).forEach((pt, i) => {
+const l = mNum(pt.l), h = mNum(pt.h);
+set('mpPartArea' + i, l && h ? `${mFmt(l * h)} м²` : '');
+});
 set('mpCalcSlopes', r.lines.slopesLen ? escapeHtml(r.lines.slopesLen) : '');
 set('mpCalcNarrow', r.lines.narrow ? escapeHtml(r.lines.narrow) : '');
 measure.openings.forEach((o, i) => {
@@ -3950,16 +4008,22 @@ function renderMeasureFooter(r) {
 const foot = document.getElementById('mpFoot');
 if (measureTab === 'history') { foot.classList.add('hidden'); return; }
 foot.classList.remove('hidden');
-const v = measureValueForTab(r, measureTab);
-let main = '', sub = '';
-if (measureTab === 'walls') {
+if (measureTab === 'walls' && !(r.parts > 0)) measureWallsPick = 'walls';
+const effTab = measureTab === 'walls' ? measureWallsPick : measureTab;
+const v = measureValueForTab(r, effTab);
+let main = '', sub = '', pick = '';
+if (measureTab === 'walls' && r.parts > 0 && measureTarget.kind !== 'room') {
+const opt = (key, label, val) => `<button type="button" class="${measureWallsPick === key ? 'active' : ''}" onclick="setWallsPick('${key}')">${label}<br><b>${mFmt(val)}</b></button>`;
+pick = `<div class="mp-pick">${opt('walls', 'Стены', r.openingsArea > 0 ? r.wallsNet : r.wallsGross)}${opt('parts', 'Участки', r.parts)}${opt('wallsMinus', 'Стены − участки', r.wallsMinusParts)}</div>`;
+} else if (measureTab === 'walls') {
 sub = r.openingsArea > 0 ? `Стены ${mFmt(r.wallsGross)} − проёмы ${mFmt(r.openingsArea)} м²` : (r.perimeter ? `Периметр ${mFmt(r.perimeter)} м` : 'Введите высоту и длину стен');
+if (r.parts > 0) sub += ` · участки ${mFmt(r.parts)} м²`;
 }
 main = `${mFmt(v.value)}${v.unit ? ' ' + v.unit : ''}`;
 const target = measureTarget.kind !== 'none' ? measureTargetName() : '';
 document.getElementById('mpResult').innerHTML = `
 <div class="mp-result-label">${escapeHtml(v.label || 'Результат')}</div>
-<div class="mp-result-main">${main}</div>
+${pick || `<div class="mp-result-main">${main}</div>`}
 ${sub ? `<div class="mp-result-sub">${escapeHtml(sub)}</div>` : ''}
 ${target ? `<div class="mp-target">→ в «${escapeHtml(target)}»</div>` : ''}`;
 const btn = document.getElementById('mpPrimaryBtn');
@@ -3970,6 +4034,9 @@ btn.disabled = false;
 btn.textContent = measureTarget.roomId ? '✅ Сохранить замер' : '✅ Добавить помещение';
 }
 }
+
+let measureWallsPick = 'walls';
+function setWallsPick(p) { measureWallsPick = p; updateMeasureOutputs(); }
 
 function setMeasureTab(tab) {
 measureTab = tab;
@@ -3983,7 +4050,11 @@ document.getElementById('mpBody').scrollTop = 0;
 function setMeasurePath(path, value) {
 const parts = path.split('.');
 let obj = measure;
-for (let i = 0; i < parts.length - 1; i++) obj = obj[isNaN(parts[i]) ? parts[i] : Number(parts[i])];
+for (let i = 0; i < parts.length - 1; i++) {
+const k = isNaN(parts[i]) ? parts[i] : Number(parts[i]);
+if (obj[k] === undefined) obj[k] = isNaN(parts[i + 1]) ? {} : [];
+obj = obj[k];
+}
 const last = parts[parts.length - 1];
 obj[isNaN(last) ? last : Number(last)] = value;
 }
@@ -4018,24 +4089,35 @@ if (next) next.focus(); else el.blur();
 });
 
 function focusMeasurePath(path) {
-const el = document.querySelector(`#mpBody .mp-in[data-path="${path}"]`);
+const el = document.querySelector(`#mpBody [data-path="${path}"]`);
 if (el) { el.scrollIntoView({ block: 'center' }); el.focus(); }
 }
 
 function addMeasureRow(kind) {
-if (kind === 'walls') measure.walls.push('');
+if (kind === 'walls') {
+measure.walls.push('');
+if (!Array.isArray(measure.wallHeights)) measure.wallHeights = [];
+measure.wallHeights[measure.walls.length - 1] = '';
+}
+if (kind === 'parts') {
+if (!Array.isArray(measure.parts)) measure.parts = [];
+const prev = measure.parts[measure.parts.length - 1];
+// высота — как у предыдущего участка (обычно одинаковая)
+measure.parts.push({ name: '', l: '', h: prev ? prev.h : '' });
+}
 if (kind === 'ceiling') measure.ceiling.push({ l: '', w: '' });
 if (kind === 'narrow') measure.narrow.push('');
 saveMeasureDraft();
 renderMeasure();
 const last = measure[kind].length - 1;
 // курсор — в первое поле новой строки (у потолка это длина)
-focusMeasurePath(kind === 'ceiling' ? `ceiling.${last}.l` : `${kind}.${last}`);
+focusMeasurePath(kind === 'ceiling' ? `ceiling.${last}.l` : kind === 'parts' ? `parts.${last}.name` : `${kind}.${last}`);
 }
 
 function removeMeasureRow(kind, i) {
 measure[kind].splice(i, 1);
-if (kind !== 'openings' && measure[kind].length === 0) measure[kind].push(kind === 'ceiling' ? { l: '', w: '' } : '');
+if (kind === 'walls' && Array.isArray(measure.wallHeights)) measure.wallHeights.splice(i, 1);
+if (kind !== 'openings' && kind !== 'parts' && measure[kind].length === 0) measure[kind].push(kind === 'ceiling' ? { l: '', w: '' } : '');
 saveMeasureDraft();
 renderMeasure();
 }
@@ -4083,13 +4165,14 @@ return list.sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedA
 
 function measureSummaryLines(m) {
 const r = computeMeasure(m);
-return [r.lines.walls, r.lines.openings, r.lines.net, r.lines.ceiling, r.lines.slopesLen, r.lines.narrow].filter(Boolean);
+return [r.lines.walls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts, r.lines.ceiling, r.lines.slopesLen, r.lines.narrow].filter(Boolean);
 }
 
 function measurePills(m) {
 const r = computeMeasure(m);
 const p = [];
 if (r.wallsGross > 0) p.push(`Стены ${mFmt(r.openingsArea > 0 ? r.wallsNet : r.wallsGross)} м²`);
+if (r.parts > 0) p.push(`Участки ${mFmt(r.parts)} м²`);
 if (r.ceiling > 0) p.push(`Потолок ${mFmt(r.ceiling)} м²`);
 if (r.slopesLen > 0) p.push(`Откосы ${mFmt(r.slopesLen)} пог. м`);
 if (r.narrow > 0) p.push(`Узкие ${mFmt(r.narrow)} пог. м`);
@@ -4201,7 +4284,9 @@ return '';
 async function measurePrimaryAction() {
 if (measureTarget.kind === 'room') { finishRoomMeasure(); return; }
 const r = computeMeasure(measure);
-const v = measureValueForTab(r, measureTab);
+// на вкладке «Стены» — то, что выбрано внизу: стены, участки или стены − участки
+const effTab = measureTab === 'walls' && r.parts > 0 ? measureWallsPick : measureTab;
+const v = measureValueForTab(r, effTab);
 if (!(v.value > 0)) return;
 const value = Math.round(v.value * 1000) / 1000;
 measure.room = document.getElementById('mpRoom').value.trim();
@@ -4257,6 +4342,8 @@ let workPickerOpenIdx = null;
 
 const SURFACES = [
 { key: 'walls', tab: 'walls', label: 'Стены' },
+{ key: 'wallsMinus', tab: 'wallsMinus', label: 'Стены − участки' },
+{ key: 'parts', tab: 'parts', label: 'Участки стен' },
 { key: 'ceiling', tab: 'ceiling', label: 'Потолок' },
 { key: 'slopes', tab: 'slopes', label: 'Откосы' },
 { key: 'narrow', tab: 'narrow', label: 'Узкие' },
@@ -4350,7 +4437,7 @@ list.innerHTML = '<div class="rooms-hint">У объекта пока нет по
 return;
 }
 const picked = rooms.filter(r => selectedRoomIds.has(r.id));
-const sums = SURFACES.map(s => ({ s, v: sumSurface(picked, s.key) })).filter(x => x.v.value > 0);
+const sums = SURFACES.filter(s => s.key !== 'wallsMinus').map(s => ({ s, v: sumSurface(picked, s.key) })).filter(x => x.v.value > 0);
 list.innerHTML = `
 <div class="room-select-all">
 <button type="button" class="chip" onclick="selectAllRooms(true)">Отметить все</button>
@@ -4359,7 +4446,7 @@ ${picked.length ? `<button type="button" class="chip" onclick="selectAllRooms(fa
 ${rooms.map(room => {
 const surf = roomSurfaces(room);
 const on = selectedRoomIds.has(room.id);
-const pills = SURFACES.filter(s => surf[s.key].value > 0).map(s => `${s.label.toLowerCase()} ${mFmt(surf[s.key].value)}`).join(' · ');
+const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && surf[s.key].value > 0).map(s => `${s.label.toLowerCase()} ${mFmt(surf[s.key].value)}`).join(' · ');
 return `<div class="room-row${on ? ' on' : ''}">
 <label class="room-check">
 <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleRoom('${room.id}', this.checked)">
@@ -4484,8 +4571,9 @@ return objectRooms(obj).filter(r => selectedRoomIds.has(r.id));
 function suggestSurface(srv, has) {
 const n = String(srv.name || '').toLowerCase();
 if (/откос/.test(n) && has('slopes')) return 'slopes';
+if (/плитк|кафел|фартук|панел/.test(n) && has('parts')) return 'parts';
 if (/потол/.test(n) && has('ceiling')) return 'ceiling';
-if (/стен|обо[ий]|плитк/.test(n) && has('walls')) return 'walls';
+if (/стен|обо[ий]|плитк|кафел/.test(n) && has('walls')) return 'walls';
 if (srv.unit === 'пог. м') return has('slopes') ? 'slopes' : (has('narrow') ? 'narrow' : null);
 if (has('walls')) return 'walls';
 if (has('ceiling')) return 'ceiling';
@@ -4614,7 +4702,7 @@ const canEdit = !isCurrentClient();
 const list = rooms.length
 ? rooms.map(room => {
 const surf = roomSurfaces(room);
-const pills = SURFACES.filter(s => surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
+const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
 return `<div class="room-card">
 <div class="room-head">
 <div class="room-name">${escapeHtml(roomName(room))}</div>
