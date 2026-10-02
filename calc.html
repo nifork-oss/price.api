@@ -351,7 +351,7 @@ body.measure-open { overflow: hidden; }
 .mp-hist-actions { display: flex; gap: 6px; margin-top: 8px; white-space: normal; }
 .mp-hist-actions button { flex: 1; min-height: 40px; border: 1px solid #dfe3e8; border-radius: 10px; background: #f4f6f8; font-size: 14px; font-weight: 600; color: #33404f; cursor: pointer; }
 .mp-hist-actions .danger { color: #b23a26; }
-body.measure-open .add-toast { z-index: 99; top: auto; bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+body.measure-open .add-toast { z-index: 99; top: calc(72px + env(safe-area-inset-top, 0px)); bottom: auto; }
 
 /* ===================== ПОМЕЩЕНИЯ ===================== */
 .rooms-section { margin: 4px 0 18px; }
@@ -727,6 +727,24 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .update-banner { box-shadow: inset 0 -3px 0 var(--tape); }
 /* ссылки — подчёркнутые, без синего */
 .room-select-all .chip, .link-text, .measure-note summary { color: var(--s-ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--tape-d); }
+
+/* --- рулетка, версия 2 --- */
+.rl-keys .next { grid-column: auto; font-size: 15px; }
+.rl-keys .back { font-size: 14px; font-weight: 600; }
+.rl-keys button:disabled { opacity: .35; }
+.rl-undo { flex: 0 0 44px; height: 44px; border: 1px solid #c9ced5; border-radius: 8px; background: #ffffff; font-size: 22px; line-height: 1; color: var(--s-ink); cursor: pointer; }
+.rl-undo:disabled { opacity: .35; cursor: default; }
+.rl-shapes { padding: 14px 12px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; background: #ffffff; }
+.rl-shapes-title { grid-column: 1 / -1; font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+.rl-shape { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; border: 1.5px solid var(--s-ink); border-radius: 8px; background: #ffffff; cursor: pointer; font-family: inherit; color: var(--s-ink); }
+.rl-shape:active { background: var(--tape-l); }
+.rl-shape b { font-size: 13px; }
+.rl-shape small { font-size: 11.5px; color: var(--s-ink2); text-align: center; line-height: 1.2; }
+.rl-shape-chip { font-size: 13px; color: var(--s-ink2); }
+.rl-turn-label { flex: 0 0 auto; align-self: center; font-size: 12.5px; color: var(--s-ink2); white-space: nowrap; }
+.rl-turn { font-weight: 600; font-size: 14px; }
+.rl-turn.on { background: var(--tape) !important; border-color: var(--tape) !important; box-shadow: none; }
+.rl-head { flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -870,11 +888,12 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 </div></div>
 <div class="rl-pad" id="rlPad"><div class="rl-pad-inner">
 <div class="rl-pad-top">
+<button type="button" class="rl-undo" id="rlUndoBtn" onclick="rulerUndoLast()" aria-label="Отменить последнее изменение" title="Отменить">↶</button>
 <div class="rl-pad-read"><div class="rl-pad-label" id="rlPadLabel"></div><div class="rl-pad-value" id="rlPadValue"></div></div>
 <button type="button" class="rl-done" onclick="rulerClose()">Готово</button>
 </div>
 <div class="rl-tools" id="rlPadTools"></div>
-<div class="rl-keys"><button type="button" onclick="rulerKey('7')">7</button><button type="button" onclick="rulerKey('8')">8</button><button type="button" onclick="rulerKey('9')">9</button><button type="button" onclick="rulerKey('+')" class="op">+</button><button type="button" onclick="rulerKey('4')">4</button><button type="button" onclick="rulerKey('5')">5</button><button type="button" onclick="rulerKey('6')">6</button><button type="button" onclick="rulerKey('×')" class="op">×</button><button type="button" onclick="rulerKey('1')">1</button><button type="button" onclick="rulerKey('2')">2</button><button type="button" onclick="rulerKey('3')">3</button><button type="button" onclick="rulerKey('⌫')" class="op" aria-label="Стереть">⌫</button><button type="button" onclick="rulerKey(',')">,</button><button type="button" onclick="rulerKey('0')">0</button><button type="button" class="next" id="rlNextBtn" onclick="rulerNext()">Следующая стена</button></div>
+<div class="rl-keys"><button type="button" onclick="rulerKey('7')">7</button><button type="button" onclick="rulerKey('8')">8</button><button type="button" onclick="rulerKey('9')">9</button><button type="button" onclick="rulerKey('+')" class="op">+</button><button type="button" onclick="rulerKey('4')">4</button><button type="button" onclick="rulerKey('5')">5</button><button type="button" onclick="rulerKey('6')">6</button><button type="button" onclick="rulerKey('×')" class="op">×</button><button type="button" onclick="rulerKey('1')">1</button><button type="button" onclick="rulerKey('2')">2</button><button type="button" onclick="rulerKey('3')">3</button><button type="button" onclick="rulerKey('⌫')" class="op" aria-label="Стереть">⌫</button><button type="button" class="op back" id="rlBackBtn" onclick="rulerBack()">← Назад</button><button type="button" onclick="rulerKey('0')">0</button><button type="button" onclick="rulerKey(',')">,</button><button type="button" class="next" id="rlNextBtn" onclick="rulerNext()">Далее →</button></div>
 </div></div>
 </div>
 
@@ -4217,7 +4236,7 @@ renderMeasure();
 }
 
 function closeMeasure() {
-if (typeof rulerTarget !== 'undefined') rulerTarget = null;
+if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; }
 document.getElementById('measurePanel').classList.remove('ruler-open');
 document.getElementById('measurePanel').classList.remove('open');
 document.body.classList.remove('measure-open');
@@ -5108,28 +5127,63 @@ ${canEdit ? `<button type="button" class="measure-open-btn" onclick="addRoom('${
 
 <script>
 /* ===================== РУЛЕТКА: замер стен чертежом ===================== */
-// Вместо полей — чертёж комнаты и своя крупная клавиатура. Стены вводятся
-// по очереди, комната рисуется на глазах. После каждой стены по умолчанию
-// поворот направо (по часовой); для Г-образных комнат можно выбрать «налево».
-// Если контур замкнулся — «Комната сошлась», если нет — показываем разрыв.
+// Сначала выбирается форма комнаты:
+//  • прямоугольная — вводятся только длина и ширина, две другие стены те же;
+//  • Г-образная — форма нарисована сразу, мерите подсвеченную стену по номеру;
+//  • своя — стена за стеной, стрелка показывает, куда пойдёт следующая.
+// «← Назад» — к предыдущему полю, «↶» — отменить последнее изменение.
 
 let rulerTarget = null;   // { kind: 'height' } | { kind: 'wall', idx } | { kind: 'wallH', idx } | { kind: 'op', idx, field }
 let rulerBuf = '';
-let rulerFresh = false;   // первое нажатие заменяет старое значение
+let rulerFresh = false;
+let rulerUndo = [];       // снимки замера для «Отменить»
 const RL_DIRS = [[1, 0], [0, 1], [-1, 0], [0, -1]]; // восток, юг, запад, север (y вниз)
+const RL_L_TURNS = ['R', 'R', 'R', 'L', 'R', 'R'];
+const RL_L_PLACEHOLDER = [4, 3, 2, 1.5, 2, 1.5];
+const RL_RECT_PLACEHOLDER = [4, 3, 4, 3];
 
+function rlShape(m) {
+if (m.shape) return m.shape;
+return m.walls.some(w => mNum(w) > 0) ? 'free' : '';
+}
 function rlTurns() { if (!Array.isArray(measure.turns)) measure.turns = []; return measure.turns; }
 
-// Точки контура по длинам стен и поворотам
+/* ---------- отмена ---------- */
+function rulerSnapshot() {
+const m = measure;
+const snap = JSON.stringify({ shape: m.shape, height: m.height, walls: m.walls, wallHeights: m.wallHeights, turns: m.turns, openings: m.openings });
+if (rulerUndo[rulerUndo.length - 1] !== snap) rulerUndo.push(snap);
+if (rulerUndo.length > 50) rulerUndo.shift();
+}
+function rulerUndoLast() {
+const snap = rulerUndo.pop();
+if (!snap) { showAddToast('Отменять нечего'); return; }
+Object.assign(measure, JSON.parse(snap));
+if (!measure.shape) delete measure.shape;
+saveMeasureDraft();
+// остаёмся на том же поле, если оно ещё существует
+const t = rulerTarget;
+if (t && t.kind === 'wall' && t.idx >= measure.walls.length) rulerTarget = { kind: 'wall', idx: Math.max(0, measure.walls.length - 1) };
+if (t && t.kind === 'op' && !measure.openings[t.idx]) rulerTarget = null;
+if (rulerTarget) { rulerBuf = rulerFieldValue(rulerTarget); rulerFresh = true; }
+else document.getElementById('measurePanel').classList.remove('ruler-open');
+renderMeasure();
+renderRulerPad();
+showAddToast('Отменено');
+}
+
+/* ---------- геометрия ---------- */
 function rulerGeometry(m) {
+const shape = rlShape(m);
 const lens = m.walls.map(mNum);
 const real = lens.filter(v => v > 0);
 const avg = real.length ? real.reduce((a, b) => a + b, 0) / real.length : 3;
-const turns = Array.isArray(m.turns) ? m.turns : [];
+const turns = shape === 'L' ? RL_L_TURNS : shape === 'rect' ? ['R', 'R', 'R', 'R'] : (Array.isArray(m.turns) ? m.turns : []);
+const ph = shape === 'L' ? RL_L_PLACEHOLDER : shape === 'rect' ? RL_RECT_PLACEHOLDER : null;
 let x = 0, y = 0, d = 0;
 const segs = [];
 lens.forEach((L, i) => {
-const len = L > 0 ? L : avg * 0.6;
+const len = L > 0 ? L : (ph ? ph[i] * (real.length ? avg / 3 : 1) : avg * 0.6);
 const [dx, dy] = RL_DIRS[d];
 const nx = x + dx * len, ny = y + dy * len;
 segs.push({ i, x1: x, y1: y, x2: nx, y2: ny, dx, dy, len: L, empty: !(L > 0) });
@@ -5138,88 +5192,104 @@ d = (d + (turns[i] === 'L' ? 3 : 1)) % 4;
 });
 const gap = Math.hypot(x, y);
 const closed = real.length >= 3 && real.length === lens.length && gap < 0.02;
-// Для проверки не учитываем пустую стену в конце (её только что открыли для ввода)
 let n = lens.length;
 while (n > 0 && !(lens[n - 1] > 0)) n--;
 const lastReal = n ? segs[n - 1] : null;
 const checkGap = lastReal ? Math.hypot(lastReal.x2, lastReal.y2) : 0;
 const checkable = n >= 3 && lens.slice(0, n).every(v => v > 0);
-// Куда пойдёт следующая стена после последней заполненной
 let dAfter = 0;
 for (let i = 0; i < n; i++) dAfter = (dAfter + (turns[i] === 'L' ? 3 : 1)) % 4;
 const lx = lastReal ? lastReal.x2 : 0, ly = lastReal ? lastReal.y2 : 0;
 const [ndx, ndy] = RL_DIRS[dAfter];
-// Если до начала комнаты ровно по ходу следующей стены — её длину можно подставить
 const along = -(lx * ndx + ly * ndy), across = Math.abs(-lx * ndy + ly * ndx);
-const closeLen = n >= 3 && lens.slice(0, n).every(v => v > 0) && along > 0.01 && across < 0.02 ? along : 0;
-return { segs, endX: x, endY: y, gap, closed, realCount: real.length, checkGap, checkable, checkClosed: checkable && checkGap < 0.02, closeLen };
+const closeLen = checkable && along > 0.01 && across < 0.02 ? along : 0;
+return { segs, endX: x, endY: y, gap, closed, realCount: real.length, checkGap, checkable,
+checkClosed: checkable && checkGap < 0.02, closeLen, nextDir: [ndx, ndy], lastX: lx, lastY: ly, filled: n, avg };
 }
 
 function rulerCheckText(g) {
+if (rlShape(measure) === 'rect') {
+const m = measure;
+return mNum(m.walls[0]) && mNum(m.walls[1]) ? '<span class="rl-ok">Комната сошлась</span>' : '';
+}
 if (!g.checkable) return '';
 if (g.checkClosed) return '<span class="rl-ok">Комната сошлась</span>';
-// пока вводятся стены — это не ошибка, комната просто не дорисована
 if (rulerTarget && rulerTarget.kind === 'wall') return `<span class="rl-wait">До угла ${mFmt(g.checkGap)} м</span>`;
 return `<span class="rl-bad">Не сходится на ${mFmt(g.checkGap)} м</span>`;
 }
 
+/* ---------- чертёж ---------- */
 function renderRulerSketch() {
 const box = document.getElementById('rlSketch');
 if (!box) return;
-const m = measure, g = rulerGeometry(m);
-const W = 320, H = 230, P = 36;
+const m = measure;
+const shape = rlShape(m);
+if (!shape) { box.innerHTML = rulerShapePickerHtml(); const c = document.getElementById('rlCheck'); if (c) c.innerHTML = ''; return; }
+const g = rulerGeometry(m);
+const W = 320, H = 230, P = 38;
 const xs = [0, ...g.segs.map(s => s.x2)], ys = [0, ...g.segs.map(s => s.y2)];
+// стрелка следующей стены (своя форма) тоже должна поместиться
+let ghost = null;
+if (shape === 'free' && g.filled === g.segs.length && !g.checkClosed) {
+const gl = Math.max(g.avg * 0.45, 0.6);
+ghost = { x1: g.lastX, y1: g.lastY, x2: g.lastX + g.nextDir[0] * gl, y2: g.lastY + g.nextDir[1] * gl };
+xs.push(ghost.x2); ys.push(ghost.y2);
+}
 const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
 const k = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
 const ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
 const X = v => ox + v * k, Y = v => oy + v * k;
 const sel = rulerTarget && (rulerTarget.kind === 'wall' || rulerTarget.kind === 'wallH') ? rulerTarget.idx : -1;
+const linked = i => shape === 'rect' && sel >= 0 && i % 2 === sel % 2;
 let out = '';
-// сетка
 let grid = '';
 for (let gx = 0; gx <= W; gx += 16) grid += `M${gx} 0V${H}`;
 for (let gy = 0; gy <= H; gy += 16) grid += `M0 ${gy}H${W}`;
-out += `<path d="${grid}" stroke="#eef1f4" stroke-width="1"/>`;
-// разрыв
-if (g.segs.length >= 2 && !g.closed && g.gap > 0.02) {
+out += `<path d="${grid}" stroke="#eff1f4" stroke-width="1"/>`;
+if (shape === 'free' && g.segs.length >= 2 && g.filled === g.segs.length && !g.checkClosed && g.checkGap > 0.02 && !ghost) {
 out += `<path d="M${X(g.endX)} ${Y(g.endY)}L${X(0)} ${Y(0)}" stroke="#c2361f" stroke-width="1.5" stroke-dasharray="4 4"/>`;
 }
 const wh = Array.isArray(m.wallHeights) ? m.wallHeights : [];
 g.segs.forEach(s => {
-const on = s.i === sel;
-const col = on ? '#e8a900' : '#14181f';
-out += `<path d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="${col}" stroke-width="${on ? 6 : 5}" stroke-linecap="square" ${s.empty ? 'stroke-dasharray="6 6" opacity=".45"' : ''}/>`;
-// размер — снаружи стены
+const on = s.i === sel || linked(s.i);
+out += `<path d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="${on ? '#ffc83d' : '#14181f'}" stroke-width="${on ? 8 : 5}" stroke-linecap="square" ${s.empty && !on ? 'stroke-dasharray="6 6" opacity=".35"' : ''}/>`;
+if (on) out += `<path d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="#14181f" stroke-width="1.5"/>`;
 const mx = (X(s.x1) + X(s.x2)) / 2, my = (Y(s.y1) + Y(s.y2)) / 2;
-const nx = s.dy, ny = -s.dx;
-const lx = mx + nx * 17, ly = my + ny * 17 + 4;
+// размер снаружи
 const own = mNum(wh[s.i]);
-const label = s.empty ? `стена ${s.i + 1}` : mFmt(s.len) + (own ? ` ↕${mFmt(own)}` : '');
-out += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="13" font-weight="${on ? 700 : 500}" fill="${on ? '#14181f' : (s.empty ? '#8a929c' : '#14181f')}">${escapeHtml(label)}</text>`;
+const label = s.empty ? '' : mFmt(s.len) + (own ? ` ↕${mFmt(own)}` : '');
+if (label) out += `<text x="${mx + s.dy * 18}" y="${my - s.dx * 18 + 4}" text-anchor="middle" font-size="13.5" font-weight="${on ? 700 : 500}" fill="#14181f">${escapeHtml(label)}</text>`;
+// номер стены внутри
+const bx = mx - s.dy * 16, by = my + s.dx * 16;
+out += `<circle cx="${bx}" cy="${by}" r="9" fill="${on ? '#14181f' : '#ffffff'}" stroke="#14181f" stroke-width="1.2"/>`;
+out += `<text x="${bx}" y="${by + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="${on ? '#ffc83d' : '#14181f'}">${s.i + 1}</text>`;
 });
 // проёмы на своих стенах
-(m.openings || []).forEach((o, oi) => {
+(m.openings || []).forEach(o => {
 if (o.wall === undefined || o.wall === null) return;
 const s = g.segs[o.wall];
 if (!s) return;
 const segPx = Math.hypot(X(s.x2) - X(s.x1), Y(s.y2) - Y(s.y1));
-const wpx = Math.min(Math.max(mNum(o.w) * k, 14), segPx * 0.8);
-const cx = (X(s.x1) + X(s.x2)) / 2, cy = (Y(s.y1) + Y(s.y2)) / 2;
+const wpx = Math.min(Math.max(mNum(o.w) * k, 14), segPx * 0.6);
+const cx = (X(s.x1) + X(s.x2)) / 2 + s.dx * segPx * 0.18, cy = (Y(s.y1) + Y(s.y2)) / 2 + s.dy * segPx * 0.18;
 const ax = cx - s.dx * wpx / 2, ay = cy - s.dy * wpx / 2, bx = cx + s.dx * wpx / 2, by = cy + s.dy * wpx / 2;
 const door = o.type === 'door';
-out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#ffffff" stroke-width="7"/>`;
-out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="${door ? '#8a5a14' : '#14181f'}" stroke-width="2"/>`;
+out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#ffffff" stroke-width="9"/>`;
+out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#14181f" stroke-width="${door ? 1.2 : 2.4}" ${door ? 'stroke-dasharray="3 2"' : ''}/>`;
 out += `<path d="M${ax - s.dy * 6} ${ay + s.dx * 6}L${ax + s.dy * 6} ${ay - s.dx * 6}M${bx - s.dy * 6} ${by + s.dx * 6}L${bx + s.dy * 6} ${by - s.dx * 6}" stroke="#14181f" stroke-width="1.5"/>`;
-const tx = cx - s.dy * 15, ty = cy + s.dx * 15 + 4;
-out += `<text x="${tx}" y="${ty}" text-anchor="middle" font-size="11" fill="${door ? '#8a5a14' : '#14181f'}">${door ? 'дверь' : 'окно'}${mNum(o.w) ? ' ' + mFmt(mNum(o.w)) : ''}</text>`;
 });
-// касание стены — выбрать её
-g.segs.forEach(s => {
-out += `<path d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="transparent" stroke-width="26" style="cursor:pointer" onclick="rulerEdit('wall', ${s.i})"><title>Стена ${s.i + 1}</title></path>`;
-});
-if (!g.segs.length || (g.realCount === 0 && g.segs.length === 1)) {
-out += `<text x="${W / 2}" y="${H - 14}" text-anchor="middle" font-size="12.5" fill="#8a929c">Нажмите «Стена 1» и вводите длины по очереди</text>`;
+// куда пойдёт следующая стена
+if (ghost) {
+const ax = X(ghost.x1), ay = Y(ghost.y1), bx = X(ghost.x2), by = Y(ghost.y2);
+const [dx, dy] = g.nextDir;
+out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#e8a900" stroke-width="3" stroke-dasharray="6 5"/>`;
+out += `<path d="M${bx - dx * 9 - dy * 6} ${by - dy * 9 + dx * 6}L${bx} ${by}L${bx - dx * 9 + dy * 6} ${by - dy * 9 - dx * 6}" fill="none" stroke="#e8a900" stroke-width="3" stroke-linejoin="round"/>`;
+const tx = (ax + bx) / 2 + dy * 16, ty = (ay + by) / 2 - dx * 16 + 4;
+out += `<text x="${tx}" y="${ty}" text-anchor="middle" font-size="12" font-weight="700" fill="#14181f">стена ${g.segs.length + 1}</text>`;
 }
+g.segs.forEach(s => {
+out += `<path d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="transparent" stroke-width="28" style="cursor:pointer" onclick="rulerEdit('wall', ${s.i})"><title>Стена ${s.i + 1}</title></path>`;
+});
 box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Чертёж комнаты" font-family="inherit">${out}</svg>`;
 const chk = document.getElementById('rlCheck');
 if (chk) chk.innerHTML = rulerCheckText(g);
@@ -5227,27 +5297,70 @@ const hb = document.getElementById('rlHeightVal');
 if (hb) hb.textContent = mNum(m.height) ? mFmt(mNum(m.height)) + ' м' : 'не задана';
 }
 
+/* ---------- выбор формы ---------- */
+function rulerShapePickerHtml() {
+const tile = (shape, title, sub, path) => `<button type="button" class="rl-shape" onclick="rulerSetShape('${shape}')">
+<svg viewBox="0 0 60 44" width="60" height="44" aria-hidden="true"><path d="${path}" fill="none" stroke="#14181f" stroke-width="3" stroke-linejoin="miter"/></svg>
+<b>${title}</b><small>${sub}</small></button>`;
+return `<div class="rl-shapes">
+<div class="rl-shapes-title">Какая комната?</div>
+${tile('rect', 'Прямоугольная', 'длина и ширина', 'M6 6H54V38H6Z')}
+${tile('L', 'Г-образная', '6 стен по порядку', 'M6 6H54V38H30V24H6Z')}
+${tile('free', 'Своя форма', 'стена за стеной', 'M6 38V6H40L54 20V38Z')}
+</div>`;
+}
+
+function rulerSetShape(shape) {
+const hasData = measure.walls.some(w => mNum(w) > 0);
+if (hasData && !confirm('Сменить форму комнаты? Длины стен придётся ввести заново (можно отменить кнопкой ↶).')) return;
+rulerSnapshot();
+measure.shape = shape;
+const n = shape === 'rect' ? 4 : shape === 'L' ? 6 : 1;
+measure.walls = Array(n).fill('');
+measure.wallHeights = Array(n).fill('');
+measure.turns = shape === 'L' ? RL_L_TURNS.slice() : [];
+(measure.openings || []).forEach(o => { delete o.wall; });
+saveMeasureDraft();
+rulerEdit(mNum(measure.height) ? 'wall' : 'height', 0);
+}
+
 /* ---------- разметка вкладки ---------- */
+function rulerWallName(i) {
+if (rlShape(measure) === 'rect') return i % 2 === 0 ? 'Длина' : 'Ширина';
+return `Стена ${i + 1}`;
+}
+
 function rulerSectionHtml() {
 const m = measure;
+const shape = rlShape(m);
+const chips = shape === 'rect'
+? [0, 1].map(i => `<button type="button" class="rl-chip${rulerTarget && rulerTarget.kind === 'wall' && rulerTarget.idx % 2 === i ? ' on' : ''}" onclick="rulerEdit('wall', ${i})">${rulerWallName(i)} <b>${mNum(m.walls[i]) ? mFmt(mNum(m.walls[i])) : '—'}</b></button>`).join('')
+: m.walls.map((w, i) => `<button type="button" class="rl-chip${rulerTarget && rulerTarget.kind === 'wall' && rulerTarget.idx === i ? ' on' : ''}" onclick="rulerEdit('wall', ${i})">${i + 1}: <b>${mNum(w) ? mFmt(mNum(w)) : '—'}</b></button>`).join('')
++ (shape === 'free' ? `<button type="button" class="rl-chip rl-add" onclick="rulerEdit('wall', ${m.walls[m.walls.length - 1] === '' ? m.walls.length - 1 : m.walls.length})">+ Стена</button>` : '');
+const shapeName = { rect: 'Прямоугольная', L: 'Г-образная', free: 'Своя форма' }[shape];
 return `<section class="mp-sec rl-sec">
 <div class="rl-head">
 <button type="button" class="rl-chip" onclick="rulerEdit('height')">Высота <b id="rlHeightVal"></b></button>
+${shape ? `<button type="button" class="rl-chip rl-shape-chip" onclick="rulerChangeShape()">${shapeName} ▾</button>` : ''}
 <span class="rl-check" id="rlCheck"></span>
 </div>
 <div class="rl-sketch" id="rlSketch"></div>
-<div class="rl-walls">
-${m.walls.map((w, i) => `<button type="button" class="rl-chip${rulerTarget && rulerTarget.kind === 'wall' && rulerTarget.idx === i ? ' on' : ''}" onclick="rulerEdit('wall', ${i})">${i + 1}: <b>${mNum(w) ? mFmt(mNum(w)) : '—'}</b></button>`).join('')}
-<button type="button" class="rl-chip rl-add" onclick="rulerEdit('wall', ${m.walls[m.walls.length - 1] === '' ? m.walls.length - 1 : m.walls.length})">+ Стена</button>
-</div>
+${shape ? `<div class="rl-walls">${chips}</div>` : ''}
 <div class="mp-calc" id="mpCalcWalls"></div>
 </section>`;
+}
+
+function rulerChangeShape() {
+rulerTarget = null;
+document.getElementById('measurePanel').classList.remove('ruler-open');
+const box = document.getElementById('rlSketch');
+if (box) box.innerHTML = rulerShapePickerHtml();
 }
 
 /* ---------- клавиатура ---------- */
 function rulerFieldPath(t) {
 if (t.kind === 'height') return 'height';
-if (t.kind === 'wall') return 'walls.' + t.idx;
+if (t.kind === 'wall') return 'walls.' + (rlShape(measure) === 'rect' ? t.idx % 2 : t.idx);
 if (t.kind === 'wallH') return 'wallHeights.' + t.idx;
 if (t.kind === 'op') return `openings.${t.idx}.${t.field}`;
 return '';
@@ -5260,8 +5373,8 @@ return v == null ? '' : String(v);
 }
 function rulerLabel(t) {
 if (t.kind === 'height') return 'Высота стен';
-if (t.kind === 'wall') return `Стена ${t.idx + 1} · длина`;
-if (t.kind === 'wallH') return `Стена ${t.idx + 1} · своя высота`;
+if (t.kind === 'wall') return `${rulerWallName(t.idx)} · длина`.replace('Длина · длина', 'Длина комнаты').replace('Ширина · длина', 'Ширина комнаты');
+if (t.kind === 'wallH') return `${rulerWallName(t.idx)} · своя высота`;
 if (t.kind === 'op') {
 const o = measure.openings[t.idx];
 return `${o && o.type === 'door' ? 'Дверь' : 'Окно'} · ${t.field === 'w' ? 'ширина ↔' : 'высота ↕'}`;
@@ -5269,17 +5382,17 @@ return `${o && o.type === 'door' ? 'Дверь' : 'Окно'} · ${t.field === '
 return '';
 }
 
-function rulerEdit(kind, idx) {
+function rulerEdit(kind, idx, field) {
 if (kind === 'wall' && idx >= measure.walls.length) {
 measure.walls.push('');
 if (!Array.isArray(measure.wallHeights)) measure.wallHeights = [];
 measure.wallHeights[idx] = '';
 }
-rulerTarget = kind === 'op' ? { kind, idx, field: arguments[2] || 'w' } : { kind, idx };
+rulerTarget = kind === 'op' ? { kind, idx, field: field || 'w' } : { kind, idx };
 rulerBuf = rulerFieldValue(rulerTarget);
 rulerFresh = true;
 document.getElementById('measurePanel').classList.add('ruler-open');
-if (measureTab !== 'walls') { measureTab = 'walls'; }
+if (measureTab !== 'walls') measureTab = 'walls';
 renderMeasure();
 renderRulerPad();
 }
@@ -5288,50 +5401,60 @@ function renderRulerPad() {
 const pad = document.getElementById('rlPad');
 if (!pad || !rulerTarget) return;
 const t = rulerTarget;
+const shape = rlShape(measure);
 const val = evalMeasureExpr(rulerBuf);
 const isExpr = /[+×*x\-/]/.test(rulerBuf.replace(/^-/, ''));
 document.getElementById('rlPadLabel').textContent = rulerLabel(t);
 document.getElementById('rlPadValue').innerHTML = rulerBuf
 ? `${escapeHtml(rulerBuf)}${isExpr && isFinite(val) ? ` <small>= ${mFmt(val)}</small>` : ''}`
 : '<span class="rl-ph">0</span>';
-// инструменты для выбранной стены
+document.getElementById('rlUndoBtn').disabled = !rulerUndo.length;
 let tools = '';
 if (t.kind === 'wall' || t.kind === 'wallH') {
-const tr = rlTurns()[t.idx] === 'L' ? 'L' : 'R';
 const gg = rulerGeometry(measure);
-const canClose = t.kind === 'wall' && !mNum(measure.walls[t.idx]) && t.idx === measure.walls.length - 1 && gg.closeLen > 0;
-tools = `${canClose ? `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCloseRoom(${gg.closeLen})">Замкнуть: ${mFmt(gg.closeLen)} м</button>` : ''}
-<button type="button" class="rl-tool${tr === 'R' ? ' on' : ''}" onclick="rulerTurn('R')">Дальше направо ↱</button>
-<button type="button" class="rl-tool${tr === 'L' ? ' on' : ''}" onclick="rulerTurn('L')">налево ↰</button>
-<button type="button" class="rl-tool${t.kind === 'wallH' ? ' on' : ''}" onclick="rulerEdit('${t.kind === 'wallH' ? 'wall' : 'wallH'}', ${t.idx})">Своя высота</button>
+const canClose = shape !== 'rect' && t.kind === 'wall' && !mNum(measure.walls[t.idx]) && t.idx === measure.walls.length - 1 && gg.closeLen > 0;
+if (canClose) tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCloseRoom(${gg.closeLen})">Замкнуть: ${mFmt(gg.closeLen)} м</button>`;
+if (shape === 'free' && t.kind === 'wall') {
+const tr = rlTurns()[t.idx] === 'L' ? 'L' : 'R';
+tools += `<span class="rl-turn-label">После этой стены:</span>
+<button type="button" class="rl-tool rl-turn${tr === 'R' ? ' on' : ''}" onclick="rulerTurn('R')">↱ Направо</button>
+<button type="button" class="rl-tool rl-turn${tr === 'L' ? ' on' : ''}" onclick="rulerTurn('L')">↰ Налево</button>`;
+}
+tools += `<button type="button" class="rl-tool${t.kind === 'wallH' ? ' on' : ''}" onclick="rulerEdit('${t.kind === 'wallH' ? 'wall' : 'wallH'}', ${t.idx})">Своя высота</button>
 <button type="button" class="rl-tool" onclick="rulerAddOpening('window')">+ Окно</button>
 <button type="button" class="rl-tool" onclick="rulerAddOpening('door')">+ Дверь</button>
-${measure.walls.length > 1 ? `<button type="button" class="rl-tool rl-tool-del" onclick="rulerRemoveWall()">Убрать стену</button>` : ''}`;
+${shape === 'free' && measure.walls.length > 1 ? `<button type="button" class="rl-tool rl-tool-del" onclick="rulerRemoveWall()">Убрать стену</button>` : ''}`;
 }
-document.getElementById('rlPadTools').innerHTML = tools;
-document.getElementById('rlPadTools').style.display = tools ? '' : 'none';
-document.getElementById('rlNextBtn').textContent =
-t.kind === 'height' ? 'К стенам' : t.kind === 'wall' ? 'Следующая стена' : t.kind === 'op' && t.field === 'w' ? 'К высоте' : 'Готово';
+const toolsEl = document.getElementById('rlPadTools');
+toolsEl.innerHTML = tools;
+toolsEl.style.display = tools ? '' : 'none';
+const nextLabel = t.kind === 'height' ? 'К стенам →'
+: t.kind === 'wall' ? (shape === 'rect' && t.idx % 2 === 1 ? 'Готово ✓' : 'Далее →')
+: t.kind === 'op' && t.field === 'w' ? 'К высоте →' : 'Готово ✓';
+document.getElementById('rlNextBtn').textContent = nextLabel;
+document.getElementById('rlBackBtn').disabled = t.kind === 'height';
 }
 
 function rulerApply() {
 setMeasurePath(rulerFieldPath(rulerTarget), rulerBuf);
+// у прямоугольной комнаты противоположные стены одинаковые
+if (rlShape(measure) === 'rect') { measure.walls[2] = measure.walls[0]; measure.walls[3] = measure.walls[1]; }
 saveMeasureDraft();
 updateMeasureOutputs();
 renderRulerPad();
-// подписи на кнопках стен
+const shape = rlShape(measure);
 document.querySelectorAll('.rl-walls .rl-chip:not(.rl-add)').forEach((b, i) => {
-const v = mNum(measure.walls[i]);
+const v = mNum(measure.walls[shape === 'rect' ? i : i]);
 const bb = b.querySelector('b'); if (bb) bb.textContent = v ? mFmt(v) : '—';
 });
 }
 
 function rulerKey(k) {
 if (!rulerTarget) return;
+if (rulerFresh) rulerSnapshot();
 if (rulerFresh && /[0-9,]/.test(k)) rulerBuf = '';
 rulerFresh = false;
 if (k === '⌫') rulerBuf = rulerBuf.slice(0, -1);
-else if (k === 'C') rulerBuf = '';
 else if (k === '+' || k === '×') { if (rulerBuf && !/[+×]$/.test(rulerBuf)) rulerBuf += k; }
 else if (k === ',') { const last = rulerBuf.split(/[+×]/).pop(); if (!last.includes(',')) rulerBuf += (last === '' ? '0,' : ','); }
 else rulerBuf += k;
@@ -5341,19 +5464,24 @@ rulerApply();
 function rulerNext() {
 if (!rulerTarget) return;
 const t = rulerTarget;
+const shape = rlShape(measure);
 if (t.kind === 'height') {
+if (!shape) { rulerClose(); return; }
 const firstEmpty = measure.walls.findIndex(w => !mNum(w));
-rulerEdit('wall', firstEmpty === -1 ? measure.walls.length : firstEmpty);
+rulerEdit('wall', firstEmpty === -1 ? 0 : firstEmpty);
 return;
 }
 if (t.kind === 'wall') {
-if (!mNum(measure.walls[t.idx])) { rulerClose(); return; }
-const g = rulerGeometry(measure);
-if (g.closed && t.idx === measure.walls.length - 1) {
+if (shape === 'rect') {
+if (t.idx % 2 === 0) { rulerEdit('wall', 1); return; }
 rulerClose();
-showAddToast('Комната сошлась');
+if (mNum(measure.walls[0]) && mNum(measure.walls[1])) showAddToast('Комната сошлась');
 return;
 }
+if (!mNum(measure.walls[t.idx])) { rulerClose(); return; }
+const g = rulerGeometry(measure);
+if (g.closed && t.idx === measure.walls.length - 1) { rulerClose(); showAddToast('Комната сошлась'); return; }
+if (shape === 'L' && t.idx === measure.walls.length - 1) { rulerClose(); return; }
 rulerEdit('wall', t.idx + 1);
 return;
 }
@@ -5362,11 +5490,35 @@ if (t.kind === 'wallH') { rulerEdit('wall', t.idx); return; }
 rulerClose();
 }
 
+// «← Назад» — к предыдущему полю
+function rulerBack() {
+const t = rulerTarget;
+if (!t) return;
+const shape = rlShape(measure);
+if (t.kind === 'op') {
+if (t.field === 'h') { rulerEdit('op', t.idx, 'w'); return; }
+const o = measure.openings[t.idx];
+if (o && typeof o.wall === 'number') { rulerEdit('wall', o.wall); return; }
+rulerClose(); return;
+}
+if (t.kind === 'wallH') { rulerEdit('wall', t.idx); return; }
+if (t.kind === 'wall') {
+const prev = shape === 'rect' ? (t.idx % 2 === 1 ? 0 : -1) : t.idx - 1;
+if (prev < 0) { rulerEdit('height'); return; }
+// пустую последнюю стену своей формы убираем, раз вернулись
+if (shape === 'free' && t.idx === measure.walls.length - 1 && !String(measure.walls[t.idx]).trim() && measure.walls.length > 1) {
+measure.walls.pop();
+if (Array.isArray(measure.wallHeights)) measure.wallHeights.length = Math.min(measure.wallHeights.length, measure.walls.length);
+}
+rulerEdit('wall', prev);
+return;
+}
+}
+
 function rulerClose() {
 rulerTarget = null;
-// пустая последняя стена не нужна
 const w = measure.walls;
-if (w.length > 1 && !String(w[w.length - 1]).trim()) {
+if (rlShape(measure) === 'free' && w.length > 1 && !String(w[w.length - 1]).trim()) {
 w.pop();
 if (Array.isArray(measure.wallHeights)) measure.wallHeights.length = Math.min(measure.wallHeights.length, w.length);
 }
@@ -5375,9 +5527,9 @@ saveMeasureDraft();
 renderMeasure();
 }
 
-// Подставить последнюю стену так, чтобы комната замкнулась
 function rulerCloseRoom(len) {
 if (!rulerTarget) return;
+rulerSnapshot();
 rulerBuf = String(Math.round(len * 1000) / 1000).replace('.', ',');
 rulerApply();
 rulerClose();
@@ -5386,6 +5538,7 @@ showAddToast('Комната сошлась');
 
 function rulerTurn(dir) {
 const t = rulerTarget; if (!t) return;
+rulerSnapshot();
 rlTurns()[t.idx] = dir;
 saveMeasureDraft();
 renderRulerSketch();
@@ -5394,6 +5547,7 @@ renderRulerPad();
 
 function rulerAddOpening(type) {
 const t = rulerTarget; if (!t) return;
+rulerSnapshot();
 const prev = [...measure.openings].reverse().find(o => o.type === type);
 measure.openings.push(prev ? { ...prev, wall: t.idx } : { type, w: '', h: '', n: '1', slopes: true, wall: t.idx });
 saveMeasureDraft();
@@ -5402,6 +5556,7 @@ rulerEdit('op', measure.openings.length - 1, 'w');
 
 function rulerRemoveWall() {
 const t = rulerTarget; if (!t) return;
+rulerSnapshot();
 const i = t.idx;
 measure.walls.splice(i, 1);
 if (Array.isArray(measure.wallHeights)) measure.wallHeights.splice(i, 1);
@@ -5410,13 +5565,10 @@ if (Array.isArray(measure.turns)) measure.turns.splice(i, 1);
 if (o.wall === i) delete o.wall;
 else if (typeof o.wall === 'number' && o.wall > i) o.wall -= 1;
 });
-rulerTarget = null;
-document.getElementById('measurePanel').classList.remove('ruler-open');
-saveMeasureDraft();
-renderMeasure();
+rulerClose();
+showAddToast('Стена убрана — можно отменить ↶');
 }
 
-// Физическая клавиатура (на компьютере) — те же действия
 document.addEventListener('keydown', (e) => {
 if (!rulerTarget || !document.getElementById('measurePanel').classList.contains('ruler-open')) return;
 if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -5424,6 +5576,8 @@ const map = { '.': ',', ',': ',', '+': '+', '*': '×', 'x': '×', 'Backspace': '
 if (/^[0-9]$/.test(e.key)) { rulerKey(e.key); e.preventDefault(); }
 else if (map[e.key]) { rulerKey(map[e.key]); e.preventDefault(); }
 else if (e.key === 'Enter') { rulerNext(); e.preventDefault(); }
+else if (e.key === 'Escape') { rulerClose(); e.preventDefault(); }
+else if ((e.ctrlKey || e.metaKey) && e.key === 'z') { rulerUndoLast(); e.preventDefault(); }
 });
 </script>
 
