@@ -123,6 +123,33 @@ h2 { font-size: 16px; }
 .form-group input, .form-group select, .form-group textarea, .unit-row input, .unit-row select { font-size: 14px; }
 .tab-btn { flex: 1; }
 }
+/* ---------- Шапка с меню пользователя ---------- */
+.app-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 16px; }
+.user-menu-wrap { position: relative; min-width: 0; }
+.user-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 62vw; min-height: 40px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #0f172a; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; cursor: pointer; }
+.user-chip .user-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-chip .user-chip-caret { color: #64748b; font-size: 10px; transition: transform 0.15s; }
+.user-chip[aria-expanded="true"] { border-color: #c7d2fe; background: #eef2ff; }
+.user-chip[aria-expanded="true"] .user-chip-caret { transform: rotate(180deg); }
+.user-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 220px; padding: 6px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14); }
+.user-menu.open { display: block; }
+.menu-item { display: block; width: 100%; padding: 12px; background: none; border: none; border-radius: 8px; text-align: left; font-size: 15px; font-weight: 600; color: #334155; cursor: pointer; }
+.menu-item:active, .menu-item:hover { background: #f1f5f9; }
+.menu-item.active { background: #eef2ff; color: #4338ca; }
+.menu-item-danger { color: #e11d48; }
+.menu-sep { height: 1px; margin: 4px 6px; background: #e2e8f0; }
+@media (prefers-reduced-motion: reduce) { .user-chip .user-chip-caret { transition: none; } }
+
+/* ---------- Нижняя панель разделов ---------- */
+.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: rgba(255, 255, 255, 0.97); border-top: 1px solid #e2e8f0; box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06); padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); }
+.bottom-nav-inner { display: flex; gap: 4px; max-width: 680px; margin: 0 auto; }
+.nav-tab { flex: 1; min-height: 54px; padding: 6px 4px; background: none; border: none; border-radius: 12px; text-align: center; font-size: 12px; font-weight: 600; color: #64748b; cursor: pointer; }
+.nav-tab .nav-tab-icon { display: block; font-size: 21px; line-height: 1.2; margin-bottom: 2px; }
+.nav-tab.active { color: #4338ca; background: #eef2ff; }
+.nav-tab:focus-visible, .menu-item:focus-visible, .user-chip:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }
+body.has-bottom-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
+/* Пока открыта клавиатура, панель прячется, чтобы не закрывать поля ввода */
+body.keyboard-open .bottom-nav { display: none !important; }
 </style>
 </head>
 <body>
@@ -198,26 +225,33 @@ h2 { font-size: 16px; }
 
 <!-- Основной экран приложения -->
 <div id="appScreen" class="container" style="display: none;">
-<div class="nav-header">
+<div class="app-header">
 <a href="index.html" class="nav-btn">⬅ Прайс</a>
-<div style="font-size:12px; font-weight:600; color:#475569; background: #f8fafc; padding: 6px 10px; border-radius: 20px; border: 1px solid #e2e8f0;">
-👤 <span id="userBadge" style="color: #0f172a;"></span>
+<div class="user-menu-wrap">
+<button type="button" class="user-chip" id="userMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="userMenu" onclick="toggleUserMenu()">
+<span aria-hidden="true">👤</span><span class="user-chip-name" id="userBadge"></span><span class="user-chip-caret" aria-hidden="true">▼</span>
+</button>
+<div class="user-menu" id="userMenu" role="menu">
+<button type="button" class="menu-item" role="menuitem" id="tabProfileBtn" onclick="switchTab('profile')">👤 Профиль</button>
+<button type="button" class="menu-item" role="menuitem" id="tabUsersBtn" onclick="switchTab('users')" style="display: none;">👥 Мастера</button>
+<button type="button" class="menu-item" role="menuitem" id="tabStatsBtn" onclick="switchTab('stats')" style="display: none;">📊 Статистика и копии</button>
+<div class="menu-sep" id="userMenuSep"></div>
+<button type="button" class="menu-item menu-item-danger" role="menuitem" onclick="toggleUserMenu(false); handleLogout()">Выйти</button>
 </div>
-<button type="button" class="btn btn-danger btn-sm" onclick="handleLogout()">Выйти</button>
+</div>
 </div>
 
 <div id="companyModePromo" style="display:none; background:linear-gradient(90deg,#4f46e5,#7c3aed); color:#fff; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; font-weight:600;">
 🆕 Новинка! Попробуй создать прайс под свою компанию — в следующий раз выбери «🏢 Своя компания» на экране входа.
 </div>
 
-<div class="tab-menu">
-<button type="button" class="tab-btn active" id="tabCalcBtn" onclick="switchTab('calc')">📐 Калькулятор</button>
-<button type="button" class="tab-btn" id="tabObjectsBtn" onclick="switchTab('objects')">🏠 Объекты</button>
-<button type="button" class="tab-btn" id="tabHistoryBtn" onclick="switchTab('history')">📂 История</button>
-<button type="button" class="tab-btn" id="tabProfileBtn" onclick="switchTab('profile')">👤 Профиль</button>
-<button type="button" class="tab-btn" id="tabUsersBtn" onclick="switchTab('users')" style="display: none;">👥 Мастера</button>
-<button type="button" class="tab-btn" id="tabStatsBtn" onclick="switchTab('stats')" style="display: none;">📊 Статистика</button>
+<nav class="bottom-nav" id="bottomNav" aria-label="Разделы" style="display: none;">
+<div class="bottom-nav-inner">
+<button type="button" class="nav-tab active" id="tabCalcBtn" onclick="switchTab('calc')"><span class="nav-tab-icon" aria-hidden="true">📐</span>Калькулятор</button>
+<button type="button" class="nav-tab" id="tabObjectsBtn" onclick="switchTab('objects')"><span class="nav-tab-icon" aria-hidden="true">🏠</span>Объекты</button>
+<button type="button" class="nav-tab" id="tabHistoryBtn" onclick="switchTab('history')"><span class="nav-tab-icon" aria-hidden="true">📂</span>История</button>
 </div>
+</nav>
 
 <!-- Вкладка Калькулятор -->
 <div id="calcTab">
@@ -814,6 +848,7 @@ document.getElementById('editPriceListLink').style.display = isCompanyMode() ? '
 document.getElementById('tabCalcBtn').style.display = isCurrentClient() ? 'none' : 'block';
 document.getElementById('tabHistoryBtn').style.display = isCurrentClient() ? 'none' : 'block';
 document.getElementById('tabProfileBtn').style.display = isCurrentClient() ? 'none' : 'block';
+updateNavigation();
 if (isCurrentClient()) {
 switchTab('objects');
 } else {
@@ -836,10 +871,61 @@ localStorage.removeItem('currentUserMode');
 localStorage.removeItem('currentUserHasTriedCompanyMode');
 document.getElementById('authScreen').style.display = 'block';
 document.getElementById('appScreen').style.display = 'none';
+document.body.classList.remove('has-bottom-nav');
+const bottomNav = document.getElementById('bottomNav');
+if (bottomNav) bottomNav.style.display = 'none';
 switchAuthMode('login');
 }
 
+// Меню пользователя (Профиль, Мастера, Статистика, Выйти)
+function toggleUserMenu(force) {
+const menu = document.getElementById('userMenu');
+const btn = document.getElementById('userMenuBtn');
+if (!menu || !btn) return;
+const open = typeof force === 'boolean' ? force : !menu.classList.contains('open');
+menu.classList.toggle('open', open);
+btn.setAttribute('aria-expanded', String(open));
+}
+
+document.addEventListener('click', (e) => {
+if (!e.target.closest('.user-menu-wrap')) toggleUserMenu(false);
+});
+document.addEventListener('keydown', (e) => {
+if (e.key === 'Escape') toggleUserMenu(false);
+});
+
+// Пока в поле ввода стоит курсор (открыта клавиатура), нижняя панель
+// прячется — иначе на телефоне она поднимается над клавиатурой и
+// закрывает поле, в которое печатаешь.
+function isTextField(el) {
+if (!el) return false;
+if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+if (el.tagName !== 'INPUT') return false;
+return !['checkbox', 'radio', 'button', 'submit', 'file', 'range', 'color'].includes(el.type);
+}
+document.addEventListener('focusin', (e) => {
+if (isTextField(e.target)) document.body.classList.add('keyboard-open');
+});
+document.addEventListener('focusout', () => {
+setTimeout(() => {
+if (!isTextField(document.activeElement)) document.body.classList.remove('keyboard-open');
+}, 100);
+});
+
+// Нижняя панель и пункты меню — в зависимости от роли
+function updateNavigation() {
+const client = isCurrentClient();
+const nav = document.getElementById('bottomNav');
+if (nav) nav.style.display = client ? 'none' : 'block';
+document.body.classList.toggle('has-bottom-nav', !client);
+// У заказчика в меню остаётся только «Выйти» — разделитель не нужен
+const sep = document.getElementById('userMenuSep');
+if (sep) sep.style.display = client ? 'none' : 'block';
+}
+
 function switchTab(tab) {
+toggleUserMenu(false);
+const prevScrollTab = document.querySelector('.nav-tab.active, .menu-item.active');
 document.getElementById('calcTab').style.display = tab === 'calc' ? 'block' : 'none';
 document.getElementById('objectsTab').style.display = tab === 'objects' ? 'block' : 'none';
 document.getElementById('historyTab').style.display = tab === 'history' ? 'block' : 'none';
@@ -852,6 +938,9 @@ document.getElementById('tabHistoryBtn').classList.toggle('active', tab === 'his
 document.getElementById('tabProfileBtn').classList.toggle('active', tab === 'profile');
 document.getElementById('tabUsersBtn').classList.toggle('active', tab === 'users');
 document.getElementById('tabStatsBtn').classList.toggle('active', tab === 'stats');
+if (prevScrollTab && prevScrollTab.id !== ({ calc: 'tabCalcBtn', objects: 'tabObjectsBtn', history: 'tabHistoryBtn', profile: 'tabProfileBtn', users: 'tabUsersBtn', stats: 'tabStatsBtn' })[tab]) {
+window.scrollTo(0, 0);
+}
 if (tab === 'history') renderHistory();
 if (tab === 'profile') renderProfile();
 if (tab === 'users') renderUsersList();
