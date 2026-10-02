@@ -150,6 +150,75 @@ h2 { font-size: 16px; }
 body.has-bottom-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
 /* Пока открыта клавиатура, панель прячется, чтобы не закрывать поля ввода */
 body.keyboard-open .bottom-nav { display: none !important; }
+
+/* ---------- Нижняя шторка с действиями ---------- */
+.sheet-overlay { display: none; position: fixed; inset: 0; z-index: 90; background: rgba(15, 23, 42, 0.4); }
+.sheet { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; max-width: 680px; margin: 0 auto; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); background: #ffffff; border-radius: 18px 18px 0 0; box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.18); }
+.sheet.open, .sheet-overlay.open { display: block; }
+.sheet::before { content: ""; display: block; width: 40px; height: 4px; margin: 2px auto 8px; border-radius: 2px; background: #cbd5e1; }
+.sheet-title { padding: 4px 12px 10px; font-size: 13px; color: #64748b; font-weight: 600; }
+.sheet-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 12px; background: none; border: none; border-radius: 10px; text-align: left; font-size: 16px; font-weight: 600; color: #1e293b; cursor: pointer; }
+.sheet-item:active, .sheet-item:hover { background: #f1f5f9; }
+.sheet-item-icon { width: 26px; text-align: center; font-size: 19px; }
+.sheet-item-danger { color: #e11d48; }
+.sheet-sep { height: 1px; margin: 4px 8px; background: #e2e8f0; }
+.sheet-cancel { width: 100%; min-height: 48px; margin-top: 6px; background: #f1f5f9; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; color: #475569; cursor: pointer; }
+body.sheet-open { overflow: hidden; }
+
+/* ---------- Карточка счёта ---------- */
+.hc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+.hc-title { min-width: 0; }
+.hc-name { font-size: 15px; font-weight: 700; color: #0f172a; overflow-wrap: anywhere; }
+.hc-date { font-size: 12px; color: #64748b; margin-top: 2px; }
+.hc-amount { font-size: 17px; font-weight: 800; color: #0f172a; white-space: nowrap; }
+.hc-meta { font-size: 12px; color: #475569; margin-top: 2px; overflow-wrap: anywhere; }
+.hc-meta b { color: #334155; }
+.hc-items { margin: 8px 0 4px; padding-top: 6px; border-top: 1px dashed #e2e8f0; color: #475569; font-size: 12px; line-height: 1.5; }
+.hc-items summary { cursor: pointer; color: #4f46e5; font-weight: 600; list-style: none; padding: 2px 0; }
+.hc-items summary::-webkit-details-marker { display: none; }
+.hc-actions { display: flex; gap: 6px; margin-top: 10px; }
+.hc-btn { flex: 1; min-height: 42px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; color: #334155; font-size: 14px; font-weight: 600; cursor: pointer; }
+.hc-btn-primary { background: #4f46e5; border-color: #4f46e5; color: #ffffff; }
+.hc-btn-more { flex: 0 0 48px; font-size: 18px; line-height: 1; }
+.hc-badge { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; vertical-align: 1px; }
+
+/* ---------- Поиск и фильтры истории ---------- */
+.hist-tools { margin-bottom: 12px; }
+.hist-tools .search-box { margin-bottom: 8px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: 0 0 auto; min-height: 36px; padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 999px; background: #ffffff; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer; }
+.chip.active { background: #0f172a; border-color: #0f172a; color: #ffffff; }
+.hist-count { font-size: 12px; color: #94a3b8; margin: 0 2px 8px; }
+
+/* ---------- Калькулятор: детали счёта и нижняя полоса ---------- */
+.calc-details { margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; }
+.calc-details > summary { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; list-style: none; }
+.calc-details > summary::-webkit-details-marker { display: none; }
+.calc-details-text { flex: 1; min-width: 0; }
+.calc-details-title { font-size: 14px; font-weight: 700; color: #0f172a; }
+.calc-details-summary { font-size: 12px; color: #64748b; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calc-details-arrow { color: #64748b; font-size: 12px; transition: transform 0.15s; }
+.calc-details[open] .calc-details-arrow { transform: rotate(180deg); }
+.calc-details-body { padding: 0 14px 6px; }
+.file-pick-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px dashed #a5b4fc; border-radius: 10px; background: #eef2ff; color: #4338ca; font-size: 14px; font-weight: 600; cursor: pointer; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.file-pick-btn:focus-within { outline: 2px solid #4f46e5; outline-offset: 2px; }
+
+.calc-bar { display: none; position: fixed; left: 0; right: 0; z-index: 49; bottom: calc(67px + env(safe-area-inset-bottom, 0px)); background: #0f172a; box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.12); }
+.calc-bar-inner { display: flex; align-items: center; gap: 8px; max-width: 680px; margin: 0 auto; padding: 8px 10px; }
+.calc-bar-total { flex: 1; min-width: 0; color: #cbd5e1; font-size: 12px; line-height: 1.2; }
+.calc-bar-total b { display: block; color: #34d399; font-size: 19px; font-weight: 800; white-space: nowrap; }
+.calc-bar-save { min-height: 46px; padding: 10px 16px; border: none; border-radius: 10px; background: #4f46e5; color: #ffffff; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.calc-bar-more { flex: 0 0 46px; min-height: 46px; border: 1px solid #334155; border-radius: 10px; background: transparent; color: #ffffff; font-size: 19px; cursor: pointer; }
+body.calc-active .calc-bar { display: block; }
+body.calc-active.has-bottom-nav { padding-bottom: calc(152px + env(safe-area-inset-bottom, 0px)); }
+body.keyboard-open .calc-bar { display: none !important; }
+/* Уведомления — над нижними панелями, но под шторкой действий */
+.add-toast { z-index: 80; }
+body.has-bottom-nav .add-toast { bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
+body.calc-active.has-bottom-nav .add-toast { bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
+@media (prefers-reduced-motion: reduce) { .calc-details-arrow { transition: none; } }
 </style>
 </head>
 <body>
@@ -245,6 +314,13 @@ body.keyboard-open .bottom-nav { display: none !important; }
 🆕 Новинка! Попробуй создать прайс под свою компанию — в следующий раз выбери «🏢 Своя компания» на экране входа.
 </div>
 
+<div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+<div class="sheet-title" id="sheetTitle"></div>
+<div id="sheetItems"></div>
+<button type="button" class="sheet-cancel" onclick="closeSheet()">Отмена</button>
+</div>
+
 <nav class="bottom-nav" id="bottomNav" aria-label="Разделы" style="display: none;">
 <div class="bottom-nav-inner">
 <button type="button" class="nav-tab active" id="tabCalcBtn" onclick="switchTab('calc')"><span class="nav-tab-icon" aria-hidden="true">📐</span>Калькулятор</button>
@@ -273,7 +349,7 @@ body.keyboard-open .bottom-nav { display: none !important; }
 <button type="button" id="docTypeInvoiceBtn" class="role-toggle-btn active" onclick="setDocType('invoice')">🧾 Счёт</button>
 <button type="button" id="docTypeEstimateBtn" class="role-toggle-btn" onclick="setDocType('estimate')">📋 Предв. расчёт</button>
 </div>
-<div style="font-size:11px; color:#94a3b8; margin-top:4px;">Предварительный расчёт хранится отдельно от счетов и не входит в их сумму по объекту.</div>
+<div style="font-size:11px; color:#94a3b8; margin-top:4px;">Расчёт не входит в сумму счетов по объекту.</div>
 </div>
 
 <div class="form-group">
@@ -284,23 +360,37 @@ body.keyboard-open .bottom-nav { display: none !important; }
 </select>
 </div>
 
+<details class="calc-details" id="calcDetails">
+<summary>
+<div class="calc-details-text">
+<div class="calc-details-title">Заказчик, адрес, пояснение, фото</div>
+<div class="calc-details-summary" id="calcDetailsSummary">Заказчик не указан</div>
+</div>
+<span class="calc-details-arrow" aria-hidden="true">▼</span>
+</summary>
+<div class="calc-details-body">
 <div class="form-group">
 <label>ФИО Заказчика</label>
-<input type="text" id="clientName" placeholder="Иванов И.И.">
+<input type="text" id="clientName" placeholder="Иванов И.И." oninput="updateCalcDetailsSummary()">
 </div>
 <div class="form-group">
 <label>Адрес объекта</label>
-<input type="text" id="objectAddress" placeholder="ул. Ленина, д. 1">
+<input type="text" id="objectAddress" placeholder="ул. Ленина, д. 1" oninput="updateCalcDetailsSummary()">
 </div>
 <div class="form-group">
 <label>Пояснение / Детали к счёту</label>
-<textarea id="invoiceNote" placeholder="Например: Стены и потолки в гостиной, черновая подготовка под покраску"></textarea>
+<textarea id="invoiceNote" placeholder="Например: Стены и потолки в гостиной, черновая подготовка под покраску" oninput="updateCalcDetailsSummary()"></textarea>
 </div>
 <div class="form-group">
-<label>📎 Фото и файлы отчёта (необязательно)</label>
-<input type="file" id="reportFileInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onchange="handleReportFileSelect(event)">
+<label>Фото и файлы отчёта</label>
+<label class="file-pick-btn">
+<input type="file" id="reportFileInput" class="visually-hidden" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onchange="handleReportFileSelect(event)">
+📷 Добавить фото или файл
+</label>
 <div id="reportAttachmentsList" style="margin-top:8px;"></div>
 </div>
+</div>
+</details>
 
 <h2>🛠 Выберите услуги:</h2>
 <input type="text" id="searchCalcInput" class="search-box" placeholder="🔍 Поиск услуги для счета..." oninput="renderServices()">
@@ -337,11 +427,12 @@ body.keyboard-open .bottom-nav { display: none !important; }
 </div>
 </div>
 
-<div class="action-btns">
-<button type="button" class="btn btn-success" onclick="sendPDF()">📤 Отправить PDF</button>
-<button type="button" class="btn btn-primary" onclick="downloadInvoicePDF()">⬇️ Скачать PDF</button>
-<button type="button" class="btn btn-primary" id="calcSaveBtn" onclick="saveInvoiceToHistory(false)">💾 Сохранить</button>
-<button type="button" class="btn btn-danger" onclick="resetAll()">❌ Очистить</button>
+<div class="calc-bar" id="calcBar">
+<div class="calc-bar-inner">
+<div class="calc-bar-total"><span id="calcBarLabel">Итого</span><b id="calcBarTotal">0 ₽</b></div>
+<button type="button" class="calc-bar-save" id="calcSaveBtn" onclick="saveInvoiceToHistory(false)">💾 Сохранить</button>
+<button type="button" class="calc-bar-more" onclick="openCalcActions()" aria-label="Другие действия">⋯</button>
+</div>
 </div>
 </div>
 
@@ -391,6 +482,16 @@ body.keyboard-open .bottom-nav { display: none !important; }
 <div id="historyTab" style="display: none;">
 <h1>📂 История счетов</h1>
 <div id="overallPayStats"></div>
+<div class="hist-tools">
+<input type="search" id="historySearch" class="search-box" placeholder="🔍 Поиск: заказчик, объект, адрес, работа" oninput="renderHistory()">
+<div class="chips" role="group" aria-label="Фильтр">
+<button type="button" class="chip active" data-filter="all" onclick="setHistoryFilter('all')">Все</button>
+<button type="button" class="chip" data-filter="owes" onclick="setHistoryFilter('owes')">Должны</button>
+<button type="button" class="chip" data-filter="paid" onclick="setHistoryFilter('paid')">Оплачены</button>
+<button type="button" class="chip" data-filter="estimate" onclick="setHistoryFilter('estimate')">Расчёты</button>
+</div>
+</div>
+<div class="hist-count" id="historyCount"></div>
 <div id="historyList">Загрузка истории...</div>
 </div>
 
@@ -778,6 +879,7 @@ selectedDocType = type;
 document.getElementById('docTypeInvoiceBtn').classList.toggle('active', type === 'invoice');
 document.getElementById('docTypeEstimateBtn').classList.toggle('active', type === 'estimate');
 document.getElementById('invoicePreviewHeading').textContent = type === 'estimate' ? '📋 Предпросмотр расчёта' : '🧾 Предпросмотр счета';
+updateCalcBarTotal();
 }
 
 function setRegisterRole(role) {
@@ -871,7 +973,7 @@ localStorage.removeItem('currentUserMode');
 localStorage.removeItem('currentUserHasTriedCompanyMode');
 document.getElementById('authScreen').style.display = 'block';
 document.getElementById('appScreen').style.display = 'none';
-document.body.classList.remove('has-bottom-nav');
+document.body.classList.remove('has-bottom-nav', 'calc-active');
 const bottomNav = document.getElementById('bottomNav');
 if (bottomNav) bottomNav.style.display = 'none';
 switchAuthMode('login');
@@ -903,14 +1005,21 @@ if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
 if (el.tagName !== 'INPUT') return false;
 return !['checkbox', 'radio', 'button', 'submit', 'file', 'range', 'color'].includes(el.type);
 }
-document.addEventListener('focusin', (e) => {
-if (isTextField(e.target)) document.body.classList.add('keyboard-open');
-});
-document.addEventListener('focusout', () => {
-setTimeout(() => {
-if (!isTextField(document.activeElement)) document.body.classList.remove('keyboard-open');
-}, 100);
-});
+// Клавиатура считается открытой, когда курсор в поле И видимая область
+// экрана заметно уменьшилась. Одного курсора мало: на Android клавиатуру
+// часто закрывают жестом «назад», а курсор остаётся в поле — панель
+// должна вернуться сразу, а не после касания где-то ещё.
+function updateKeyboardState() {
+const focused = isTextField(document.activeElement);
+let open = focused;
+if (focused && window.visualViewport) {
+open = window.visualViewport.height < window.innerHeight - 120;
+}
+document.body.classList.toggle('keyboard-open', open);
+}
+document.addEventListener('focusin', () => setTimeout(updateKeyboardState, 300));
+document.addEventListener('focusout', () => setTimeout(updateKeyboardState, 100));
+if (window.visualViewport) window.visualViewport.addEventListener('resize', updateKeyboardState);
 
 // Нижняя панель и пункты меню — в зависимости от роли
 function updateNavigation() {
@@ -918,6 +1027,8 @@ const client = isCurrentClient();
 const nav = document.getElementById('bottomNav');
 if (nav) nav.style.display = client ? 'none' : 'block';
 document.body.classList.toggle('has-bottom-nav', !client);
+const calcTab = document.getElementById('calcTab');
+document.body.classList.toggle('calc-active', !client && !!calcTab && calcTab.style.display !== 'none');
 // У заказчика в меню остаётся только «Выйти» — разделитель не нужен
 const sep = document.getElementById('userMenuSep');
 if (sep) sep.style.display = client ? 'none' : 'block';
@@ -925,6 +1036,8 @@ if (sep) sep.style.display = client ? 'none' : 'block';
 
 function switchTab(tab) {
 toggleUserMenu(false);
+closeSheet();
+document.body.classList.toggle('calc-active', tab === 'calc' && !isCurrentClient());
 const prevScrollTab = document.querySelector('.nav-tab.active, .menu-item.active');
 document.getElementById('calcTab').style.display = tab === 'calc' ? 'block' : 'none';
 document.getElementById('objectsTab').style.display = tab === 'objects' ? 'block' : 'none';
@@ -1267,6 +1380,7 @@ console.error('Не удалось удалить файл из хранилищ
 }
 
 function renderReportAttachments() {
+updateCalcDetailsSummary();
 const container = document.getElementById('reportAttachmentsList');
 if (!container) return;
 container.innerHTML = invoiceAttachments.map((att, idx) => {
@@ -1325,7 +1439,41 @@ btn.innerHTML = originalHtml;
 }
 }
 
+// Короткая строка под заголовком «Заказчик, адрес, пояснение, фото»,
+// чтобы видеть заполненное, не раскрывая блок.
+function updateCalcDetailsSummary() {
+const el = document.getElementById('calcDetailsSummary');
+if (!el) return;
+const client = (document.getElementById('clientName').value || '').trim();
+const address = (document.getElementById('objectAddress').value || '').trim();
+const note = (document.getElementById('invoiceNote').value || '').trim();
+const files = typeof invoiceAttachments !== 'undefined' && Array.isArray(invoiceAttachments) ? invoiceAttachments.length : 0;
+const parts = [client ? '👤 ' + client : 'Заказчик не указан'];
+if (address) parts.push('📍 ' + address);
+if (note) parts.push('📝 есть пояснение');
+if (files) parts.push('📎 ' + files);
+el.textContent = parts.join('  ·  ');
+}
+
+function updateCalcBarTotal() {
+const src = document.getElementById('totalSum');
+const dst = document.getElementById('calcBarTotal');
+if (src && dst) dst.textContent = src.textContent + ' ₽';
+const label = document.getElementById('calcBarLabel');
+if (label) label.textContent = (typeof selectedDocType !== 'undefined' && selectedDocType === 'estimate') ? 'Итого по расчёту' : 'Итого';
+}
+
+// Итог в нижней полосе повторяет итог предпросмотра — следим за ним,
+// чтобы не трогать все места, где он пересчитывается.
+document.addEventListener('DOMContentLoaded', () => {
+const src = document.getElementById('totalSum');
+if (src) new MutationObserver(updateCalcBarTotal).observe(src, { childList: true, characterData: true, subtree: true });
+updateCalcBarTotal();
+updateCalcDetailsSummary();
+});
+
 function updateInvoiceInfo() {
+updateCalcDetailsSummary();
 const info = document.getElementById('invoiceInfo');
 if (!info) return;
 const client = document.getElementById('clientName').value.trim();
@@ -1830,37 +1978,123 @@ renderHistory();
 return true;
 }
 
+// Дата без секунд: «02.10.2026, 15:30:13» → «02.10.2026, 15:30»
+function formatRecordDate(date) {
+return String(date || '').replace(/(\d{1,2}:\d{2}):\d{2}/, '$1');
+}
+
 function renderHistoryCardHtml(rec, containerId, opts = {}) {
 const items = rec.items || [];
-let itemsHtml = items.map(i =>
-`• ${escapeHtml(i.name)} (${i.qty} ${escapeHtml(i.unit)})${i.location ? ` <span style="color:#6366f1;">— 📍 ${escapeHtml(i.location)}</span>` : ''} — ${(i.qty * i.price).toLocaleString('ru-RU')} ₽`
-).join('<br>');
+const itemLine = i =>
+`• ${escapeHtml(i.name)} (${i.qty} ${escapeHtml(i.unit)})${i.location ? ` <span style="color:#6366f1;">— 📍 ${escapeHtml(i.location)}</span>` : ''} — ${(i.qty * i.price).toLocaleString('ru-RU')} ₽`;
+const VISIBLE_ITEMS = 3;
+let itemsHtml = items.slice(0, VISIBLE_ITEMS).map(itemLine).join('<br>');
+if (items.length > VISIBLE_ITEMS) {
+const rest = items.length - VISIBLE_ITEMS;
+itemsHtml += `<details><summary>Ещё ${rest} ${pluralRu(rest, 'позиция', 'позиции', 'позиций')}</summary>${items.slice(VISIBLE_ITEMS).map(itemLine).join('<br>')}</details>`;
+}
 const masterName = rec.author || rec.master || rec.user || 'Мастер';
 const recordId = rec.id || ('legacy_' + Math.random());
 const isEstimate = rec.docType === 'estimate';
+const title = opts.objName || rec.client || (isEstimate ? 'Расчёт' : 'Счёт');
+const showClient = opts.showClientAddress && rec.client && rec.client !== title;
+const showAddress = opts.showClientAddress && rec.address && rec.address.trim() && rec.address !== 'Без адреса';
+const canShare = rec.id && !rec.shareDisabled;
 return `
 <div class="history-card" id="historyCard_${recordId}">
-<div class="history-card-header">
-<div><b>📅 ${escapeHtml(rec.date)}</b>${isEstimate ? ' <span class="badge" style="background:#fef9c3; color:#a16207;">Расчёт</span>' : ''}</div>
-<div style="display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; min-width:0;">
-<button type="button" class="btn-delete-item" style="background:#e0f2fe; color:#0369a1;" onclick="sendHistoryRecordPDF('${recordId}')">📤 PDF</button>
-<button type="button" class="btn-delete-item" style="background:#e0e7ff; color:#4338ca;" onclick="downloadHistoryRecordPDF('${recordId}')">⬇️ PDF</button>
-${rec.id && !rec.shareDisabled ? `<button type="button" class="btn-delete-item" style="background:#dcfce7; color:#15803d;" onclick="shareInvoiceLink('${recordId}')">🔗</button>` : ''}
-${rec.id && isCurrentAdmin() ? `<button type="button" class="btn-delete-item" style="background:${rec.shareDisabled ? '#fee2e2' : '#f1f5f9'}; color:${rec.shareDisabled ? '#dc2626' : '#64748b'};" onclick="toggleShareLink('${recordId}')" title="${rec.shareDisabled ? 'Включить ссылку' : 'Отключить ссылку'}">${rec.shareDisabled ? '🚫 ссылка' : '🔒'}</button>` : ''}
-${!isCurrentClient() ? `<button type="button" class="btn-delete-item" style="background:#fef3c7; color:#d97706;" onclick="startEditRecord('${recordId}', '${containerId}')">✏️</button>
-<button type="button" class="btn-delete-item" onclick="deleteHistoryRecord('${recordId}')">✕</button>` : ''}
+<div class="hc-top">
+<div class="hc-title">
+<div class="hc-name">${opts.objName ? '🏠 ' : ''}${escapeHtml(title)}${isEstimate ? '<span class="hc-badge" style="background:#fef9c3; color:#a16207;">Расчёт</span>' : ''}${rec.shareDisabled ? '<span class="hc-badge" style="background:#fee2e2; color:#b91c1c;">ссылка выкл.</span>' : ''}</div>
+<div class="hc-date">${escapeHtml(formatRecordDate(rec.date))}</div>
 </div>
+<div class="hc-amount">${Number(rec.total || 0).toLocaleString('ru-RU')} ₽</div>
 </div>
-${isCurrentAdmin() ? `<div style="font-size:11px; color:#64748b; margin-bottom:4px;">Мастер: <b>${escapeHtml(masterName)}</b></div>` : ''}
-${opts.objName ? `<div style="font-size:11px; color:#4f46e5; margin-bottom:4px;">🏠 Объект: <b>${escapeHtml(opts.objName)}</b></div>` : ''}
-${opts.showClientAddress ? `<div>👤 <b>Заказчик:</b> ${escapeHtml(rec.client)}</div><div>📍 <b>Адрес:</b> ${escapeHtml(rec.address)}</div>` : ''}
-${rec.note ? `<div>📝 <b>Пояснение:</b> ${escapeHtml(rec.note)}</div>` : ''}
+${showClient ? `<div class="hc-meta">👤 ${escapeHtml(rec.client)}</div>` : ''}
+${showAddress ? `<div class="hc-meta">📍 ${escapeHtml(rec.address)}</div>` : ''}
+${isCurrentAdmin() ? `<div class="hc-meta">Мастер: <b>${escapeHtml(masterName)}</b></div>` : ''}
+${rec.note ? `<div class="hc-meta">📝 ${escapeHtml(rec.note)}</div>` : ''}
 ${renderAttachmentsHtml(rec.attachments)}
-<div style="margin: 8px 0; border-top: 1px dashed #e2e8f0; padding-top: 6px; color: #475569; font-size:12px;">${itemsHtml}</div>
-<b style="color:#059669; font-size: 14px;">${isEstimate ? 'Итого по расчёту' : 'Итого'}: ${Number(rec.total || 0).toLocaleString('ru-RU')} ₽</b>
+<div class="hc-items">${itemsHtml || '<span style="color:#94a3b8;">Нет позиций</span>'}</div>
 ${!isEstimate ? renderPaymentSectionHtml(rec, recordId) : ''}
+<div class="hc-actions">
+<button type="button" class="hc-btn hc-btn-primary" onclick="sendHistoryRecordPDF('${recordId}')">📤 PDF</button>
+${canShare ? `<button type="button" class="hc-btn" onclick="shareInvoiceLink('${recordId}')">🔗 Ссылка</button>` : ''}
+<button type="button" class="hc-btn hc-btn-more" onclick="openRecordActions('${recordId}', '${containerId}')" aria-label="Другие действия">⋯</button>
+</div>
 </div>
 `;
+}
+
+function pluralRu(n, one, few, many) {
+const m10 = n % 10, m100 = n % 100;
+if (m10 === 1 && m100 !== 11) return one;
+if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+return many;
+}
+
+/* ---------- Нижняя шторка с действиями ---------- */
+let sheetActions = [];
+
+function openSheet(title, items) {
+sheetActions = items.map(i => i && i.onClick);
+document.getElementById('sheetTitle').textContent = title || '';
+document.getElementById('sheetItems').innerHTML = items.map((item, idx) => {
+if (!item) return '<div class="sheet-sep"></div>';
+return `<button type="button" class="sheet-item${item.danger ? ' sheet-item-danger' : ''}" onclick="runSheetAction(${idx})"><span class="sheet-item-icon" aria-hidden="true">${item.icon || ''}</span>${escapeHtml(item.label)}</button>`;
+}).join('');
+document.getElementById('sheet').classList.add('open');
+document.getElementById('sheetOverlay').classList.add('open');
+document.body.classList.add('sheet-open');
+}
+
+function closeSheet() {
+document.getElementById('sheet').classList.remove('open');
+document.getElementById('sheetOverlay').classList.remove('open');
+document.body.classList.remove('sheet-open');
+}
+
+function runSheetAction(idx) {
+const fn = sheetActions[idx];
+closeSheet();
+if (typeof fn === 'function') fn();
+}
+
+document.addEventListener('keydown', (e) => {
+if (e.key === 'Escape') closeSheet();
+});
+
+function openRecordActions(recordId, containerId) {
+const rec = (cloudData.history || []).find(r => String(r.id) === String(recordId));
+const isEstimate = rec && rec.docType === 'estimate';
+const items = [
+{ icon: '⬇️', label: 'Скачать PDF', onClick: () => downloadHistoryRecordPDF(recordId) },
+];
+if (rec && rec.id && !rec.shareDisabled) {
+items.push({ icon: '🔗', label: 'Ссылка для заказчика', onClick: () => shareInvoiceLink(recordId) });
+}
+if (rec && rec.id && isCurrentAdmin()) {
+items.push(rec.shareDisabled
+? { icon: '🔓', label: 'Включить ссылку', onClick: () => toggleShareLink(recordId) }
+: { icon: '🔒', label: 'Отключить ссылку', onClick: () => toggleShareLink(recordId) });
+}
+if (!isCurrentClient()) {
+items.push({ icon: '✏️', label: 'Редактировать', onClick: () => startEditRecord(recordId, containerId) });
+items.push(null);
+items.push({ icon: '🗑️', label: isEstimate ? 'Удалить расчёт' : 'Удалить счёт', danger: true, onClick: () => deleteHistoryRecord(recordId) });
+}
+const title = rec ? `${isEstimate ? 'Расчёт' : 'Счёт'} от ${formatRecordDate(rec.date)} · ${Number(rec.total || 0).toLocaleString('ru-RU')} ₽` : '';
+openSheet(title, items);
+}
+
+function openCalcActions() {
+openSheet(selectedDocType === 'estimate' ? 'Расчёт' : 'Счёт', [
+{ icon: '📤', label: 'Отправить PDF', onClick: () => sendPDF() },
+{ icon: '⬇️', label: 'Скачать PDF', onClick: () => downloadInvoicePDF() },
+null,
+{ icon: '🧹', label: 'Очистить всё', danger: true, onClick: () => {
+if (confirm('Очистить счёт? Все позиции и заполненные поля будут сброшены.')) resetAll();
+} },
+]);
 }
 
 function renderPaymentSectionHtml(rec, recordId) {
@@ -1888,23 +2122,57 @@ ${paymentsHtml}
 `;
 }
 
+let historyFilter = 'all';
+
+function setHistoryFilter(filter) {
+historyFilter = filter;
+document.querySelectorAll('.chips .chip').forEach(c => c.classList.toggle('active', c.dataset.filter === filter));
+renderHistory();
+}
+
 function renderHistory() {
 const list = document.getElementById('historyList');
 if (!list) return;
-list.innerHTML = '';
 let records = cloudData.history || [];
 if (!isCurrentAdmin()) {
 records = records.filter(r => (r.author || r.master || r.user) === currentUser);
 }
+// Общая сводка — всегда по всем счетам, независимо от фильтра
 renderOverallPayStats(records.filter(r => r.docType !== 'estimate'));
+const countEl = document.getElementById('historyCount');
 if (records.length === 0) {
-list.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 20px 0; font-size:13px;">История счетов пуста</div>';
+list.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 20px 0; font-size:13px;">Здесь появятся сохранённые счета и расчёты</div>';
+if (countEl) countEl.textContent = '';
 return;
 }
-records.forEach((rec) => {
+const objName = rec => {
 const obj = rec.objectId ? (cloudData.objects || []).find(o => o.id === rec.objectId) : null;
-list.innerHTML += renderHistoryCardHtml(rec, 'historyList', { objName: obj ? obj.name : null, showClientAddress: true });
+return obj ? obj.name : null;
+};
+const searchEl = document.getElementById('historySearch');
+const query = (searchEl ? searchEl.value : '').trim().toLowerCase();
+const filtered = records.filter(rec => {
+const isEstimate = rec.docType === 'estimate';
+if (historyFilter === 'estimate' && !isEstimate) return false;
+if (historyFilter === 'owes' && (isEstimate || getBalanceInfo(rec).status !== 'owes')) return false;
+if (historyFilter === 'paid' && (isEstimate || getBalanceInfo(rec).status === 'owes')) return false;
+if (!query) return true;
+const haystack = [rec.client, rec.address, rec.note, objName(rec), rec.author, rec.master, rec.date,
+...(rec.items || []).map(i => i.name)].filter(Boolean).join(' ').toLowerCase();
+return haystack.includes(query);
 });
+if (countEl) {
+countEl.textContent = (query || historyFilter !== 'all')
+? `Найдено: ${filtered.length} из ${records.length}`
+: '';
+}
+if (filtered.length === 0) {
+list.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 20px 0; font-size:13px;">Ничего не найдено — измените поиск или фильтр</div>';
+return;
+}
+list.innerHTML = filtered.map(rec =>
+renderHistoryCardHtml(rec, 'historyList', { objName: objName(rec), showClientAddress: true })
+).join('');
 }
 
 function renderOverallPayStats(invoiceRecords) {
