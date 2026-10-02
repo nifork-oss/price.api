@@ -245,8 +245,9 @@ body.keyboard-open .calc-bar { display: none !important; }
 .pay-balance-line { gap: 8px; flex-wrap: wrap; }
 /* Уведомления — над нижними панелями, но под шторкой действий */
 .add-toast { z-index: 80; }
-body.has-bottom-nav .add-toast { bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
-body.calc-active.calc-has-items.has-bottom-nav .add-toast { bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
+/* Внизу экрана теперь панели и полосы — уведомления показываем сверху */
+body.has-bottom-nav .add-toast { top: calc(14px + env(safe-area-inset-top, 0px)); bottom: auto; transform: translateX(-50%) translateY(-20px); }
+body.has-bottom-nav .add-toast.show { transform: translateX(-50%) translateY(0); }
 @media (prefers-reduced-motion: reduce) { .calc-details-arrow { transition: none; } }
 
 /* ---------- Оповещение «вышла новая версия» ---------- */
@@ -335,7 +336,7 @@ body.measure-open { overflow: hidden; }
 .mp-hist-actions { display: flex; gap: 6px; margin-top: 8px; white-space: normal; }
 .mp-hist-actions button { flex: 1; min-height: 40px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; font-size: 14px; font-weight: 600; color: #334155; cursor: pointer; }
 .mp-hist-actions .danger { color: #e11d48; }
-body.measure-open .add-toast { z-index: 99; bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+body.measure-open .add-toast { z-index: 99; top: auto; bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
 
 /* ===================== ПОМЕЩЕНИЯ ===================== */
 .rooms-section { margin: 4px 0 18px; }
@@ -375,6 +376,20 @@ body.measure-open .add-toast { z-index: 99; bottom: calc(160px + env(safe-area-i
 .hc-room > summary { cursor: pointer; list-style: none; font-weight: 700; color: #334155; padding: 3px 0; }
 .hc-room > summary::-webkit-details-marker { display: none; }
 .hc-room > div { padding-left: 4px; }
+.room-select-all { display: flex; gap: 6px; margin-bottom: 8px; }
+.room-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; margin-bottom: 6px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; }
+.room-row.on { border-color: #818cf8; background: #eef2ff; }
+.room-check { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 48px; padding-left: 8px; cursor: pointer; }
+.room-check input { width: 22px; height: 22px; flex-shrink: 0; accent-color: #4f46e5; }
+.room-check .room-name { display: block; font-size: 15px; }
+.room-dims { display: block; font-size: 12px; color: #64748b; margin-top: 1px; }
+.room-selbar { display: none; position: sticky; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 5; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #312e81; color: #ffffff; box-shadow: 0 6px 18px rgba(49, 46, 129, 0.25); }
+body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
+.room-selbar.show { display: flex; }
+.room-selbar-text { flex: 1; font-size: 14px; font-weight: 700; line-height: 1.3; }
+.room-selbar-text small { font-weight: 500; color: #c7d2fe; font-size: 12px; }
+.room-selbar-btn { min-height: 44px; padding: 8px 16px; border: none; border-radius: 10px; background: #ffffff; color: #312e81; font-size: 15px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.rooms-breakdown { font-size: 11px; color: #4338ca; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -603,8 +618,9 @@ body.measure-open .add-toast { z-index: 99; bottom: calc(160px + env(safe-area-i
 
 <section class="rooms-section" id="roomsSection">
 <h2>🏠 Помещения</h2>
+<div class="rooms-hint">Отметьте помещения, где делали работу, и нажмите «+ Работа».</div>
 <div id="roomsList"></div>
-<button type="button" class="measure-open-btn" onclick="addRoom()">+ Помещение</button>
+<button type="button" class="measure-open-btn" id="addRoomBtn" onclick="addRoom()">+ Помещение</button>
 </section>
 <h2>🛠 Услуги без помещения</h2>
 <input type="text" id="searchCalcInput" class="search-box" placeholder="🔍 Поиск услуги для счета..." oninput="renderServices()">
@@ -1714,12 +1730,12 @@ client: (document.getElementById('clientName').value || '').trim(),
 address: (document.getElementById('objectAddress').value || '').trim(),
 note: (document.getElementById('invoiceNote').value || '').trim(),
 attachments: invoiceAttachments,
-rooms: invoiceRooms
+roomSel: [...selectedRoomIds]
 };
 }
 
 function isDraftEmpty(st) {
-return !st.cart.length && !st.client && !st.address && !st.note && !st.attachments.length && !(st.rooms && st.rooms.length);
+return !st.cart.length && !st.client && !st.address && !st.note && !st.attachments.length;
 }
 
 function readDraft() {
@@ -1780,7 +1796,6 @@ const whenText = when
 : '';
 const parts = [];
 if (obj) parts.push(obj.name); else if (d.client) parts.push(d.client);
-if (Array.isArray(d.rooms) && d.rooms.length) parts.push(`${d.rooms.length} ${pluralRu(d.rooms.length, 'помещение', 'помещения', 'помещений')}`);
 if (d.cart.length) parts.push(`${d.cart.length} ${pluralRu(d.cart.length, 'позиция', 'позиции', 'позиций')} · ${total.toLocaleString('ru-RU')} ₽`);
 if (whenText) parts.push(whenText);
 document.getElementById('draftOfferInfo').textContent = parts.join(' · ');
@@ -1811,7 +1826,8 @@ el.value = [d.client, d.address, d.note][i] || '';
 el.dataset.autofilled = '';
 });
 invoiceCart = d.cart;
-invoiceRooms = Array.isArray(d.rooms) ? d.rooms : [];
+if (migrateLegacyRooms(d.rooms, invoiceCart, d.objectId)) saveCloudData();
+selectedRoomIds = new Set(Array.isArray(d.roomSel) ? d.roomSel : []);
 invoiceAttachments = Array.isArray(d.attachments) ? d.attachments : [];
 renderReportAttachments();
 renderServices();
@@ -1917,7 +1933,9 @@ ${unitOptions.map(u => `<option value="${u}" ${u === item.unit ? 'selected' : ''
 <input type="number" min="0" value="${item.price}" oninput="updateInvoiceItemField(${idx}, 'price', this.value)" style="width:80px; border:1px solid #e2e8f0; border-radius:7px; padding:6px 8px; font-size:13px;" title="Цена за единицу, ₽">
 <span style="margin-left:auto; font-weight:700; white-space:nowrap;">${sum.toLocaleString('ru-RU')} ₽</span>
 </div>
-${item.location ? `<div style="font-size:11px; color:#6366f1;">📍 ${escapeHtml(item.location)}</div>` : ''}
+${roomsBreakdownText(item)
+? `<div class="rooms-breakdown">🏠 ${escapeHtml(roomsBreakdownText(item))}</div>`
+: (item.location ? `<div style="font-size:11px; color:#6366f1;">📍 ${escapeHtml(item.location)}</div>` : '')}
 ${measureNoteHtml(item)}
 </div>
 `;
@@ -1930,7 +1948,10 @@ const item = invoiceCart[idx];
 if (!item) return;
 if (field === 'qty' && item.measure && Math.abs(Number(value) - Number(item.measure.value)) >= 0.0005) delete item.measure;
 // Количество поправили вручную — больше не пересчитываем его по замеру помещения
-if (field === 'qty' && item.surface && item.surface !== 'manual') item.surface = 'manual';
+if (field === 'qty' && item.surface && item.surface !== 'manual') {
+item.surface = 'manual';
+delete item.rooms; // разбивка больше не сходится с общим количеством
+}
 setTimeout(() => { if (typeof renderRooms === 'function') renderRooms(); }, 0);
 scheduleDraftSave();
 if (field === 'qty' || field === 'price') {
@@ -2051,7 +2072,7 @@ const sum = item.qty * item.price;
 total += sum;
 rows += `
 <tr>
-<td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(item.name)}${item.location ? `<br><span style="font-size:10px; color:#6366f1;">📍 ${escapeHtml(item.location)}</span>` : ''}</td>
+<td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(item.name)}${roomsBreakdownText(item) ? `<br><span style="font-size:10px; color:#6366f1;">${escapeHtml(roomsBreakdownText(item))}</span>` : (item.location ? `<br><span style="font-size:10px; color:#6366f1;">📍 ${escapeHtml(item.location)}</span>` : '')}</td>
 <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.qty}</td>
 <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${escapeHtml(item.unit)}</td>
 <td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${item.price.toLocaleString('ru-RU')} ₽</td>
@@ -2350,8 +2371,6 @@ rec.address = address;
 rec.note = note;
 rec.objectId = objectId;
 rec.items = [...invoiceCart];
-rec.rooms = JSON.parse(JSON.stringify(invoiceRooms));
-storeRoomMeasures(objectId);
 rec.total = total;
 rec.attachments = attachments;
 rec.date = new Date().toLocaleString('ru-RU');
@@ -2378,10 +2397,8 @@ total,
 objectId,
 docType: selectedDocType,
 items: [...invoiceCart],
-rooms: JSON.parse(JSON.stringify(invoiceRooms)),
 attachments
 };
-storeRoomMeasures(objectId);
 if (!cloudData.history) cloudData.history = [];
 cloudData.history.unshift(newRecord);
 const savedOk = await saveCloudData();
@@ -2399,7 +2416,7 @@ return String(date || '').replace(/(\d{1,2}:\d{2}):\d{2}/, '$1');
 function renderHistoryCardHtml(rec, containerId, opts = {}) {
 const items = rec.items || [];
 const itemLine = i =>
-`• ${escapeHtml(i.name)} (${i.qty} ${escapeHtml(i.unit)})${i.location ? ` <span style="color:#6366f1;">— 📍 ${escapeHtml(i.location)}</span>` : ''} — ${(i.qty * i.price).toLocaleString('ru-RU')} ₽${measureNoteHtml(i)}`;
+`• ${escapeHtml(i.name)} (${i.qty} ${escapeHtml(i.unit)})${i.location && !roomsBreakdownText(i) ? ` <span style="color:#6366f1;">— 📍 ${escapeHtml(i.location)}</span>` : ''} — ${(i.qty * i.price).toLocaleString('ru-RU')} ₽${roomsBreakdownText(i) ? `<div class="rooms-breakdown" style="margin-left:10px;">🏠 ${escapeHtml(roomsBreakdownText(i))}</div>` : ''}${measureNoteHtml(i)}`;
 const VISIBLE_ITEMS = 3;
 const asLines = arr => arr.map(l => `<div>${l}</div>`).join('');
 let itemsHtml = asLines(items.slice(0, VISIBLE_ITEMS).map(itemLine));
@@ -3068,7 +3085,7 @@ const objSelect = document.getElementById('invoiceObjectSelect');
 if (objSelect) objSelect.value = '';
 setDocType('invoice');
 invoiceCart = [];
-invoiceRooms = [];
+selectedRoomIds = new Set();
 invoiceAttachments = [];
 renderReportAttachments();
 renderServices();
@@ -3126,6 +3143,8 @@ if (select.value === '__new__') {
 await quickCreateObjectFromCalc();
 return;
 }
+selectedRoomIds = new Set();
+if (typeof renderRooms === 'function') renderRooms();
 if (!select.value) return;
 const obj = (cloudData.objects || []).find(o => o.id === select.value);
 if (!obj) return;
@@ -3352,9 +3371,8 @@ ${!isCurrentClient() ? `<button type="button" class="btn btn-primary" style="mar
 <button type="button" class="hc-btn hc-btn-more" onclick="openObjectActions('${obj.id}')" aria-label="Другие действия">⋯</button>
 </div>` : ''}
 
-<h2 style="margin-top:18px;">📏 Замеры${(obj.measurements || []).length ? ` (${obj.measurements.length})` : ''}</h2>
-${(obj.measurements || []).length ? renderMeasureHistoryHtml(obj.id) : '<div style="font-size:13px; color:#94a3b8; margin-bottom:8px;">Замеров по объекту пока нет</div>'}
-${!isCurrentClient() ? `<button type="button" class="measure-open-btn" onclick="openMeasure({ kind: 'none', objectId: '${obj.id}', fresh: true })">📏 Новый замер</button>` : ''}
+${renderObjectRoomsHtml(obj)}
+${(obj.measurements || []).length ? `<details style="margin:8px 0;"><summary style="cursor:pointer; font-weight:700; color:#475569; padding:6px 0;">📏 История замеров (${obj.measurements.length})</summary>${renderMeasureHistoryHtml(obj.id)}</details>` : ''}
 
 <div class="tab-menu" style="margin-top:16px;">
 <button type="button" class="tab-btn ${objectHistorySubTab === 'invoice' ? 'active' : ''}" onclick="switchObjectHistoryTab('invoice')">🧾 Счета (${invoiceRecords.length})</button>
@@ -3474,7 +3492,8 @@ editingRecordId = id;
 editingReturnContext = containerId === 'objectHistoryList' ? 'object' : 'history';
 objectHistorySubTab = rec.docType === 'estimate' ? 'estimate' : 'invoice';
 invoiceCart = (rec.items || []).map(i => ({ ...i }));
-invoiceRooms = JSON.parse(JSON.stringify(rec.rooms || []));
+selectedRoomIds = new Set();
+if (migrateLegacyRooms(rec.rooms, invoiceCart, rec.objectId)) saveCloudData();
 invoiceAttachments = (rec.attachments || []).map(a => ({ ...a }));
 renderReportAttachments();
 
@@ -3523,7 +3542,7 @@ const returnToObject = editingReturnContext === 'object' && currentObjectId;
 editingRecordId = null;
 editingReturnContext = null;
 invoiceCart = [];
-invoiceRooms = [];
+selectedRoomIds = new Set();
 invoiceAttachments = [];
 renderReportAttachments();
 document.getElementById('clientName').value = '';
@@ -3747,10 +3766,8 @@ document.getElementById('mpSaveBtn').style.display = roomMode ? 'none' : '';
 document.getElementById('mpObject').style.display = roomMode ? 'none' : '';
 if (roomMode) {
 // Замер помещения правится отдельно от обычного черновика замера
-const room = measureTarget.roomId ? findRoom(measureTarget.roomId) : null;
-const calcSelect = document.getElementById('invoiceObjectSelect');
-const objId = calcSelect && calcSelect.value && calcSelect.value !== '__new__' ? calcSelect.value : '';
-measure = room ? JSON.parse(JSON.stringify(room.measure)) : newMeasure(objId);
+const room = measureTarget.roomId ? findObjectRoom(measureTarget.objectId, measureTarget.roomId) : null;
+measure = room ? JSON.parse(JSON.stringify(room.measure)) : newMeasure(measureTarget.objectId);
 measureTab = 'walls';
 measureDirty = false;
 document.getElementById('measurePanel').classList.add('open');
@@ -3950,7 +3967,7 @@ btn.disabled = !(v.value > 0);
 btn.textContent = target ? '✅ Вставить' : '📋 Скопировать';
 if (measureTarget.kind === 'room') {
 btn.disabled = false;
-btn.textContent = measureTarget.roomId ? '✅ Готово' : '✅ Готово — выбрать работы';
+btn.textContent = measureTarget.roomId ? '✅ Сохранить замер' : '✅ Добавить помещение';
 }
 }
 
@@ -4228,16 +4245,14 @@ return `<details class="measure-note"><summary>📏 Как считали${m.roo
 </script>
 
 <script>
-/* ===================== ПОМЕЩЕНИЯ В СЧЁТЕ ===================== */
-// Сначала помещения (у каждого свой замер), потом в каждом — работы из
-// прайса. Работа привязана к поверхности помещения (стены, потолок,
-// откосы, узкие) и берёт количество из замера. Исправили замер —
-// количество всех работ помещения пересчиталось само.
-// В счёт по-прежнему уходит обычный список позиций: у каждой есть
-// «где на объекте», так что PDF, история и страница заказчика не меняются.
+/* ===================== ПОМЕЩЕНИЯ ОБЪЕКТА ===================== */
+// Помещения хранятся в объекте (obj.rooms) и замеряются один раз.
+// В калькуляторе помещения выбранного объекта отмечаются галочками;
+// работа добавляется ОДНОЙ строкой на все отмеченные помещения, а под
+// ней — разбивка по комнатам (item.rooms). Исправили замер помещения —
+// работы текущего счёта пересчитываются; сохранённые счета не меняются.
 
-let invoiceRooms = [];           // [{ id, measure }]
-let workPickerRoomId = null;
+let selectedRoomIds = new Set();
 let workPickerOpenIdx = null;
 
 const SURFACES = [
@@ -4247,7 +4262,16 @@ const SURFACES = [
 { key: 'narrow', tab: 'narrow', label: 'Узкие' },
 ];
 
-function findRoom(id) { return invoiceRooms.find(r => r.id === id) || null; }
+function calcObject() {
+const sel = document.getElementById('invoiceObjectSelect');
+const id = sel && sel.value && sel.value !== '__new__' ? sel.value : '';
+return id ? (cloudData.objects || []).find(o => o.id === id) || null : null;
+}
+function objectRooms(obj) { return obj && Array.isArray(obj.rooms) ? obj.rooms : []; }
+function findObjectRoom(objectId, roomId) {
+const obj = (cloudData.objects || []).find(o => o.id === objectId);
+return obj ? objectRooms(obj).find(r => r.id === roomId) || null : null;
+}
 function roomName(room) { return (room && room.measure && room.measure.room) || 'Помещение'; }
 
 function roomSurfaces(room) {
@@ -4262,135 +4286,203 @@ const q = Math.round(v * 1000) / 1000;
 return unit === 'пог. м' ? Math.max(1, q) : q;
 }
 
-// Пересчитать работы помещения по его замеру
-function syncRoomItems(roomId) {
-const room = findRoom(roomId);
-if (!room) return;
-const surf = roomSurfaces(room);
-const name = roomName(room);
-invoiceCart.forEach(item => {
-if (item.roomId !== roomId) return;
-item.location = name;
-if (!item.surface || item.surface === 'manual') return;
-const s = surf[item.surface];
-if (!s || !(s.value > 0)) return;
-item.qty = roundQty(s.value, item.unit);
-item.measure = { room: name, text: s.text, value: Math.round(s.value * 1000) / 1000, unit: s.unit, measureId: room.measure.id };
+// Сумма поверхности по нескольким помещениям
+function sumSurface(rooms, key) {
+let value = 0, unit = '';
+rooms.forEach(room => {
+const s = roomSurfaces(room)[key];
+if (s && s.value > 0) { value += roundQty(s.value, s.unit); unit = s.unit; }
 });
+return { value: Math.round(value * 1000) / 1000, unit };
+}
+
+// Разбивка работы по помещениям: «Гостиная 37,32 · Спальня 30,1 м²»
+function roomsBreakdownText(item) {
+if (!item || !Array.isArray(item.rooms) || item.rooms.length < 2) return '';
+return item.rooms.map(r => `${r.name} ${mFmt(r.qty)}`).join(' · ') + (item.unit ? ' ' + item.unit : '');
+}
+
+// Пересобрать строку работы из помещений объекта
+function rebuildRoomItem(item, obj) {
+if (!item.rooms || !item.surface || item.surface === 'manual') return;
+const parts = [];
+item.rooms.forEach(r => {
+const room = objectRooms(obj).find(x => x.id === r.roomId);
+if (!room) return;
+const s = roomSurfaces(room)[item.surface];
+if (!s || !(s.value > 0)) return;
+parts.push({ roomId: room.id, name: roomName(room), qty: roundQty(s.value, item.unit), text: s.text });
+});
+if (!parts.length) return;
+item.rooms = parts;
+item.qty = Math.round(parts.reduce((a, p) => a + p.qty, 0) * 1000) / 1000;
+item.location = parts.map(p => p.name).join(', ');
+item.measure = {
+room: item.location,
+text: parts.map(p => `${p.name}:\n${p.text}`).join('\n'),
+value: item.qty, unit: item.unit
+};
+}
+
+function syncCartWithRooms() {
+const obj = calcObject();
+if (!obj) return;
+invoiceCart.forEach(item => rebuildRoomItem(item, obj));
 }
 
 /* ---------- блок «Помещения» в калькуляторе ---------- */
 function renderRooms() {
 const list = document.getElementById('roomsList');
+const addBtn = document.getElementById('addRoomBtn');
 if (!list) return;
-if (!invoiceRooms.length) {
-list.innerHTML = '<div class="rooms-hint">Добавьте помещение, сделайте замер и выберите работы — количество подставится само.</div>';
+const obj = calcObject();
+if (!obj) {
+list.innerHTML = '<div class="rooms-hint">Выберите объект выше — помещения хранятся в объекте и замеряются один раз.</div>';
+if (addBtn) addBtn.style.display = 'none';
 return;
 }
-list.innerHTML = invoiceRooms.map(room => {
+if (addBtn) addBtn.style.display = '';
+const rooms = objectRooms(obj);
+// убираем отметки с удалённых помещений
+selectedRoomIds = new Set([...selectedRoomIds].filter(id => rooms.some(r => r.id === id)));
+if (!rooms.length) {
+list.innerHTML = '<div class="rooms-hint">У объекта пока нет помещений. Добавьте их и сделайте замер — дальше отмечайте нужные комнаты и выбирайте работы.</div>';
+return;
+}
+const picked = rooms.filter(r => selectedRoomIds.has(r.id));
+const sums = SURFACES.map(s => ({ s, v: sumSurface(picked, s.key) })).filter(x => x.v.value > 0);
+list.innerHTML = `
+<div class="room-select-all">
+<button type="button" class="chip" onclick="selectAllRooms(true)">Отметить все</button>
+${picked.length ? `<button type="button" class="chip" onclick="selectAllRooms(false)">Снять отметки</button>` : ''}
+</div>
+${rooms.map(room => {
 const surf = roomSurfaces(room);
-const works = invoiceCart.map((item, idx) => ({ item, idx })).filter(({ item }) => item.roomId === room.id);
-const sum = works.reduce((a, { item }) => a + item.qty * item.price, 0);
-const pills = SURFACES.filter(s => surf[s.key].value > 0)
-.map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
-const worksHtml = works.length
-? works.map(({ item, idx }) => {
-const surfLabel = item.surface && item.surface !== 'manual' ? (SURFACES.find(s => s.key === item.surface) || {}).label : '';
-return `<div class="room-work">
-<div class="rw-main">
-<div class="rw-name">${escapeHtml(item.name)}</div>
-<div class="rw-meta">${surfLabel ? surfLabel.toLowerCase() + ' · ' : ''}${mFmt(item.qty)} ${escapeHtml(item.unit)} × ${Number(item.price).toLocaleString('ru-RU')} ₽</div>
-</div>
-<div class="rw-sum">${(item.qty * item.price).toLocaleString('ru-RU')} ₽</div>
-<button type="button" class="mp-del" onclick="removeFromInvoice(${idx})" aria-label="Убрать работу">✕</button>
+const on = selectedRoomIds.has(room.id);
+const pills = SURFACES.filter(s => surf[s.key].value > 0).map(s => `${s.label.toLowerCase()} ${mFmt(surf[s.key].value)}`).join(' · ');
+return `<div class="room-row${on ? ' on' : ''}">
+<label class="room-check">
+<input type="checkbox" ${on ? 'checked' : ''} onchange="toggleRoom('${room.id}', this.checked)">
+<span><span class="room-name">${escapeHtml(roomName(room))}</span><span class="room-dims">${escapeHtml(pills || 'замер не заполнен')}</span></span>
+</label>
+<button type="button" class="mp-mini" onclick="openMeasure({ kind: 'room', objectId: '${obj.id}', roomId: '${room.id}' })" aria-label="Замер помещения">📏</button>
 </div>`;
-}).join('')
-: '<div class="room-empty">Работ пока нет</div>';
-return `<div class="room-card">
-<div class="room-head">
-<div class="room-name">🏠 ${escapeHtml(roomName(room))}</div>
-<div class="room-sum">${sum.toLocaleString('ru-RU')} ₽</div>
-</div>
-${pills ? `<div class="obj-money">${pills}</div>` : '<div class="room-empty">Замер не заполнен</div>'}
-<div class="room-works">${worksHtml}</div>
-<div class="room-actions">
-<button type="button" class="hc-btn hc-btn-primary" onclick="openWorkPicker('${room.id}')">+ Работа</button>
-<button type="button" class="hc-btn" onclick="openMeasure({ kind: 'room', roomId: '${room.id}' })">📏 Замер</button>
-<button type="button" class="hc-btn hc-btn-more" onclick="openRoomActions('${room.id}')" aria-label="Другие действия">⋯</button>
-</div>
+}).join('')}
+<div class="room-selbar${picked.length ? ' show' : ''}">
+<div class="room-selbar-text">Отмечено ${picked.length} ${pluralRu(picked.length, 'помещение', 'помещения', 'помещений')}${sums.length ? '<br><small>' + sums.map(x => `${x.s.label.toLowerCase()} ${mFmt(x.v.value)} ${x.v.unit}`).join(' · ') + '</small>' : ''}</div>
+<button type="button" class="room-selbar-btn" onclick="openWorkPicker()" ${picked.length ? '' : 'disabled'}>+ Работа</button>
 </div>`;
-}).join('');
 }
 
-function addRoom() {
-openMeasure({ kind: 'room', roomId: null });
+function toggleRoom(id, on) {
+if (on) selectedRoomIds.add(id); else selectedRoomIds.delete(id);
+renderRooms();
+scheduleDraftSave();
 }
 
-function openRoomActions(roomId) {
-const room = findRoom(roomId);
-if (!room) return;
-openSheet(roomName(room), [
-{ icon: '📋', label: 'Копировать как новое помещение', onClick: () => duplicateRoom(roomId) },
-null,
-{ icon: '🗑️', label: 'Удалить помещение', danger: true, onClick: () => deleteRoom(roomId) },
-]);
+function selectAllRooms(on) {
+const obj = calcObject();
+selectedRoomIds = new Set(on ? objectRooms(obj).map(r => r.id) : []);
+renderRooms();
+scheduleDraftSave();
 }
 
-function duplicateRoom(roomId) {
-const room = findRoom(roomId);
-if (!room) return;
-const copy = JSON.parse(JSON.stringify(room.measure));
-copy.id = 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-copy.room = roomName(room) + ' (копия)';
-const newRoom = { id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: copy };
-invoiceRooms.push(newRoom);
-invoiceCart.filter(i => i.roomId === roomId).forEach(i => invoiceCart.push({ ...JSON.parse(JSON.stringify(i)), roomId: newRoom.id }));
-syncRoomItems(newRoom.id);
-renderInvoice();
-// сразу предлагаем переименовать и поправить размеры
-openMeasure({ kind: 'room', roomId: newRoom.id });
-}
-
-function deleteRoom(roomId) {
-const room = findRoom(roomId);
-if (!room) return;
-const n = invoiceCart.filter(i => i.roomId === roomId).length;
-if (!confirm(n ? `Удалить «${roomName(room)}» и его работы (${n})?` : `Удалить «${roomName(room)}»?`)) return;
-invoiceRooms = invoiceRooms.filter(r => r.id !== roomId);
-invoiceCart = invoiceCart.filter(i => i.roomId !== roomId);
-renderInvoice();
-}
-
-// Замер помещения: «Готово»
-function finishRoomMeasure() {
+/* ---------- замер помещения: «Готово» ---------- */
+async function finishRoomMeasure() {
 const name = document.getElementById('mpRoom').value.trim();
 if (!name) {
 alert('Назовите помещение, например: Гостиная.');
 document.getElementById('mpRoom').focus();
 return;
 }
+const obj = (cloudData.objects || []).find(o => o.id === measureTarget.objectId);
+if (!obj) { alert('Объект не найден.'); return; }
 measure.room = name;
+measure.objectId = obj.id;
 const snapshot = JSON.parse(JSON.stringify(measure));
-let room = measureTarget.roomId ? findRoom(measureTarget.roomId) : null;
+if (!Array.isArray(obj.rooms)) obj.rooms = [];
+let room = measureTarget.roomId ? obj.rooms.find(r => r.id === measureTarget.roomId) : null;
 const isNew = !room;
-if (room) {
-room.measure = snapshot;
-} else {
+if (room) room.measure = snapshot;
+else {
 room = { id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: snapshot };
-invoiceRooms.push(room);
+obj.rooms.push(room);
 }
-syncRoomItems(room.id);
+const roomId = room.id, objectId = obj.id;
 closeMeasure();
+syncCartWithRooms();
 renderInvoice();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
 scheduleDraftSave();
-if (isNew) openWorkPicker(room.id);
-else showAddToast('📏 Замер обновлён, количество пересчитано');
+await saveCloudData();
+// после сохранения данные пришли с сервера заново — перерисуем
+syncCartWithRooms();
+renderInvoice();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
+showAddToast(isNew ? `🏠 «${name}» добавлено` : '📏 Замер обновлён');
 }
 
-/* ---------- выбор работ для помещения ---------- */
-function suggestSurface(srv, surf) {
+function addRoom(objectId) {
+const obj = objectId ? (cloudData.objects || []).find(o => o.id === objectId) : calcObject();
+if (!obj) { alert('Сначала выберите объект.'); return; }
+openMeasure({ kind: 'room', objectId: obj.id, roomId: null });
+}
+
+function openRoomActions(objectId, roomId) {
+const room = findObjectRoom(objectId, roomId);
+if (!room) return;
+openSheet(roomName(room), [
+{ icon: '📏', label: 'Изменить замер', onClick: () => openMeasure({ kind: 'room', objectId, roomId }) },
+{ icon: '📋', label: 'Копировать как новое помещение', onClick: () => duplicateRoom(objectId, roomId) },
+null,
+{ icon: '🗑️', label: 'Удалить помещение', danger: true, onClick: () => deleteRoom(objectId, roomId) },
+]);
+}
+
+async function duplicateRoom(objectId, roomId) {
+const obj = (cloudData.objects || []).find(o => o.id === objectId);
+const room = findObjectRoom(objectId, roomId);
+if (!obj || !room) return;
+const copy = JSON.parse(JSON.stringify(room.measure));
+copy.id = 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+copy.room = roomName(room) + ' (копия)';
+const newRoom = { id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: copy };
+obj.rooms.push(newRoom);
+await saveCloudData();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
+renderInvoice();
+openMeasure({ kind: 'room', objectId, roomId: newRoom.id });
+}
+
+async function deleteRoom(objectId, roomId) {
+const obj = (cloudData.objects || []).find(o => o.id === objectId);
+const room = findObjectRoom(objectId, roomId);
+if (!obj || !room) return;
+if (!confirm(`Удалить помещение «${roomName(room)}» из объекта? Уже сохранённые счета не изменятся.`)) return;
+obj.rooms = obj.rooms.filter(r => r.id !== roomId);
+selectedRoomIds.delete(roomId);
+// убираем помещение из работ текущего счёта
+invoiceCart.forEach(item => {
+if (Array.isArray(item.rooms) && item.rooms.some(r => r.roomId === roomId)) {
+item.rooms = item.rooms.filter(r => r.roomId !== roomId);
+if (!item.rooms.length) item._remove = true;
+}
+});
+invoiceCart = invoiceCart.filter(i => !i._remove);
+syncCartWithRooms();
+await saveCloudData();
+renderInvoice();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
+}
+
+/* ---------- выбор работы для отмеченных помещений ---------- */
+function pickedRooms() {
+const obj = calcObject();
+return objectRooms(obj).filter(r => selectedRoomIds.has(r.id));
+}
+
+function suggestSurface(srv, has) {
 const n = String(srv.name || '').toLowerCase();
-const has = k => surf[k] && surf[k].value > 0;
 if (/откос/.test(n) && has('slopes')) return 'slopes';
 if (/потол/.test(n) && has('ceiling')) return 'ceiling';
 if (/стен|обо[ий]|плитк/.test(n) && has('walls')) return 'walls';
@@ -4400,11 +4492,11 @@ if (has('ceiling')) return 'ceiling';
 return null;
 }
 
-function openWorkPicker(roomId) {
-workPickerRoomId = roomId;
+function openWorkPicker() {
+const rooms = pickedRooms();
+if (!rooms.length) { alert('Отметьте помещения, в которых делали работу.'); return; }
 workPickerOpenIdx = null;
-const room = findRoom(roomId);
-document.getElementById('wpTitle').textContent = 'Работы: ' + roomName(room);
+document.getElementById('wpTitle').textContent = 'Работа: ' + rooms.map(roomName).join(', ');
 document.getElementById('wpSearch').value = '';
 document.getElementById('workPicker').classList.add('open');
 document.body.classList.add('measure-open');
@@ -4414,18 +4506,19 @@ renderWorkPicker();
 function closeWorkPicker() {
 document.getElementById('workPicker').classList.remove('open');
 document.body.classList.remove('measure-open');
-workPickerRoomId = null;
 renderInvoice();
 }
 
 function renderWorkPicker() {
-const room = findRoom(workPickerRoomId);
+const rooms = pickedRooms();
 const body = document.getElementById('wpBody');
-if (!room) { body.innerHTML = ''; return; }
-const surf = roomSurfaces(room);
+if (!rooms.length) { body.innerHTML = ''; return; }
+const sums = {};
+SURFACES.forEach(s => { sums[s.key] = sumSurface(rooms, s.key); });
+const has = k => sums[k].value > 0;
 const q = document.getElementById('wpSearch').value.trim().toLowerCase();
 const services = cloudData.services || [];
-const added = new Set(invoiceCart.filter(i => i.roomId === room.id).map(i => i.name));
+const inCart = new Set(invoiceCart.filter(i => Array.isArray(i.rooms) && i.rooms.some(r => selectedRoomIds.has(r.roomId))).map(i => i.name));
 let html = '', cat = null, catPrinted = false, any = false;
 services.forEach((srv, idx) => {
 if (srv.isCategory) { cat = srv.name; catPrinted = false; return; }
@@ -4433,21 +4526,21 @@ if (q && !String(srv.name).toLowerCase().includes(q) && !(cat && cat.toLowerCase
 any = true;
 if (cat && !catPrinted) { html += `<div class="wp-cat">${escapeHtml(cat)}</div>`; catPrinted = true; }
 const open = workPickerOpenIdx === idx;
-const sug = suggestSurface(srv, surf);
-html += `<div class="wp-item${added.has(srv.name) ? ' added' : ''}">
+const sug = suggestSurface(srv, has);
+html += `<div class="wp-item${inCart.has(srv.name) ? ' added' : ''}">
 <button type="button" class="wp-row" onclick="toggleWorkOptions(${idx})">
-<span class="wp-row-name">${escapeHtml(srv.name)}${added.has(srv.name) ? ' <span class="wp-badge">✓ добавлено</span>' : ''}</span>
+<span class="wp-row-name">${escapeHtml(srv.name)}${inCart.has(srv.name) ? ' <span class="wp-badge">✓ в счёте</span>' : ''}</span>
 <span class="wp-row-price">${Number(srv.price).toLocaleString('ru-RU')} ₽${srv.unit ? '/' + escapeHtml(srv.unit) : ''}</span>
 </button>
 ${open ? `<div class="wp-opts">
-<div class="wp-opts-title">Сколько — по замеру «${escapeHtml(roomName(room))}»:</div>
+<div class="wp-opts-title">Что считаем в отмеченных помещениях:</div>
 <div class="wp-surfaces">
-${SURFACES.filter(s => surf[s.key].value > 0).map(s => `<button type="button" class="wp-surface${s.key === sug ? ' suggested' : ''}" onclick="addWorkToRoom(${idx}, '${s.key}')">${s.label}<small>${mFmt(surf[s.key].value)} ${surf[s.key].unit}</small></button>`).join('')}
+${SURFACES.filter(s => has(s.key)).map(s => `<button type="button" class="wp-surface${s.key === sug ? ' suggested' : ''}" onclick="addWorkToRooms(${idx}, '${s.key}')">${s.label}<small>${mFmt(sums[s.key].value)} ${sums[s.key].unit}</small></button>`).join('')}
 </div>
 <div class="wp-manual">
 <input class="mp-in" id="wpManualQty" type="text" inputmode="decimal" placeholder="своё кол-во">
 <select id="wpManualUnit">${DEFAULT_UNITS.map(u => `<option ${u === (srv.unit || 'м²') ? 'selected' : ''}>${escapeHtml(u)}</option>`).join('')}</select>
-<button type="button" onclick="addWorkToRoom(${idx}, 'manual')">Добавить</button>
+<button type="button" onclick="addWorkToRooms(${idx}, 'manual')">Добавить</button>
 </div>
 </div>` : ''}
 </div>`;
@@ -4460,43 +4553,81 @@ workPickerOpenIdx = workPickerOpenIdx === idx ? null : idx;
 renderWorkPicker();
 }
 
-function addWorkToRoom(serviceIdx, surfaceKey) {
-const room = findRoom(workPickerRoomId);
+function addWorkToRooms(serviceIdx, surfaceKey) {
+const rooms = pickedRooms();
+const obj = calcObject();
 const srv = (cloudData.services || [])[serviceIdx];
-if (!room || !srv) return;
-let item;
+if (!rooms.length || !srv || !obj) return;
+const names = rooms.map(roomName).join(', ');
 if (surfaceKey === 'manual') {
 const qty = evalMeasureExpr(document.getElementById('wpManualQty').value);
 const unit = document.getElementById('wpManualUnit').value;
 if (!(qty > 0)) { alert('Укажите количество.'); document.getElementById('wpManualQty').focus(); return; }
-item = { name: srv.name, price: Number(srv.price) || 0, qty: roundQty(qty, unit), unit, location: roomName(room), roomId: room.id, surface: 'manual' };
+invoiceCart.push({ name: srv.name, price: Number(srv.price) || 0, qty: roundQty(qty, unit), unit, location: names, surface: 'manual' });
+showAddToast(`✅ ${srv.name}: ${mFmt(roundQty(qty, unit))} ${unit}`);
 } else {
-const s = roomSurfaces(room)[surfaceKey];
-if (!s || !(s.value > 0)) return;
-const unit = s.unit || srv.unit || 'м²';
-item = { name: srv.name, price: Number(srv.price) || 0, qty: 0, unit, location: roomName(room), roomId: room.id, surface: surfaceKey };
-}
+const unit = sumSurface(rooms, surfaceKey).unit || srv.unit || 'м²';
+const price = Number(srv.price) || 0;
+// Та же работа по той же поверхности уже есть — добавляем комнаты в неё
+let item = invoiceCart.find(i => i.name === srv.name && i.surface === surfaceKey && i.price === price && Array.isArray(i.rooms));
+if (!item) {
+item = { name: srv.name, price, qty: 0, unit, location: '', surface: surfaceKey, rooms: [] };
 invoiceCart.push(item);
-syncRoomItems(room.id);
+}
+rooms.forEach(room => {
+if (!item.rooms.some(r => r.roomId === room.id)) item.rooms.push({ roomId: room.id, name: roomName(room), qty: 0 });
+});
+rebuildRoomItem(item, obj);
+showAddToast(`✅ ${srv.name}: ${mFmt(item.qty)} ${item.unit}`);
+}
 workPickerOpenIdx = null;
 renderInvoice();
 renderWorkPicker();
 scheduleDraftSave();
-showAddToast(`✅ ${srv.name}: ${mFmt(item.qty)} ${item.unit}`);
 }
 
-/* ---------- история: замеры помещений сохраняются вместе со счётом ---------- */
-function storeRoomMeasures(objectId) {
-invoiceRooms.forEach(room => {
-const entry = JSON.parse(JSON.stringify(room.measure));
-entry.objectId = objectId || '';
-entry.savedAt = new Date().toISOString();
-entry.author = currentUser || '';
-removeMeasureEverywhere(entry.id);
-const obj = entry.objectId ? (cloudData.objects || []).find(o => o.id === entry.objectId) : null;
-if (obj) obj.measurements = [entry, ...(obj.measurements || [])].slice(0, 100);
-else setLocalMeasures([{ ...entry, objectId: '' }, ...getLocalMeasures()]);
+/* ---------- старый формат (помещения внутри счёта) → в объект ---------- */
+// Помещения из черновиков и счетов, собранных до этой версии, переносятся
+// в объект, а позиции с одним помещением — в формат с разбивкой.
+function migrateLegacyRooms(rooms, items, objectId) {
+const obj = objectId ? (cloudData.objects || []).find(o => o.id === objectId) : null;
+let changed = false;
+if (obj && Array.isArray(rooms) && rooms.length) {
+if (!Array.isArray(obj.rooms)) obj.rooms = [];
+rooms.forEach(r => {
+if (r && r.id && r.measure && !obj.rooms.some(x => x.id === r.id)) { obj.rooms.push({ id: r.id, measure: r.measure }); changed = true; }
 });
+}
+(items || []).forEach(i => {
+if (i.roomId && !i.rooms) {
+i.rooms = [{ roomId: i.roomId, name: i.location || 'Помещение', qty: i.qty, text: i.measure ? i.measure.text : '' }];
+delete i.roomId;
+}
+});
+return changed;
+}
+
+/* ---------- помещения на странице объекта ---------- */
+function renderObjectRoomsHtml(obj) {
+const rooms = objectRooms(obj);
+const canEdit = !isCurrentClient();
+const list = rooms.length
+? rooms.map(room => {
+const surf = roomSurfaces(room);
+const pills = SURFACES.filter(s => surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
+return `<div class="room-card">
+<div class="room-head">
+<div class="room-name">${escapeHtml(roomName(room))}</div>
+${canEdit ? `<button type="button" class="hc-btn hc-btn-more" style="flex:0 0 44px; min-height:38px;" onclick="openRoomActions('${obj.id}', '${room.id}')" aria-label="Действия">⋯</button>` : ''}
+</div>
+<div class="obj-money">${pills || '<span class="obj-pill">замер не заполнен</span>'}</div>
+<details class="measure-note" style="margin:6px 0 0;"><summary>📏 Как мерили</summary><div>${escapeHtml(measureSummaryLines(room.measure).join('\n'))}</div></details>
+</div>`;
+}).join('')
+: '<div style="font-size:13px; color:#94a3b8; margin-bottom:8px;">Помещений пока нет. Замерьте их один раз — дальше в калькуляторе останется только отмечать нужные.</div>';
+return `<h2 style="margin-top:18px;">🏠 Помещения${rooms.length ? ` (${rooms.length})` : ''}</h2>
+${list}
+${canEdit ? `<button type="button" class="measure-open-btn" onclick="addRoom('${obj.id}')">+ Помещение</button>` : ''}`;
 }
 </script>
 
