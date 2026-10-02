@@ -207,10 +207,15 @@ async function readBin(env) {
     headers: { "X-Master-Key": env.JSONBIN_KEY },
   });
   const data = await res.json();
-  const record = data.record || {};
+  const record = data && data.record;
+  // Если JSONBin вернул пустые или повреждённые данные (нет списка
+  // пользователей) — НЕ подставляем ничего по умолчанию, а отдаём ошибку.
+  // Раньше здесь создавался admin / 12345: при сбое любой мог бы войти
+  // как админ, а следующая запись затёрла бы настоящие данные пустыми.
+  if (!record || typeof record !== "object" || !Array.isArray(record.users) || record.users.length === 0) {
+    throw new Error("База данных временно недоступна, попробуйте ещё раз через минуту");
+  }
   if (!Array.isArray(record.services)) record.services = [];
-  if (!Array.isArray(record.users))
-    record.users = [{ login: "admin", email: "admin@mail.ru", pass: "12345", role: "admin" }];
   if (!Array.isArray(record.history)) record.history = [];
   if (!Array.isArray(record.objects)) record.objects = [];
   if (!Array.isArray(record.pirogHistory)) record.pirogHistory = [];
@@ -332,6 +337,10 @@ const handler = {
         // явно прислал клиент из ограниченного набора, иначе всегда "master".
         const role = body.role === "client" ? "client" : "master";
         if (!login || !email || !password) return json({ error: "Заполните все поля" }, 400);
+        // Логин "admin" зарезервирован: вход под этим логином даёт права
+        // администратора, поэтому зарегистрировать его нельзя никогда —
+        // даже если настоящий admin когда-то будет переименован или удалён.
+        if (login.toLowerCase() === "admin") return json({ error: "Такой логин уже занят!" }, 400);
         const record = await readBin(env);
         if (record.users.some((u) => u.login.toLowerCase() === login.toLowerCase()))
           return json({ error: "Такой логин уже занят!" }, 400);
