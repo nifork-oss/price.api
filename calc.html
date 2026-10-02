@@ -229,6 +229,17 @@ body.keyboard-open .calc-bar { display: none !important; }
 .obj-actions .btn { flex: 1; }
 .obj-actions .hc-btn-more { flex: 0 0 48px; min-height: 44px; }
 
+/* ---------- Черновик счёта ---------- */
+.draft-offer { display: none; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #c7d2fe; border-radius: 12px; background: #eef2ff; }
+.draft-offer.show { display: flex; }
+.draft-offer-text { flex: 1 1 180px; font-size: 13px; color: #312e81; line-height: 1.35; }
+.draft-offer-text b { display: block; font-size: 14px; }
+.draft-offer-btns { display: flex; gap: 6px; }
+.draft-offer-btns button { min-height: 40px; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.draft-continue { border: none; background: #4f46e5; color: #ffffff; }
+.draft-discard { border: 1px solid #c7d2fe; background: #ffffff; color: #475569; }
+
+.pay-balance-line { gap: 8px; flex-wrap: wrap; }
 /* Уведомления — над нижними панелями, но под шторкой действий */
 .add-toast { z-index: 80; }
 body.has-bottom-nav .add-toast { bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
@@ -355,6 +366,14 @@ body.calc-active.has-bottom-nav .add-toast { bottom: calc(146px + env(safe-area-
 <!-- Вкладка Калькулятор -->
 <div id="calcTab">
 <h1>📐 Расчёт счёта</h1>
+
+<div class="draft-offer" id="draftOffer" role="status">
+<div class="draft-offer-text"><b>Незаконченный счёт</b><span id="draftOfferInfo"></span></div>
+<div class="draft-offer-btns">
+<button type="button" class="draft-continue" onclick="restoreDraft()">Продолжить</button>
+<button type="button" class="draft-discard" onclick="discardDraft()">Удалить</button>
+</div>
+</div>
 
 <a href="index.html" id="editPriceListLink" target="_blank" rel="noopener" style="display:none; align-items:center; gap:6px; background:#ede9fe; color:#5b21b6; border:1px solid #ddd6fe; padding:8px 12px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none; margin-bottom:14px;">✏️ Редактировать свой прайс-лист</a>
 
@@ -820,7 +839,7 @@ await loadCloudData();
 if (!cloudData.self) cloudData.self = savedSelf;
 refreshViewsAfterReload();
 alert((result && result.error) || 'Данные изменились на другом устройстве. Загружены свежие данные — повторите последнее действие.');
-return;
+return false;
 }
 if (res.ok) {
 const keepSelf = cloudData.self;
@@ -829,29 +848,30 @@ if (cloudData && !cloudData.self) cloudData.self = keepSelf;
 if (result && typeof result.rev === 'number') cloudRev = result.rev;
 showSyncStatus('✅ Сохранено');
 hideSyncStatus();
-return;
+return true;
 }
 if (res.status === 401) {
 hideSyncStatus(0);
 alert("Сессия истекла, войдите снова.");
 handleLogout();
-return;
+return false;
 }
 if (attempt === maxAttempts) {
 hideSyncStatus(0);
 alert('Не удалось сохранить данные' + (result && result.error ? (': ' + result.error) : (' (ошибка ' + res.status + ')')) + '. Попробуйте ещё раз — изменения могли не сохраниться в облаке.');
-return;
+return false;
 }
 } catch (e) {
 console.error(`Ошибка сохранения (попытка ${attempt}/${maxAttempts}):`, e);
 if (attempt === maxAttempts) {
 hideSyncStatus(0);
 alert('Не удалось сохранить данные: нет соединения с сервером. Изменения не сохранены в облаке, попробуйте ещё раз.');
-return;
+return false;
 }
 }
 await new Promise(r => setTimeout(r, 600 * attempt));
 }
+return false;
 }
 
 function switchAuthMode(mode) {
@@ -912,6 +932,7 @@ document.getElementById('loginModeCompanyBtn').classList.toggle('active', mode =
 
 function setDocType(type) {
 selectedDocType = type;
+if (typeof scheduleDraftSave === 'function') scheduleDraftSave();
 document.getElementById('docTypeInvoiceBtn').classList.toggle('active', type === 'invoice');
 document.getElementById('docTypeEstimateBtn').classList.toggle('active', type === 'estimate');
 document.getElementById('invoicePreviewHeading').textContent = type === 'estimate' ? '📋 Предпросмотр расчёта' : '🧾 Предпросмотр счета';
@@ -992,6 +1013,7 @@ switchTab('objects');
 } else {
 populateObjectSelect();
 renderHistory();
+offerDraftRestore();
 }
 }
 
@@ -1010,6 +1032,9 @@ localStorage.removeItem('currentUserHasTriedCompanyMode');
 document.getElementById('authScreen').style.display = 'block';
 document.getElementById('appScreen').style.display = 'none';
 document.body.classList.remove('has-bottom-nav', 'calc-active');
+saveDraftNow();
+draftReady = false;
+hideDraftOffer();
 const bottomNav = document.getElementById('bottomNav');
 if (bottomNav) bottomNav.style.display = 'none';
 switchAuthMode('login');
@@ -1475,9 +1500,156 @@ btn.innerHTML = originalHtml;
 }
 }
 
+/* ===================== ЧЕРНОВИК СЧЁТА ===================== */
+// Собранный в калькуляторе счёт сохраняется на телефоне автоматически.
+// Если приложение закрылось, телефон выгрузил его из памяти или сайт
+// обновился — при следующем открытии предлагается продолжить.
+// Черновик свой у каждого пользователя и режима; при редактировании
+// счёта из истории черновик не пишется (там исходник уже сохранён).
+let draftReady = false;      // запись разрешена (после проверки при входе)
+let draftOfferPending = false;
+let draftTimer = null;
+let lastSavedDraftJson = null; // состояние, совпадающее с только что сохранённым счётом
+
+function draftKey() {
+return 'calcDraft:' + (currentUser || '') + ':' + (isCompanyMode() ? 'company' : 'employee');
+}
+
+function collectDraftState() {
+const select = document.getElementById('invoiceObjectSelect');
+const objectId = select && select.value !== '__new__' ? select.value : '';
+return {
+cart: invoiceCart,
+docType: selectedDocType,
+objectId,
+client: (document.getElementById('clientName').value || '').trim(),
+address: (document.getElementById('objectAddress').value || '').trim(),
+note: (document.getElementById('invoiceNote').value || '').trim(),
+attachments: invoiceAttachments
+};
+}
+
+function isDraftEmpty(st) {
+return !st.cart.length && !st.client && !st.address && !st.note && !st.attachments.length;
+}
+
+function readDraft() {
+try {
+const raw = localStorage.getItem(draftKey());
+const d = raw ? JSON.parse(raw) : null;
+return d && Array.isArray(d.cart) ? d : null;
+} catch (e) {
+return null;
+}
+}
+
+function scheduleDraftSave() {
+clearTimeout(draftTimer);
+draftTimer = setTimeout(saveDraftNow, 400);
+}
+
+function saveDraftNow() {
+clearTimeout(draftTimer);
+if (!currentUser || isCurrentClient() || editingRecordId) return;
+const st = collectDraftState();
+// Пока висит предложение продолжить старый черновик, пустой калькулятор
+// его не стирает. Если же человек начал новый счёт, не нажав ни одну из
+// кнопок, — значит, старый не нужен: убираем предложение.
+if (draftOfferPending) {
+if (isDraftEmpty(st)) return;
+hideDraftOffer();
+}
+if (!draftReady) return;
+try {
+const json = JSON.stringify(st);
+if (isDraftEmpty(st) || json === lastSavedDraftJson) {
+localStorage.removeItem(draftKey());
+} else {
+localStorage.setItem(draftKey(), JSON.stringify({ ...st, savedAt: Date.now() }));
+}
+} catch (e) {
+// память браузера переполнена или недоступна — черновик просто не сохранится
+}
+}
+
+// Вызывается после входа: если есть черновик и калькулятор пуст — предлагаем продолжить
+function offerDraftRestore() {
+draftReady = true;
+const d = readDraft();
+const st = collectDraftState();
+if (!d || !isDraftEmpty(st) || isCurrentClient()) {
+hideDraftOffer();
+return;
+}
+const total = d.cart.reduce((sum, i) => sum + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
+const obj = d.objectId ? (cloudData.objects || []).find(o => o.id === d.objectId) : null;
+const when = d.savedAt ? new Date(d.savedAt) : null;
+const whenText = when
+? (when.toDateString() === new Date().toDateString()
+? 'сегодня в ' + when.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+: when.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))
+: '';
+const parts = [];
+if (obj) parts.push(obj.name); else if (d.client) parts.push(d.client);
+if (d.cart.length) parts.push(`${d.cart.length} ${pluralRu(d.cart.length, 'позиция', 'позиции', 'позиций')} · ${total.toLocaleString('ru-RU')} ₽`);
+if (whenText) parts.push(whenText);
+document.getElementById('draftOfferInfo').textContent = parts.join(' · ');
+document.getElementById('draftOffer').classList.add('show');
+draftOfferPending = true;
+}
+
+function hideDraftOffer() {
+draftOfferPending = false;
+const el = document.getElementById('draftOffer');
+if (el) el.classList.remove('show');
+}
+
+function restoreDraft() {
+if (editingRecordId) {
+alert('Сначала сохраните или отмените редактирование текущего счёта.');
+return;
+}
+const d = readDraft();
+hideDraftOffer();
+if (!d) return;
+setDocType(d.docType === 'estimate' ? 'estimate' : 'invoice');
+const select = document.getElementById('invoiceObjectSelect');
+if (select) select.value = d.objectId && [...select.options].some(o => o.value === d.objectId) ? d.objectId : '';
+['clientName', 'objectAddress', 'invoiceNote'].forEach((id, i) => {
+const el = document.getElementById(id);
+el.value = [d.client, d.address, d.note][i] || '';
+el.dataset.autofilled = '';
+});
+invoiceCart = d.cart;
+invoiceAttachments = Array.isArray(d.attachments) ? d.attachments : [];
+renderReportAttachments();
+renderServices();
+renderInvoice();
+saveDraftNow();
+showAddToast('📝 Черновик восстановлен');
+}
+
+function discardDraft() {
+hideDraftOffer();
+try { localStorage.removeItem(draftKey()); } catch (e) { /* пусто */ }
+}
+
+// Отмечаем, что текущее состояние калькулятора уже сохранено в истории —
+// черновик для него больше не нужен (пока что-то не изменится).
+function markDraftSaved() {
+lastSavedDraftJson = JSON.stringify(collectDraftState());
+saveDraftNow();
+}
+
+document.addEventListener('visibilitychange', () => {
+if (document.visibilityState === 'hidden') saveDraftNow();
+});
+window.addEventListener('pagehide', () => saveDraftNow());
+
 // Короткая строка под заголовком «Заказчик, адрес, пояснение, фото»,
 // чтобы видеть заполненное, не раскрывая блок.
 function updateCalcDetailsSummary() {
+scheduleDraftSave();
 const el = document.getElementById('calcDetailsSummary');
 if (!el) return;
 const client = (document.getElementById('clientName').value || '').trim();
@@ -1561,6 +1733,7 @@ document.getElementById('totalSum').textContent = total.toLocaleString('ru-RU');
 function updateInvoiceItemField(idx, field, value) {
 const item = invoiceCart[idx];
 if (!item) return;
+scheduleDraftSave();
 if (field === 'qty' || field === 'price') {
 item[field] = Number(value) || 0;
 } else {
@@ -2008,7 +2181,8 @@ attachments
 };
 if (!cloudData.history) cloudData.history = [];
 cloudData.history.unshift(newRecord);
-await saveCloudData();
+const savedOk = await saveCloudData();
+if (savedOk) markDraftSaved();
 if (!silent) alert(selectedDocType === 'estimate' ? "Расчёт сохранён!" : "Счет сохранен в историю!");
 renderHistory();
 return true;
@@ -2122,6 +2296,45 @@ const title = rec ? `${isEstimate ? 'Расчёт' : 'Счёт'} от ${formatRe
 openSheet(title, items);
 }
 
+/* ---------- Напоминание об оплате ---------- */
+function buildReminderText(rec) {
+const info = getBalanceInfo(rec);
+const obj = rec.objectId ? (cloudData.objects || []).find(o => o.id === rec.objectId) : null;
+const money = n => Number(n || 0).toLocaleString('ru-RU') + ' ₽';
+const date = formatRecordDate(rec.date).split(',')[0];
+const lines = [];
+lines.push(rec.client ? `Здравствуйте, ${rec.client}!` : 'Здравствуйте!');
+lines.push(`Напоминаю об оплате${obj ? ` по объекту «${obj.name}»` : ''}: счёт от ${date} на ${money(info.total)}.`);
+if (info.paid > 0) lines.push(`Оплачено ${money(info.paid)}, осталось ${money(info.balance)}.`);
+else lines.push(`К оплате ${money(info.balance)}.`);
+if (rec.id && !rec.shareDisabled) lines.push(`Счёт: ${getInvoiceShareUrl(rec.id)}`);
+lines.push('Спасибо!');
+const signature = (cloudData.self && (cloudData.self.companyName || '').trim()) || '';
+if (signature) lines.push(signature);
+return lines.join('\n');
+}
+
+function openReminderActions(recordId) {
+const rec = (cloudData.history || []).find(r => String(r.id) === String(recordId));
+if (!rec) return;
+const text = buildReminderText(rec);
+const items = [
+{ icon: '💬', label: 'Отправить в WhatsApp', onClick: () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener') },
+];
+if (navigator.share) {
+items.push({ icon: '📤', label: 'Другое приложение…', onClick: () => navigator.share({ text }).catch(() => {}) });
+}
+items.push({ icon: '📋', label: 'Скопировать текст', onClick: async () => {
+try {
+await navigator.clipboard.writeText(text);
+showAddToast('📋 Текст скопирован');
+} catch (e) {
+prompt('Скопируйте текст напоминания:', text);
+}
+} });
+openSheet(`Напоминание об оплате · осталось ${getBalanceInfo(rec).balance.toLocaleString('ru-RU')} ₽`, items);
+}
+
 function openObjectActions(id) {
 const obj = (cloudData.objects || []).find(o => o.id === id);
 openSheet(obj ? obj.name : 'Объект', [
@@ -2159,7 +2372,10 @@ ${!isCurrentClient() ? `<button type="button" onclick="deletePayment('${recordId
 return `
 <div class="pay-balance-line ${balanceClass}">
 <span>${balanceLabel}</span>
-${!isCurrentClient() ? `<button type="button" class="btn-delete-item" style="background:#fff; border:1px solid currentColor;" onclick="openPaymentModal('${recordId}')">💰 Оплата</button>` : ''}
+${!isCurrentClient() ? `<span style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+${info.status === 'owes' && rec.id ? `<button type="button" class="btn-delete-item" style="background:#fff; border:1px solid currentColor;" onclick="openReminderActions('${recordId}')">💬 Напомнить</button>` : ''}
+<button type="button" class="btn-delete-item" style="background:#fff; border:1px solid currentColor;" onclick="openPaymentModal('${recordId}')">💰 Оплата</button>
+</span>` : ''}
 </div>
 ${paymentsHtml}
 `;
@@ -3165,9 +3381,11 @@ document.getElementById('updateBanner').classList.remove('show');
 };
 
 window.reloadForUpdate = function () {
-// В калькуляторе собран счёт, который ещё не сохранён — переспрашиваем
-if (typeof invoiceCart !== 'undefined' && invoiceCart.length > 0 &&
-!confirm('В калькуляторе есть несохранённый счёт — после обновления он пропадёт. Обновить сейчас?')) return;
+// Собранный счёт сохранится как черновик и будет предложен после обновления.
+// Правки счёта из истории черновиком не сохраняются — о них переспрашиваем.
+if (typeof editingRecordId !== 'undefined' && editingRecordId &&
+!confirm('Вы редактируете счёт из истории — несохранённые правки пропадут. Обновить сейчас?')) return;
+if (typeof saveDraftNow === 'function') saveDraftNow();
 location.reload();
 };
 

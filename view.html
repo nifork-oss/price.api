@@ -29,6 +29,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .attachment-link { text-decoration: none; }
 .attachment-download-btn { background: #e0e7ff; color: #4338ca; border: none; border-radius: 6px; width: 30px; height: 30px; font-size: 13px; cursor: pointer; flex-shrink: 0; }
 .attachment-download-btn:disabled { opacity: 0.6; }
+.pay-box { margin-top: 12px; border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+.pay-box-owes { background: #fef2f2; color: #991b1b; }
+.pay-box-paid { background: #f0fdf4; color: #166534; }
+.pay-box-over { background: #eff6ff; color: #1e40af; }
+.pay-box-main { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+.pay-box-sub { font-size: 13px; margin-top: 4px; opacity: 0.85; }
+.pay-list { margin-top: 8px; padding-top: 8px; border-top: 1px dashed currentColor; font-size: 13px; }
+.pay-list-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
 .footer-link { display: block; text-align: center; font-size: 12px; color: #94a3b8; margin-top: 18px; text-decoration: none; }
 </style>
 </head>
@@ -113,6 +121,30 @@ btn.innerHTML = originalHtml;
 }
 }
 
+function renderPaymentsHtml(rec) {
+if (rec.docType === 'estimate') return '';
+const payments = Array.isArray(rec.payments) ? rec.payments : [];
+const total = Number(rec.total || 0);
+const paid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+const rub = n => Number(n).toLocaleString('ru-RU') + ' ₽';
+if (paid <= 0) {
+return `<div class="pay-box pay-box-owes"><div class="pay-box-main"><span>К оплате</span><span>${rub(total)}</span></div></div>`;
+}
+const rest = total - paid;
+const cls = rest > 0 ? 'pay-box-owes' : rest < 0 ? 'pay-box-over' : 'pay-box-paid';
+const main = rest > 0
+? `<span>Осталось оплатить</span><span>${rub(rest)}</span>`
+: rest < 0
+? `<span>Переплата</span><span>${rub(-rest)}</span>`
+: `<span>Оплачено полностью ✓</span><span>${rub(paid)}</span>`;
+const list = payments.map(p => `<div class="pay-list-row"><span>${escapeHtml(p.date || '')}</span><span>${rub(Number(p.amount) || 0)}</span></div>`).join('');
+return `<div class="pay-box ${cls}">
+<div class="pay-box-main">${main}</div>
+${rest !== 0 ? `<div class="pay-box-sub">Оплачено ${rub(paid)} из ${rub(total)}</div>` : ''}
+<div class="pay-list">${list}</div>
+</div>`;
+}
+
 function renderInvoice(rec) {
 document.getElementById('loadingState').style.display = 'none';
 const isEstimate = rec.docType === 'estimate';
@@ -147,6 +179,7 @@ ${rec.note ? `<div class="note-box">📝 ${escapeHtml(rec.note)}</div>` : ''}
 <div>${isEstimate ? 'Итого по расчёту' : 'Итого'}</div>
 <div>${Number(rec.total || 0).toLocaleString('ru-RU')} ₽</div>
 </div>
+${renderPaymentsHtml(rec)}
 </div>
 
 ${Array.isArray(rec.attachments) && rec.attachments.length > 0 ? `

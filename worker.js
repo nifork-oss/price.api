@@ -500,6 +500,12 @@ const handler = {
           items: rec.items || [],
           attachments: rec.attachments || [],
           objectName: obj ? obj.name : null,
+          // Для страницы заказчика — только даты и суммы оплат, без способа
+          // оплаты и прочих служебных полей.
+          payments: (rec.docType === "estimate" ? [] : rec.payments || []).map((p) => ({
+            date: p && p.date ? String(p.date) : "",
+            amount: Number(p && p.amount) || 0,
+          })),
         });
       }
 
