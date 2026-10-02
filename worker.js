@@ -905,6 +905,59 @@ const handler = {
         );
       }
 
+      // Восстановление из резервной копии — только для админа. Принимает
+      // файл, скачанный через /backup, и целиком заменяет им данные.
+      if (path === "/restore" && request.method === "POST") {
+        if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
+        let body;
+        try { body = await request.json(); } catch (e) { return json({ error: "Файл повреждён — это не JSON" }, 400); }
+        const incomingRecord = body && body.record && typeof body.record === "object" ? body.record : null;
+        let restored;
+        try {
+          restored = normalizeRecord(JSON.parse(JSON.stringify(incomingRecord)));
+        } catch (e) {
+          return json({ error: "Это не резервная копия сайта или в ней нет пользователей" }, 400);
+        }
+        // Защита от потери доступа: в копии должен быть админ с паролем.
+        const hasAdmin = restored.users.some(
+          (u) => u && typeof u.login === "string" && u.pass && (u.role === "admin" || u.login === "admin")
+        );
+        if (!hasAdmin) return json({ error: "В копии нет администратора — после восстановления никто не смог бы войти как админ" }, 400);
+
+        // Номера версий: берём больше, чем были и в текущих данных, и в
+        // копии, и помечаем все разделы изменёнными. Тогда все открытые
+        // страницы со старыми данными при сохранении получат 409 и
+        // перезагрузятся, а не затрут восстановленное.
+        const current = await readBin(env);
+        const keys = new Set([
+          "main",
+          ...Object.keys(current.revs || {}),
+          ...Object.keys(restored.revs || {}),
+          ...Object.keys(restored.companyData).map((l) => COMPANY_PREFIX + l),
+        ]);
+        const revs = {};
+        for (const k of keys) {
+          const a = getSpaceRev(current, k).rev || 0;
+          const b = getSpaceRev(restored, k).rev || 0;
+          const rev = Math.max(a, b) + 1;
+          const fields = k === "main"
+            ? { services: rev, users: rev, history: rev, objects: rev, pirogHistory: rev }
+            : { services: rev, objects: rev, history: rev };
+          revs[k] = { rev, fields };
+        }
+        restored.revs = revs;
+        await writeBin(env, restored);
+        return json({
+          ok: true,
+          counts: {
+            users: restored.users.length,
+            history: restored.history.length,
+            objects: restored.objects.length,
+            companies: Object.keys(restored.companyData).length,
+          },
+        });
+      }
+
       // Статистика по кабинетам "своя компания" — только счётчики, без самих
       // данных: админ видит, сколько у кого объектов/счетов/расчётов/чеков,
       // но не что именно внутри — личные кабинеты остаются приватными.
