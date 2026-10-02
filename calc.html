@@ -296,7 +296,7 @@ body.measure-open { overflow: hidden; }
 .mp-del { flex: 0 0 36px; height: 36px; border: none; border-radius: 9px; background: #fef2f2; color: #e11d48; font-size: 15px; cursor: pointer; }
 .mp-add-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .mp-add { flex: 1; min-height: 42px; padding: 8px 12px; border: 1px dashed #a5b4fc; border-radius: 10px; background: #eef2ff; color: #4338ca; font-size: 14px; font-weight: 700; cursor: pointer; }
-.mp-calc { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f8fafc; font-size: 13px; color: #334155; line-height: 1.45; overflow-wrap: anywhere; }
+.mp-calc { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f8fafc; font-size: 13px; color: #334155; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line; }
 .mp-calc:empty { display: none; }
 .mp-calc b { color: #0f172a; }
 .mp-open { border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px; margin-bottom: 8px; background: #fbfdff; }
@@ -561,7 +561,7 @@ body.measure-open .add-toast { z-index: 99; bottom: calc(160px + env(safe-area-i
 <input type="text" id="customItemName" placeholder="Название работы" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px; margin-bottom:6px;">
 <div class="unit-row">
 <input type="number" id="customItemPrice" min="0" step="1" placeholder="Цена, ₽">
-<input type="number" id="customItemQty" min="0" step="0.1" value="1" placeholder="Кол-во" oninput="delete this.dataset.measure">
+<input type="number" id="customItemQty" min="0" step="any" value="1" placeholder="Кол-во" oninput="delete this.dataset.measure">
 <button type="button" class="mp-mini" onclick="openMeasure({ kind: 'custom' })" aria-label="Посчитать замером">📏</button>
 </div>
 <select id="customItemUnit" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px; background:#fff; margin-top:6px;"></select>
@@ -1321,7 +1321,7 @@ card.innerHTML = `
 </span>
 </div>
 <div class="unit-row">
-<input type="number" id="input_qty_${idx}" min="0" step="0.1" value="1" placeholder="Кол-во" oninput="delete this.dataset.measure">
+<input type="number" id="input_qty_${idx}" min="0" step="any" value="1" placeholder="Кол-во" oninput="delete this.dataset.measure">
 <select id="select_unit_${idx}">${unitsOptions}</select>
 <button type="button" class="mp-mini" onclick="openMeasure({ kind: 'service', idx: ${idx} })" aria-label="Посчитать замером">📏</button>
 </div>
@@ -1347,7 +1347,7 @@ if (!input || !input.dataset.measure) return null;
 let note = null;
 try { note = JSON.parse(input.dataset.measure); } catch (e) { /* пусто */ }
 delete input.dataset.measure;
-return note && Math.abs(Number(note.value) - Number(qty)) < 0.005 ? note : null;
+return note && Math.abs(Number(note.value) - Number(qty)) < 0.0005 ? note : null;
 }
 
 function addCustomInvoiceItem() {
@@ -1376,7 +1376,8 @@ qtyInput.focus();
 return;
 }
 const measureNote = takeMeasureNote(qtyInput, qty);
-if (unit === 'пог. м') qty = Math.ceil(qty);
+// Погонный метр: меньше одного не бывает, больше — считается как есть (1,001 → 1,001)
+if (unit === 'пог. м') qty = Math.max(1, qty);
 invoiceCart.push({ name, price, qty, unit, location: '', ...(measureNote ? { measure: measureNote } : {}) });
 renderInvoice();
 showAddToast(`✅ Добавлено: ${name}`);
@@ -1400,7 +1401,8 @@ if (isNaN(qty) || qty <= 0) {
 alert('Укажите корректное количество!');
 return;
 }
-if (unit === 'пог. м') qty = Math.ceil(qty);
+// Погонный метр: меньше одного не бывает, больше — считается как есть (1,001 → 1,001)
+if (unit === 'пог. м') qty = Math.max(1, qty);
 const location = locInput ? locInput.value.trim() : '';
 const measureNote = takeMeasureNote(qtyInput, parseFloat(qtyInput.value));
 invoiceCart.push({ name: srv.name, price, qty, unit, location, ...(measureNote ? { measure: measureNote } : {}) });
@@ -1844,7 +1846,7 @@ container.innerHTML += `
 <button type="button" class="btn-delete-item" onclick="removeFromInvoice(${idx})">✕</button>
 </div>
 <div style="display:flex; gap:6px; align-items:center;">
-<input type="number" min="0" step="0.1" value="${item.qty}" oninput="updateInvoiceItemField(${idx}, 'qty', this.value)" style="width:70px; border:1px solid #e2e8f0; border-radius:7px; padding:6px 8px; font-size:13px;" title="Объём/количество">
+<input type="number" min="0" step="any" value="${item.qty}" oninput="updateInvoiceItemField(${idx}, 'qty', this.value)" style="width:70px; border:1px solid #e2e8f0; border-radius:7px; padding:6px 8px; font-size:13px;" title="Объём/количество">
 <button type="button" class="mp-mini" style="width:34px; min-height:32px; font-size:14px;" onclick="openMeasure({ kind: 'cart', idx: ${idx} })" aria-label="Посчитать замером">📏</button>
 <select onchange="updateInvoiceItemField(${idx}, 'unit', this.value)" style="border:1px solid #e2e8f0; border-radius:7px; padding:6px 4px; font-size:13px; background:#fff;">
 ${unitOptions.map(u => `<option value="${u}" ${u === item.unit ? 'selected' : ''}>${u}</option>`).join('')}
@@ -1863,7 +1865,7 @@ document.getElementById('totalSum').textContent = total.toLocaleString('ru-RU');
 function updateInvoiceItemField(idx, field, value) {
 const item = invoiceCart[idx];
 if (!item) return;
-if (field === 'qty' && item.measure && Math.abs(Number(value) - Number(item.measure.value)) >= 0.005) delete item.measure;
+if (field === 'qty' && item.measure && Math.abs(Number(value) - Number(item.measure.value)) >= 0.0005) delete item.measure;
 scheduleDraftSave();
 if (field === 'qty' || field === 'price') {
 item[field] = Number(value) || 0;
@@ -3482,7 +3484,6 @@ if ('serviceWorker' in navigator) {
 let measure = null;          // текущий замер
 let measureTab = 'walls';
 let measureTarget = { kind: 'none' };
-let measureSlopesPick = 'len';
 let measureDirty = false;
 
 function newMeasure(objectId) {
@@ -3491,7 +3492,6 @@ id: 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
 room: '', objectId: objectId || '',
 height: '', walls: [''],
 openings: [],
-slopeDepthWindow: '', slopeDepthDoor: '',
 ceiling: [{ l: '', w: '' }],
 narrow: ['']
 };
@@ -3544,9 +3544,16 @@ return NaN;
 }
 }
 const mNum = raw => { const v = evalMeasureExpr(raw); return isFinite(v) && v > 0 ? v : 0; };
-const mFmt = n => Number((Math.round(n * 100) / 100).toFixed(2)).toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+// До миллиметра: 1,001 м — это 1,001, а не 1
+const mFmt = n => Number((Math.round(n * 1000) / 1000).toFixed(3)).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
 const mCount = raw => { const s = String(raw == null ? '' : raw).trim(); if (!s) return 1; const v = evalMeasureExpr(s); return isFinite(v) && v > 0 ? v : 0; };
 const typeLabel = t => t === 'door' ? 'дверь' : 'окно';
+// Погонный метр: кусок короче метра считается за 1 пог. м, длиннее — как есть
+const minLen = v => (v > 0 && v < 1 ? 1 : v);
+const fmtMin = v => (v > 0 && v < 1 ? `1*` : mFmt(v));
+const MIN_NOTE = '\n* меньше 1 м — считается как 1 пог. м';
+// «левый 1,5 + правый 1,5 + верх 1,4», куски короче метра — со звёздочкой
+const slopeSidesText = (h, w) => `левый ${fmtMin(h)} + правый ${fmtMin(h)} + верх ${fmtMin(w)}`;
 
 /* ---------- расчёт ---------- */
 function computeMeasure(m) {
@@ -3573,26 +3580,22 @@ if (r.wallsGross > 0 && r.openingsArea > 0) {
 r.lines.net = `Стены без проёмов: ${mFmt(r.wallsGross)} − ${mFmt(r.openingsArea)} = ${mFmt(r.wallsNet)} м²`;
 }
 
-// Откосы: две боковины и верх — (2 × высота + ширина) × количество
-const dW = mNum(m.slopeDepthWindow), dD = mNum(m.slopeDepthDoor);
-let lenW = 0, lenD = 0;
+// Откосы — в погонных метрах: две боковины и верх,
+// (2 × высота + ширина) × количество. Глубина не нужна: всё, что у́же
+// метра, считается погонным метром по цене квадратного. Кусок короче
+// метра всё равно считается за 1 пог. м — отмечаем такие звёздочкой.
 const slopeParts = [];
+r.slopesLen = 0;
+r.slopesHasMin = false;
 ops.filter(o => o.slopes).forEach(o => {
-const len = (2 * o.h + o.w) * o.n;
-if (o.type === 'door') lenD += len; else lenW += len;
-slopeParts.push(`${typeLabel(o.type)} (2×${mFmt(o.h)} + ${mFmt(o.w)})${o.n !== 1 ? `×${mFmt(o.n)}` : ''}`);
+const side = minLen(o.h), top = minLen(o.w);
+if (side !== o.h || top !== o.w) r.slopesHasMin = true;
+r.slopesLen += (2 * side + top) * o.n;
+// Каждый откос — отдельный кусок: левый + правый + верх
+slopeParts.push(`${typeLabel(o.type)} (${fmtMin(o.h)} + ${fmtMin(o.h)} + ${fmtMin(o.w)})${o.n !== 1 ? ` × ${mFmt(o.n)} шт.` : ''}`);
 });
-r.slopesLen = lenW + lenD;
-r.slopesArea = (lenW > 0 ? lenW * dW : 0) + (lenD > 0 ? lenD * dD : 0);
-r.slopesMissingDepth = (lenW > 0 && !dW) || (lenD > 0 && !dD);
-r.hasDoors = ops.some(o => o.type === 'door');
-r.hasWindows = ops.some(o => o.type !== 'door');
 if (slopeParts.length) {
-r.lines.slopesLen = `Откосы, длина: ${slopeParts.join(' + ')} = ${mFmt(r.slopesLen)} пог. м`;
-const areaParts = [];
-if (lenW > 0 && dW) areaParts.push(`окна ${mFmt(lenW)} × ${mFmt(dW)}`);
-if (lenD > 0 && dD) areaParts.push(`двери ${mFmt(lenD)} × ${mFmt(dD)}`);
-if (areaParts.length) r.lines.slopesArea = `Откосы, площадь: ${areaParts.join(' + ')} = ${mFmt(r.slopesArea)} м²`;
+r.lines.slopesLen = `Откосы: ${slopeParts.join(' + ')} = ${mFmt(r.slopesLen)} пог. м${r.slopesHasMin ? MIN_NOTE : ''}`;
 }
 
 const ceil = m.ceiling.map(c => ({ l: mNum(c.l), w: mNum(c.w) })).filter(c => c.l > 0 && c.w > 0);
@@ -3600,8 +3603,9 @@ r.ceiling = ceil.reduce((a, c) => a + c.l * c.w, 0);
 if (ceil.length) r.lines.ceiling = `Потолок: ${ceil.map(c => `${mFmt(c.l)}×${mFmt(c.w)}`).join(' + ')} = ${mFmt(r.ceiling)} м²`;
 
 const nar = m.narrow.map(mNum).filter(v => v > 0);
-r.narrow = nar.reduce((a, b) => a + b, 0);
-if (nar.length) r.lines.narrow = `Узкие поверхности: ${nar.map(mFmt).join(' + ')} = ${mFmt(r.narrow)}`;
+r.narrow = nar.reduce((a, v) => a + minLen(v), 0);
+const narHasMin = nar.some(v => v < 1);
+if (nar.length) r.lines.narrow = `Узкие поверхности: ${nar.map(fmtMin).join(' + ')} = ${mFmt(r.narrow)} пог. м${narHasMin ? MIN_NOTE : ''}`;
 return r;
 }
 
@@ -3613,13 +3617,8 @@ return { value: v, unit: 'м²', label: r.openingsArea > 0 ? 'Стены без 
 text: [r.lines.walls, r.lines.openings, r.lines.net].filter(Boolean).join('\n') };
 }
 if (tab === 'ceiling') return { value: r.ceiling, unit: 'м²', label: 'Потолок', text: r.lines.ceiling || '' };
-if (tab === 'slopes') {
-if (measureSlopesPick === 'area' && r.slopesArea > 0) {
-return { value: r.slopesArea, unit: 'м²', label: 'Откосы, площадь', text: [r.lines.slopesLen, r.lines.slopesArea].filter(Boolean).join('\n') };
-}
-return { value: r.slopesLen, unit: 'пог. м', label: 'Откосы, длина', text: r.lines.slopesLen || '' };
-}
-if (tab === 'narrow') return { value: r.narrow, unit: '', label: 'Узкие поверхности', text: r.lines.narrow || '' };
+if (tab === 'slopes') return { value: r.slopesLen, unit: 'пог. м', label: 'Откосы', text: r.lines.slopesLen || '' };
+if (tab === 'narrow') return { value: r.narrow, unit: 'пог. м', label: 'Узкие поверхности', text: r.lines.narrow || '' };
 return { value: 0, unit: '', label: '', text: '' };
 }
 
@@ -3658,9 +3657,6 @@ if (target.fresh && (!isMeasureEmpty(measure) && measureDirty) &&
 measure = newMeasure(wantObj); measureTab = 'walls'; measureDirty = false;
 }
 if (!measure.objectId && wantObj) measure.objectId = wantObj;
-// Единица услуги подсказывает, что считать
-const unit = measureTargetUnit();
-if (unit === 'пог. м') measureSlopesPick = 'len';
 document.getElementById('measurePanel').classList.add('open');
 document.body.classList.add('measure-open');
 fillMeasureObjectSelect();
@@ -3761,31 +3757,25 @@ ${m.ceiling.map((c, i) => `<div class="mp-row">${mIn(`ceiling.${i}.l`, c.l, 'д�
 <div class="mp-calc" id="mpCalcCeiling"></div>
 </section>`;
 } else if (measureTab === 'slopes') {
-const r = computeMeasure(m);
 const valid = m.openings.map((o, i) => ({ o, i })).filter(({ o }) => mNum(o.w) > 0 && mNum(o.h) > 0);
 if (!valid.length) {
 html += `<section class="mp-sec"><div class="mp-empty">Откосы считаются по окнам и дверям.<br>Сначала добавьте их на вкладке «Стены».</div>
 <button type="button" class="mp-link-btn" onclick="setMeasureTab('walls')">← К окнам и дверям</button></section>`;
 } else {
 html += `<section class="mp-sec">
-<div class="mp-sec-title">Глубина откосов</div>
-<div class="mp-hint">Нужна, чтобы посчитать площадь. Для длины в пог. м не обязательна.</div>
-${r.hasWindows ? `<div class="mp-row"><span class="mp-row-label">Окна</span>${mIn('slopeDepthWindow', m.slopeDepthWindow, '0,25')}<span class="mp-unit">м</span></div>` : ''}
-${r.hasDoors ? `<div class="mp-row"><span class="mp-row-label">Двери</span>${mIn('slopeDepthDoor', m.slopeDepthDoor, '0,15')}<span class="mp-unit">м</span></div>` : ''}
-</section>
-<section class="mp-sec">
 <div class="mp-sec-title">Какие проёмы с откосами</div>
-<div class="mp-hint">Считаются две боковины и верх: (2 × высота + ширина) × количество.</div>
+<div class="mp-hint">Каждый откос отдельно: левый + правый + верх. Откос короче метра считается за 1 пог. м.</div>
 ${valid.map(({ o, i }) => `<label class="mp-check"><input type="checkbox" ${o.slopes !== false ? 'checked' : ''} onchange="setOpeningSlopes(${i}, this.checked)">
-<span>${o.type === 'door' ? '🚪 Дверь' : '🪟 Окно'} ${mFmt(mNum(o.w))} × ${mFmt(mNum(o.h))}${mCount(o.n) !== 1 ? `, ${mFmt(mCount(o.n))} шт.` : ''} — <b>${mFmt((2 * mNum(o.h) + mNum(o.w)) * mCount(o.n))} пог. м</b></span></label>`).join('')}
+<span>${o.type === 'door' ? '🚪 Дверь' : '🪟 Окно'} ширина ${mFmt(mNum(o.w))}, высота ${mFmt(mNum(o.h))}${mCount(o.n) !== 1 ? `, ${mFmt(mCount(o.n))} шт.` : ''}<br>
+откосы: ${slopeSidesText(mNum(o.h), mNum(o.w))}${mCount(o.n) !== 1 ? ` × ${mFmt(mCount(o.n))}` : ''} = <b>${mFmt((2 * minLen(mNum(o.h)) + minLen(mNum(o.w))) * mCount(o.n))} пог. м</b></span></label>`).join('')}
 <div class="mp-calc" id="mpCalcSlopes"></div>
 </section>`;
 }
 } else if (measureTab === 'narrow') {
 html += `<section class="mp-sec">
 <div class="mp-sec-title">Узкие поверхности</div>
-<div class="mp-hint">Торцы, полосы, короба — значения просто складываются.</div>
-${m.narrow.map((v, i) => `<div class="mp-row"><span class="mp-row-label">${i + 1}.</span>${mIn('narrow.' + i, v, '0,00')}${m.narrow.length > 1 ? `<button type="button" class="mp-del" onclick="removeMeasureRow('narrow', ${i})" aria-label="Убрать">✕</button>` : ''}</div>`).join('')}
+<div class="mp-hint">Всё, что у́же метра хотя бы по одной стороне, — погонные метры. Длины складываются, кусок короче метра — за 1 пог. м.</div>
+${m.narrow.map((v, i) => `<div class="mp-row"><span class="mp-row-label">${i + 1}.</span>${mIn('narrow.' + i, v, '0,00')}<span class="mp-unit">м</span>${m.narrow.length > 1 ? `<button type="button" class="mp-del" onclick="removeMeasureRow('narrow', ${i})" aria-label="Убрать">✕</button>` : ''}</div>`).join('')}
 <div class="mp-add-row"><button type="button" class="mp-add" onclick="addMeasureRow('narrow')">+ Добавить</button></div>
 <div class="mp-calc" id="mpCalcNarrow"></div>
 </section>`;
@@ -3802,7 +3792,7 @@ const set = (id, v) => { const el = document.getElementById(id); if (el) el.inne
 set('mpCalcWalls', r.lines.walls ? escapeHtml(r.lines.walls) : '');
 set('mpCalcOpenings', [r.lines.openings, r.lines.net].filter(Boolean).map(escapeHtml).join('<br>'));
 set('mpCalcCeiling', r.lines.ceiling ? escapeHtml(r.lines.ceiling) : '');
-set('mpCalcSlopes', [r.lines.slopesLen, r.lines.slopesArea, r.slopesMissingDepth ? 'Для площади укажите глубину откосов выше.' : ''].filter(Boolean).map(escapeHtml).join('<br>'));
+set('mpCalcSlopes', r.lines.slopesLen ? escapeHtml(r.lines.slopesLen) : '');
 set('mpCalcNarrow', r.lines.narrow ? escapeHtml(r.lines.narrow) : '');
 measure.openings.forEach((o, i) => {
 const w = mNum(o.w), h = mNum(o.h), n = mCount(o.n);
@@ -3824,21 +3814,15 @@ const foot = document.getElementById('mpFoot');
 if (measureTab === 'history') { foot.classList.add('hidden'); return; }
 foot.classList.remove('hidden');
 const v = measureValueForTab(r, measureTab);
-let main = '', sub = '', pick = '';
+let main = '', sub = '';
 if (measureTab === 'walls') {
 sub = r.openingsArea > 0 ? `Стены ${mFmt(r.wallsGross)} − проёмы ${mFmt(r.openingsArea)} м²` : (r.perimeter ? `Периметр ${mFmt(r.perimeter)} м` : 'Введите высоту и длину стен');
-}
-if (measureTab === 'slopes' && r.slopesLen > 0) {
-pick = `<div class="mp-pick">
-<button type="button" class="${measureSlopesPick !== 'area' || !(r.slopesArea > 0) ? 'active' : ''}" onclick="setSlopesPick('len')">${mFmt(r.slopesLen)} пог. м</button>
-${r.slopesArea > 0 ? `<button type="button" class="${measureSlopesPick === 'area' ? 'active' : ''}" onclick="setSlopesPick('area')">${mFmt(r.slopesArea)} м²</button>` : ''}
-</div>`;
 }
 main = `${mFmt(v.value)}${v.unit ? ' ' + v.unit : ''}`;
 const target = measureTarget.kind !== 'none' ? measureTargetName() : '';
 document.getElementById('mpResult').innerHTML = `
 <div class="mp-result-label">${escapeHtml(v.label || 'Результат')}</div>
-${pick || `<div class="mp-result-main">${main}</div>`}
+<div class="mp-result-main">${main}</div>
 ${sub ? `<div class="mp-result-sub">${escapeHtml(sub)}</div>` : ''}
 ${target ? `<div class="mp-target">→ в «${escapeHtml(target)}»</div>` : ''}`;
 const btn = document.getElementById('mpPrimaryBtn');
@@ -3853,7 +3837,6 @@ renderMeasure();
 document.getElementById('mpBody').scrollTop = 0;
 }
 
-function setSlopesPick(p) { measureSlopesPick = p; updateMeasureOutputs(); }
 
 /* ---------- ввод ---------- */
 function setMeasurePath(path, value) {
@@ -3959,7 +3942,7 @@ return list.sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedA
 
 function measureSummaryLines(m) {
 const r = computeMeasure(m);
-return [r.lines.walls, r.lines.openings, r.lines.net, r.lines.ceiling, r.lines.slopesLen, r.lines.slopesArea, r.lines.narrow].filter(Boolean);
+return [r.lines.walls, r.lines.openings, r.lines.net, r.lines.ceiling, r.lines.slopesLen, r.lines.narrow].filter(Boolean);
 }
 
 function measurePills(m) {
@@ -3968,7 +3951,7 @@ const p = [];
 if (r.wallsGross > 0) p.push(`Стены ${mFmt(r.openingsArea > 0 ? r.wallsNet : r.wallsGross)} м²`);
 if (r.ceiling > 0) p.push(`Потолок ${mFmt(r.ceiling)} м²`);
 if (r.slopesLen > 0) p.push(`Откосы ${mFmt(r.slopesLen)} пог. м`);
-if (r.narrow > 0) p.push(`Узкие ${mFmt(r.narrow)}`);
+if (r.narrow > 0) p.push(`Узкие ${mFmt(r.narrow)} пог. м`);
 return p;
 }
 
@@ -4078,7 +4061,7 @@ async function measurePrimaryAction() {
 const r = computeMeasure(measure);
 const v = measureValueForTab(r, measureTab);
 if (!(v.value > 0)) return;
-const value = Math.round(v.value * 100) / 100;
+const value = Math.round(v.value * 1000) / 1000;
 measure.room = document.getElementById('mpRoom').value.trim();
 const note = { room: measure.room, text: v.text, value, unit: v.unit, measureId: measure.id };
 const t = measureTarget;
