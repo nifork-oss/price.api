@@ -112,6 +112,14 @@ body.sheet-open { overflow: hidden; }
 .unsaved-dot { display: none; }
 body.price-unsaved .unsaved-dot { display: inline; }
 body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #fde68a; }
+
+/* ---------- Оповещение «вышла новая версия» ---------- */
+.update-banner { display: none; position: fixed; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top, 0px)); z-index: 95; max-width: 520px; margin: 0 auto; padding: 10px 10px 10px 14px; align-items: center; gap: 10px; background: #0f172a; color: #ffffff; border-radius: 14px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3); font-size: 14px; font-weight: 600; }
+.update-banner.show { display: flex; }
+.update-banner-text { flex: 1; min-width: 0; line-height: 1.3; }
+.update-banner-text small { display: block; color: #94a3b8; font-weight: 500; font-size: 12px; margin-top: 2px; }
+.update-banner-btn { min-height: 40px; padding: 8px 14px; border: none; border-radius: 10px; background: #4f46e5; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.update-banner-close { width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent; color: #94a3b8; font-size: 18px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -1372,5 +1380,69 @@ e.returnValue = '';
 <div id="sheetItems"></div>
 <button type="button" class="sheet-cancel" onclick="closeSheet()">Отмена</button>
 </div>
+
+<div class="update-banner" id="updateBanner" role="status" aria-live="polite">
+<div class="update-banner-text">🔄 Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>
+<button type="button" class="update-banner-btn" onclick="reloadForUpdate()">Обновить</button>
+<button type="button" class="update-banner-close" onclick="dismissUpdateBanner()" aria-label="Скрыть">✕</button>
+</div>
+<script>
+// ---------- Проверка новой версии сайта ----------
+// Страница запоминает, какой была при открытии, и время от времени
+// (при возвращении в приложение и раз в 5 минут) сверяется с сервером.
+// Если файл на сервере изменился — показывает оповещение. Ничего
+// настраивать при выкладке новой версии не нужно.
+(function () {
+const pageUrl = location.pathname;
+let baseline = null;
+let dismissedVersion = null;
+let lastCheck = 0;
+
+async function fetchCurrent() {
+const res = await fetch(pageUrl, { cache: 'no-store' });
+if (!res.ok) return null;
+return await res.text();
+}
+
+async function checkForUpdate() {
+if (location.protocol === 'file:') return;
+if (Date.now() - lastCheck < 30000) return;
+lastCheck = Date.now();
+try {
+const text = await fetchCurrent();
+if (text === null) return;
+if (baseline === null) { baseline = text; return; }
+if (text !== baseline && text !== dismissedVersion) {
+window.__pendingUpdateVersion = text;
+document.getElementById('updateBanner').classList.add('show');
+}
+} catch (e) {
+// нет сети — проверим в следующий раз
+}
+}
+
+window.dismissUpdateBanner = function () {
+dismissedVersion = window.__pendingUpdateVersion || null;
+document.getElementById('updateBanner').classList.remove('show');
+};
+
+window.reloadForUpdate = function () {
+// Несохранённые правки прайса — переспрашиваем
+if (typeof priceUnsaved !== 'undefined' && priceUnsaved) {
+if (!confirm('Есть несохранённые изменения прайса — после обновления они пропадут. Обновить сейчас?')) return;
+priceUnsaved = false; // чтобы браузер не спросил второй раз
+}
+location.reload();
+};
+
+window.addEventListener('load', () => setTimeout(checkForUpdate, 2000));
+document.addEventListener('visibilitychange', () => {
+if (document.visibilityState === 'visible') checkForUpdate();
+});
+setInterval(() => {
+if (document.visibilityState === 'visible') checkForUpdate();
+}, 5 * 60 * 1000);
+})();
+</script>
 </body>
 </html>
