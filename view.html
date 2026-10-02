@@ -59,21 +59,35 @@ box.textContent = msg;
 box.style.display = 'block';
 }
 
+// Пропускает только http(s)-ссылки, всё остальное (javascript:, data: и т.п.) отбрасывает
+function safeUrl(raw) {
+if (typeof raw !== 'string' || !raw.trim()) return null;
+try {
+const u = new URL(raw, window.location.href);
+return (u.protocol === 'https:' || u.protocol === 'http:') ? u.href : null;
+} catch (e) {
+return null;
+}
+}
+
 function renderAttachmentsHtml(attachments) {
 if (!Array.isArray(attachments) || attachments.length === 0) return '';
 const chips = attachments.map(att => {
-const isImage = att.type && att.type.startsWith('image/');
-const downloadBtn = `<button type="button" class="attachment-download-btn" data-url="${escapeHtml(att.url)}" data-name="${escapeHtml(att.name)}" onclick="downloadAttachment(this)" title="Скачать">⬇️</button>`;
+const url = safeUrl(att && att.url);
+if (!url) return '';
+const isImage = typeof att.type === 'string' && att.type.startsWith('image/');
+const safeHref = escapeHtml(url);
+const downloadBtn = `<button type="button" class="attachment-download-btn" data-url="${safeHref}" data-name="${escapeHtml(att.name)}" onclick="downloadAttachment(this)" title="Скачать">⬇️</button>`;
 if (isImage) {
-return `<div class="attachment-chip-wrap"><a href="${att.url}" target="_blank" rel="noopener" class="attachment-link"><img src="${att.url}" class="attachment-thumb" alt="${escapeHtml(att.name)}" title="${escapeHtml(att.name)}"></a>${downloadBtn}</div>`;
+return `<div class="attachment-chip-wrap"><a href="${safeHref}" target="_blank" rel="noopener" class="attachment-link"><img src="${safeHref}" class="attachment-thumb" alt="${escapeHtml(att.name)}" title="${escapeHtml(att.name)}"></a>${downloadBtn}</div>`;
 }
-return `<div class="attachment-chip-wrap"><a href="${att.url}" target="_blank" rel="noopener" class="attachment-link" style="display:flex; align-items:center; gap:4px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; padding:6px 10px; font-size:12px; color:#334155;">📄 ${escapeHtml(att.name)}</a>${downloadBtn}</div>`;
+return `<div class="attachment-chip-wrap"><a href="${safeHref}" target="_blank" rel="noopener" class="attachment-link" style="display:flex; align-items:center; gap:4px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; padding:6px 10px; font-size:12px; color:#334155;">📄 ${escapeHtml(att.name)}</a>${downloadBtn}</div>`;
 }).join('');
 return `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">${chips}</div>`;
 }
 
 async function downloadAttachment(btn) {
-const url = btn.dataset.url;
+const url = safeUrl(btn.dataset.url);
 const name = btn.dataset.name || 'file';
 if (!url) return;
 const originalHtml = btn.innerHTML;
