@@ -348,10 +348,25 @@ const handler = {
         const id = url.searchParams.get("id") || "";
         if (!id) return json({ error: "Не указан счёт" }, 400);
         const record = await readBin(env);
-        const rec = (record.history || []).find((r) => String(r.id) === String(id));
+        // Счёт ищем сначала в общей истории, затем в истории каждой
+        // "своей компании" (режим company хранит счета отдельно, в
+        // companyData[логин].history). Раньше искалось только в общей,
+        // и ссылки на счета из режима "своя компания" не открывались.
+        let rec = (record.history || []).find((r) => String(r.id) === String(id));
+        let objects = record.objects || [];
+        if (!rec) {
+          for (const cd of Object.values(record.companyData || {})) {
+            const found = (cd && Array.isArray(cd.history) ? cd.history : []).find((r) => String(r.id) === String(id));
+            if (found) {
+              rec = found;
+              objects = Array.isArray(cd.objects) ? cd.objects : [];
+              break;
+            }
+          }
+        }
         if (!rec) return json({ error: "Счёт не найден. Возможно, ссылка устарела или счёт был удалён." }, 404);
         if (rec.shareDisabled) return json({ error: "Доступ к этому счёту по ссылке отключён." }, 404);
-        const obj = rec.objectId ? (record.objects || []).find((o) => o.id === rec.objectId) : null;
+        const obj = rec.objectId ? objects.find((o) => o.id === rec.objectId) : null;
         return json({
           id: rec.id,
           docType: rec.docType || "invoice",
