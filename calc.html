@@ -6,7 +6,7 @@
 <title>Кабинет мастера и Калькулятор</title>
 <!-- PWA: делает сайт "устанавливаемым" на телефон как приложение -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#4f46e5">
+<meta name="theme-color" content="#23408e">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -17,104 +17,107 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-* { box-sizing: border-box; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-tap-highlight-color: transparent; }
-body { background-color: #f8fafc; margin: 0; padding: 12px 8px; color: #1e293b; }
-.container { max-width: 680px; margin: 0 auto; background: #ffffff; padding: 20px 16px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05); }
-h1, h2, h3 { color: #0f172a; margin-top: 0; font-weight: 700; letter-spacing: -0.02em; }
+* { box-sizing: border-box; font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+body { background-color: #f4f6f8; margin: 0; padding: 12px 8px; color: #1f2a37; }
+.container { max-width: 680px; margin: 0 auto; background: #ffffff; padding: 20px 16px; border-radius: 16px; border: 1px solid #dfe3e8; box-shadow: 0 4px 20px rgba(29, 39, 51, 0.05); }
+h1, h2, h3 { color: #1d2733; margin-top: 0; font-weight: 700; letter-spacing: -0.02em; }
 h1 { font-size: 18px; text-align: center; margin-bottom: 16px; }
 h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .nav-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.nav-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; background: #f1f5f9; color: #475569; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; border: 1px solid #e2e8f0; min-height: 38px; cursor: pointer; }
+.nav-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; background: #eef1f4; color: #485566; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; border: 1px solid #dfe3e8; min-height: 38px; cursor: pointer; }
 .auth-container { max-width: 100%; margin: 20px auto; text-align: center; background: #ffffff; padding: 20px 16px; border-radius: 12px; }
-.auth-container input { width: 100%; padding: 12px 14px; margin-bottom: 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 16px; outline: none; }
+.auth-container input { width: 100%; padding: 12px 14px; margin-bottom: 12px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 16px; outline: none; }
 .form-group { margin-bottom: 12px; text-align: left; }
-.form-group label { display: block; font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
-.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 16px; background: #fff; color: #0f172a; outline: none; -webkit-appearance: none; }
+.form-group label { display: block; font-size: 11px; color: #5d6878; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 12px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 16px; background: #fff; color: #1d2733; outline: none; -webkit-appearance: none; }
 .form-group input[type="checkbox"] { width: 18px; height: 18px; padding: 0; margin: 0; flex-shrink: 0; -webkit-appearance: checkbox; appearance: checkbox; }
 .form-group textarea { resize: vertical; min-height: 70px; }
-.accordion-category { margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff; }
-.accordion-header { background: #f8fafc; font-weight: 700; padding: 12px 14px; font-size: 13px; color: #334155; border-left: 4px solid #6366f1; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
-.accordion-header:hover { background: #f1f5f9; }
-.accordion-content { display: none; padding: 10px; background: #fff; border-top: 1px solid #e2e8f0; }
+.accordion-category { margin-bottom: 10px; border: 1px solid #dfe3e8; border-radius: 12px; overflow: hidden; background: #ffffff; }
+.accordion-header { background: #f4f6f8; font-weight: 700; padding: 12px 14px; font-size: 13px; color: #33404f; border-left: 4px solid #3556a8; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.accordion-header:hover { background: #eef1f4; }
+.accordion-content { display: none; padding: 10px; background: #fff; border-top: 1px solid #dfe3e8; }
 .accordion-category.open .accordion-content { display: block; }
-.accordion-arrow { transition: transform 0.2s ease; font-size: 12px; color: #64748b; }
+.accordion-arrow { transition: transform 0.2s ease; font-size: 12px; color: #5d6878; }
 .accordion-category.open .accordion-arrow { transform: rotate(180deg); }
-.search-box { width: 100%; padding: 12px 14px; margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 15px; outline: none; background: #fff; }
-.service-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
-.service-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; color: #0f172a; }
-.service-price { color: #059669; font-weight: 700; white-space: nowrap; font-size: 13px; }
-.price-edit-input { width: 70px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 12px; text-align: right; color: #059669; font-weight: 700; }
+.search-box { width: 100%; padding: 12px 14px; margin-bottom: 16px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 15px; outline: none; background: #fff; }
+.service-card { background: #f4f6f8; border: 1px solid #dfe3e8; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.service-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; color: #1d2733; }
+.service-price { color: #23704a; font-weight: 700; white-space: nowrap; font-size: 13px; }
+.price-edit-input { width: 70px; padding: 4px 6px; border: 1px solid #cfd5dd; border-radius: 6px; font-size: 12px; text-align: right; color: #23704a; font-weight: 700; }
 .unit-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-.unit-row input[type="number"] { width: 45%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; }
-.unit-row select { width: 55%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; background: white; outline: none; }
-.add-to-cart-btn { background: #10b981; color: white; border: none; padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 8px; font-weight: 600; width: 100%; min-height: 38px; }
-.total-box { margin-top: 14px; padding: 14px; background: #0f172a; border-radius: 12px; color: #ffffff; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 600; }
-.total-box span { color: #34d399; font-size: 18px; font-weight: 700; }
-.invoice-preview { background: #f8fafc; border: 1px dashed #cbd5e1; padding: 12px; border-radius: 12px; margin-top: 16px; }
-.invoice-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #e2e8f0; gap: 8px; }
-.invoice-item-info { display: flex; align-items: center; gap: 8px; flex: 1; color: #334155; word-break: break-word; }
-.attachment-chip { display: flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 12px; }
-.attachment-thumb { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #e2e8f0; }
-.attachment-name { flex: 1; color: #334155; word-break: break-word; }
+.unit-row input[type="number"] { width: 45%; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 8px; font-size: 14px; outline: none; }
+.unit-row select { width: 55%; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 8px; font-size: 14px; background: white; outline: none; }
+.add-to-cart-btn { background: #2f7d55; color: white; border: none; padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 8px; font-weight: 600; width: 100%; min-height: 38px; }
+.total-box { margin-top: 14px; padding: 14px; background: #1d2733; border-radius: 12px; color: #ffffff; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 600; }
+.total-box span { color: #8fd3b0; font-size: 18px; font-weight: 700; }
+.invoice-preview { background: #f4f6f8; border: 1px dashed #cfd5dd; padding: 12px; border-radius: 12px; margin-top: 16px; }
+.invoice-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #dfe3e8; gap: 8px; }
+.invoice-item-info { display: flex; align-items: center; gap: 8px; flex: 1; color: #33404f; word-break: break-word; }
+.attachment-chip { display: flex; align-items: center; gap: 8px; background: #f4f6f8; border: 1px solid #dfe3e8; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 12px; }
+.attachment-thumb { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: #dfe3e8; }
+.attachment-name { flex: 1; color: #33404f; word-break: break-word; }
 .attachment-uploading { opacity: 0.6; }
 .attachment-link { text-decoration: none; }
 .attachment-chip-wrap { display: flex; align-items: center; gap: 4px; }
-.attachment-download-btn { background: #e0e7ff; color: #4338ca; border: none; border-radius: 6px; width: 26px; height: 26px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.attachment-download-btn { background: #dfe6f4; color: #1c3473; border: none; border-radius: 6px; width: 26px; height: 26px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
 .attachment-download-btn:disabled { opacity: 0.6; cursor: default; }
-.location-input { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 10px; border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; font-size: 13px; color: #334155; outline: none; }
-.location-input:focus { border-color: #6366f1; }
-.location-input::placeholder { color: #94a3b8; }
-.add-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px); background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 99999; opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease; max-width: 85%; text-align: center; }
+.location-input { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 10px; border: 1px solid #cfd5dd; background: #fff; border-radius: 8px; font-size: 13px; color: #33404f; outline: none; }
+.location-input:focus { border-color: #3556a8; }
+.location-input::placeholder { color: #8d97a5; }
+.add-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px); background: #1d2733; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 99999; opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease; max-width: 85%; text-align: center; }
 .add-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.pay-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.55); z-index: 100000; align-items: center; justify-content: center; padding: 14px; }
+.pay-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(29,39,51,0.55); z-index: 100000; align-items: center; justify-content: center; padding: 14px; }
 .pay-modal-overlay.show { display: flex; }
 .pay-modal-box { background: #fff; border-radius: 16px; width: 100%; max-width: 380px; padding: 18px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto; }
-.pay-modal-box h3 { margin: 0 0 4px; font-size: 16px; color: #1e293b; }
-.pay-modal-box .pay-sub { font-size: 12px; color: #64748b; margin-bottom: 14px; }
+.pay-modal-box h3 { margin: 0 0 4px; font-size: 16px; color: #1f2a37; }
+.pay-modal-box .pay-sub { font-size: 12px; color: #5d6878; margin-bottom: 14px; }
 .pay-field { margin-bottom: 10px; }
-.pay-field label { display: block; font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; margin-bottom: 4px; }
-.pay-field input, .pay-field select, .pay-field textarea { width: 100%; padding: 9px 10px; border: 1px solid #e2e8f0; border-radius: 9px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
+.pay-field label { display: block; font-size: 11px; font-weight: 600; color: #485566; text-transform: uppercase; margin-bottom: 4px; }
+.pay-field input, .pay-field select, .pay-field textarea { width: 100%; padding: 9px 10px; border: 1px solid #dfe3e8; border-radius: 9px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
 .pay-balance-line { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 8px 10px; border-radius: 9px; margin: 10px 0; }
-.pay-balance-owes { background: #fef2f2; color: #b91c1c; }
-.pay-balance-over { background: #eff6ff; color: #1d4ed8; }
-.pay-balance-paid { background: #f0fdf4; color: #15803d; }
-.pay-history-item { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 6px 0; border-top: 1px dashed #e2e8f0; }
-.add-to-cart-btn.just-added { background: #059669; }
+.pay-balance-owes { background: #fbeeea; color: #a5321f; }
+.pay-balance-over { background: #eef2f9; color: #23408e; }
+.pay-balance-paid { background: #eef6f1; color: #23704a; }
+.pay-history-item { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 6px 0; border-top: 1px dashed #dfe3e8; }
+.add-to-cart-btn.just-added { background: #23704a; }
 @keyframes addPulse { 0% { transform: scale(1); } 40% { transform: scale(0.96); } 100% { transform: scale(1); } }
 .add-to-cart-btn.just-added { animation: addPulse 0.3s ease; }
-.btn-delete-item { background: #fee2e2; color: #ef4444; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; font-weight: bold; flex-shrink: 0; }
+.btn-delete-item { background: #f6dfd8; color: #b23a26; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; font-weight: bold; flex-shrink: 0; }
 .action-btns { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 .btn { padding: 12px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; width: 100%; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
-.btn-success { background: #10b981; color: white; }
-.btn-primary { background: #4f46e5; color: white; }
-.btn-danger { background: #f43f5e; color: white; }
-.btn-warning { background: #f59e0b; color: white; }
+.btn-success { background: #2f7d55; color: white; }
+.btn-primary { background: #23408e; color: white; }
+.btn-danger { background: #b23a26; color: white; }
+.btn-warning { background: #b7791f; color: white; }
 .btn-sm { padding: 6px 10px; font-size: 12px; width: auto; border-radius: 6px; min-height: unset; }
-.tab-menu { display: flex; gap: 6px; margin-bottom: 16px; background: #f1f5f9; padding: 4px; border-radius: 12px; border: 1px solid #e2e8f0; overflow-x: auto; scrollbar-width: none; }
+.tab-menu { display: flex; gap: 6px; margin-bottom: 16px; background: #eef1f4; padding: 4px; border-radius: 12px; border: 1px solid #dfe3e8; overflow-x: auto; scrollbar-width: none; }
 .tab-menu::-webkit-scrollbar { display: none; }
-.tab-btn { flex: 0 0 auto; padding: 8px 12px; background: transparent; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 12px; color: #64748b; white-space: nowrap; }
-.tab-btn.active { background: #ffffff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-.history-card, .profile-box, .user-card, .object-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-bottom: 10px; font-size: 13px; }
+.tab-btn { flex: 0 0 auto; padding: 8px 12px; background: transparent; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 12px; color: #5d6878; white-space: nowrap; }
+.tab-btn.active { background: #ffffff; color: #1d2733; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.history-card, .profile-box, .user-card, .object-card { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 12px; padding: 12px; margin-bottom: 10px; font-size: 13px; }
 .history-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; gap: 8px; }
 .user-card { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 .badge { padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; display: inline-block; }
-.badge-admin { background: #fef3c7; color: #d97706; }
-.badge-master { background: #e0f2fe; color: #0369a1; }
-.badge-client { background: #dcfce7; color: #15803d; }
-.role-toggle-btn { flex: 1; padding: 12px 10px; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff; color: #64748b; font-weight: 600; font-size: 13px; cursor: pointer; }
-.role-toggle-btn.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+.badge-admin { background: #f6ecd2; color: #9a5f12; }
+.badge-master { background: #eef2f9; color: #23408e; }
+.badge-client { background: #dcefe3; color: #23704a; }
+.role-toggle-btn { flex: 1; padding: 12px 10px; border-radius: 10px; border: 1px solid #cfd5dd; background: #fff; color: #5d6878; font-weight: 600; font-size: 13px; cursor: pointer; }
+.role-toggle-btn.active { background: #23408e; color: #fff; border-color: #23408e; }
 .role-toggle-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.loader { text-align: center; color: #4f46e5; font-weight: 600; padding: 16px; font-size: 13px; }
-.link-text { color: #4f46e5; font-size: 13px; cursor: pointer; text-decoration: underline; margin-top: 10px; display: inline-block; font-weight: 500; }
+.loader { text-align: center; color: #23408e; font-weight: 600; padding: 16px; font-size: 13px; }
+.link-text { color: #23408e; font-size: 13px; cursor: pointer; text-decoration: underline; margin-top: 10px; display: inline-block; font-weight: 500; }
 .object-card { cursor: pointer; }
-.object-card:hover { border-color: #6366f1; }
+.object-card:hover { border-color: #3556a8; }
 .object-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
 .object-stats { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
-.object-stat-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #334155; flex: 1; min-width: 100px; }
-.object-stat-box b { display: block; font-size: 15px; color: #0f172a; }
+.object-stat-box { background: #f4f6f8; border: 1px solid #dfe3e8; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #33404f; flex: 1; min-width: 100px; }
+.object-stat-box b { display: block; font-size: 15px; color: #1d2733; }
 .object-detail-field { margin-bottom: 10px; font-size: 13px; }
-.object-detail-field b { display: block; font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; font-weight: 600; }
+.object-detail-field b { display: block; font-size: 11px; color: #5d6878; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 2px; font-weight: 600; }
 @media (min-width: 481px) {
 body { padding: 20px 15px; }
 .container { padding: 28px; }
@@ -126,59 +129,66 @@ h2 { font-size: 16px; }
 /* ---------- Шапка с меню пользователя ---------- */
 .app-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 16px; }
 .user-menu-wrap { position: relative; min-width: 0; }
-.user-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 62vw; min-height: 40px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #0f172a; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; cursor: pointer; }
+.user-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 62vw; min-height: 40px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #1d2733; background: #f4f6f8; border: 1px solid #dfe3e8; border-radius: 999px; cursor: pointer; }
 .user-chip .user-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.user-chip .user-chip-caret { color: #64748b; font-size: 10px; transition: transform 0.15s; }
-.user-chip[aria-expanded="true"] { border-color: #c7d2fe; background: #eef2ff; }
+.user-chip .user-chip-caret { color: #5d6878; font-size: 10px; transition: transform 0.15s; }
+.user-chip[aria-expanded="true"] { border-color: #c9d3ea; background: #eef2f9; }
 .user-chip[aria-expanded="true"] .user-chip-caret { transform: rotate(180deg); }
-.user-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 220px; padding: 6px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14); }
+.user-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 220px; padding: 6px; background: #ffffff; border: 1px solid #dfe3e8; border-radius: 12px; box-shadow: 0 12px 32px rgba(29, 39, 51, 0.14); }
 .user-menu.open { display: block; }
-.menu-item { display: block; width: 100%; padding: 12px; background: none; border: none; border-radius: 8px; text-align: left; font-size: 15px; font-weight: 600; color: #334155; cursor: pointer; }
-.menu-item:active, .menu-item:hover { background: #f1f5f9; }
-.menu-item.active { background: #eef2ff; color: #4338ca; }
-.menu-item-danger { color: #e11d48; }
-.menu-sep { height: 1px; margin: 4px 6px; background: #e2e8f0; }
+.menu-item { display: block; width: 100%; padding: 12px; background: none; border: none; border-radius: 8px; text-align: left; font-size: 15px; font-weight: 600; color: #33404f; cursor: pointer; }
+.menu-item:active, .menu-item:hover { background: #eef1f4; }
+.menu-item.active { background: #eef2f9; color: #1c3473; }
+.menu-item-danger { color: #b23a26; }
+.menu-sep { height: 1px; margin: 4px 6px; background: #dfe3e8; }
 @media (prefers-reduced-motion: reduce) { .user-chip .user-chip-caret { transition: none; } }
 
 /* ---------- Нижняя панель разделов ---------- */
-.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: rgba(255, 255, 255, 0.97); border-top: 1px solid #e2e8f0; box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06); padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); }
+.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: rgba(255, 255, 255, 0.97); border-top: 1px solid #dfe3e8; box-shadow: 0 -4px 16px rgba(29, 39, 51, 0.06); padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); }
 .bottom-nav-inner { display: flex; gap: 4px; max-width: 680px; margin: 0 auto; }
-.nav-tab { flex: 1; min-height: 54px; padding: 6px 4px; background: none; border: none; border-radius: 12px; text-align: center; font-size: 12px; font-weight: 600; color: #64748b; cursor: pointer; }
+.nav-tab { flex: 1; min-height: 54px; padding: 6px 4px; background: none; border: none; border-radius: 12px; text-align: center; font-size: 12px; font-weight: 600; color: #5d6878; cursor: pointer; }
 .nav-tab .nav-tab-icon { display: block; font-size: 21px; line-height: 1.2; margin-bottom: 2px; }
-.nav-tab.active { color: #4338ca; background: #eef2ff; }
-.nav-tab:focus-visible, .menu-item:focus-visible, .user-chip:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }
+.nav-tab.active { color: #1c3473; background: #eef2f9; }
+.nav-tab:focus-visible, .menu-item:focus-visible, .user-chip:focus-visible { outline: 2px solid #23408e; outline-offset: 2px; }
 body.has-bottom-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
 /* Пока открыта клавиатура, панель прячется, чтобы не закрывать поля ввода */
 body.keyboard-open .bottom-nav { display: none !important; }
 
 /* ---------- Нижняя шторка с действиями ---------- */
-.sheet-overlay { display: none; position: fixed; inset: 0; z-index: 90; background: rgba(15, 23, 42, 0.4); }
-.sheet { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; max-width: 680px; margin: 0 auto; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); background: #ffffff; border-radius: 18px 18px 0 0; box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.18); }
+.sheet-overlay { display: none; position: fixed; inset: 0; z-index: 90; background: rgba(29, 39, 51, 0.4); }
+.sheet { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; max-width: 680px; margin: 0 auto; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); background: #ffffff; border-radius: 18px 18px 0 0; box-shadow: 0 -10px 30px rgba(29, 39, 51, 0.18); }
 .sheet.open, .sheet-overlay.open { display: block; }
-.sheet::before { content: ""; display: block; width: 40px; height: 4px; margin: 2px auto 8px; border-radius: 2px; background: #cbd5e1; }
-.sheet-title { padding: 4px 12px 10px; font-size: 13px; color: #64748b; font-weight: 600; }
-.sheet-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 12px; background: none; border: none; border-radius: 10px; text-align: left; font-size: 16px; font-weight: 600; color: #1e293b; cursor: pointer; }
-.sheet-item:active, .sheet-item:hover { background: #f1f5f9; }
+.sheet::before { content: ""; display: block; width: 40px; height: 4px; margin: 2px auto 8px; border-radius: 2px; background: #cfd5dd; }
+.sheet-title { padding: 4px 12px 10px; font-size: 13px; color: #5d6878; font-weight: 600; }
+.sheet-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 12px; background: none; border: none; border-radius: 10px; text-align: left; font-size: 16px; font-weight: 600; color: #1f2a37; cursor: pointer; }
+.sheet-item:active, .sheet-item:hover { background: #eef1f4; }
 .sheet-item-icon { width: 26px; text-align: center; font-size: 19px; }
-.sheet-item-danger { color: #e11d48; }
-.sheet-sep { height: 1px; margin: 4px 8px; background: #e2e8f0; }
-.sheet-cancel { width: 100%; min-height: 48px; margin-top: 6px; background: #f1f5f9; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; color: #475569; cursor: pointer; }
+.sheet-item-danger { color: #b23a26; }
+.sheet-sep { height: 1px; margin: 4px 8px; background: #dfe3e8; }
+.sheet-cancel { width: 100%; min-height: 48px; margin-top: 6px; background: #eef1f4; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; color: #485566; cursor: pointer; }
 body.sheet-open { overflow: hidden; }
 
 /* ---------- Карточка счёта ---------- */
 .hc-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
 .hc-title { min-width: 0; }
-.hc-name { font-size: 15px; font-weight: 700; color: #0f172a; overflow-wrap: anywhere; }
-.hc-date { font-size: 12px; color: #64748b; margin-top: 2px; }
-.hc-amount { font-size: 17px; font-weight: 800; color: #0f172a; white-space: nowrap; }
-.hc-meta { font-size: 12px; color: #475569; margin-top: 2px; overflow-wrap: anywhere; }
-.hc-meta b { color: #334155; }
-.hc-items { margin: 8px 0 4px; padding-top: 6px; border-top: 1px dashed #e2e8f0; color: #475569; font-size: 12px; line-height: 1.5; }
-.hc-items summary { cursor: pointer; color: #4f46e5; font-weight: 600; list-style: none; padding: 2px 0; }
+.hc-name { font-size: 15px; font-weight: 700; color: #1d2733; overflow-wrap: anywhere; }
+.hc-date { font-size: 12px; color: #5d6878; margin-top: 2px; }
+.hc-amount { font-size: 17px; font-weight: 700; color: #1d2733; white-space: nowrap; }
+.hc-meta { font-size: 12px; color: #485566; margin-top: 2px; overflow-wrap: anywhere; }
+.hc-meta b { color: #33404f; }
+.hc-items { margin: 10px 0 4px; color: #485566; font-size: 12px; line-height: 1.45; }
+.hc-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 9px 0; border-top: 1px solid #dfe3e8; }
+.hc-l-main { min-width: 0; }
+.hc-l-name { font-size: 14px; font-weight: 500; color: #1d2733; }
+.hc-l-sub { font-size: 12.5px; color: #5d6878; margin-top: 2px; }
+.hc-l-sum { font-size: 14px; font-weight: 600; color: #1d2733; white-space: nowrap; }
+.hc-line .rooms-breakdown { margin-top: 2px; }
+.hc-line .measure-note { margin-left: 0; }
+.hc-items summary { cursor: pointer; color: #23408e; font-weight: 600; list-style: none; padding: 2px 0; }
 .hc-items summary::-webkit-details-marker { display: none; }
 .hc-actions { display: flex; gap: 6px; margin-top: 10px; }
-.hc-btn { flex: 1; min-height: 42px; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; color: #334155; font-size: 14px; font-weight: 600; cursor: pointer; }
-.hc-btn-primary { background: #4f46e5; border-color: #4f46e5; color: #ffffff; }
+.hc-btn { flex: 1; min-height: 42px; padding: 8px 10px; border: 1px solid #dfe3e8; border-radius: 10px; background: #f4f6f8; color: #33404f; font-size: 14px; font-weight: 600; cursor: pointer; }
+.hc-btn-primary { background: #23408e; border-color: #23408e; color: #ffffff; }
 .hc-btn-more { flex: 0 0 48px; font-size: 18px; line-height: 1; }
 .hc-badge { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; vertical-align: 1px; }
 
@@ -187,30 +197,30 @@ body.sheet-open { overflow: hidden; }
 .hist-tools .search-box { margin-bottom: 8px; }
 .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
 .chips::-webkit-scrollbar { display: none; }
-.chip { flex: 0 0 auto; min-height: 36px; padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 999px; background: #ffffff; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer; }
-.chip.active { background: #0f172a; border-color: #0f172a; color: #ffffff; }
-.hist-count { font-size: 12px; color: #94a3b8; margin: 0 2px 8px; }
+.chip { flex: 0 0 auto; min-height: 36px; padding: 6px 14px; border: 1px solid #dfe3e8; border-radius: 999px; background: #ffffff; color: #485566; font-size: 13px; font-weight: 600; cursor: pointer; }
+.chip.active { background: #1d2733; border-color: #1d2733; color: #ffffff; }
+.hist-count { font-size: 12px; color: #8d97a5; margin: 0 2px 8px; }
 
 /* ---------- Калькулятор: детали счёта и нижняя полоса ---------- */
-.calc-details { margin-bottom: 14px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; }
+.calc-details { margin-bottom: 14px; border: 1px solid #dfe3e8; border-radius: 12px; background: #f4f6f8; }
 .calc-details > summary { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; list-style: none; }
 .calc-details > summary::-webkit-details-marker { display: none; }
 .calc-details-text { flex: 1; min-width: 0; }
-.calc-details-title { font-size: 14px; font-weight: 700; color: #0f172a; }
-.calc-details-summary { font-size: 12px; color: #64748b; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.calc-details-arrow { color: #64748b; font-size: 12px; transition: transform 0.15s; }
+.calc-details-title { font-size: 14px; font-weight: 700; color: #1d2733; }
+.calc-details-summary { font-size: 12px; color: #5d6878; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calc-details-arrow { color: #5d6878; font-size: 12px; transition: transform 0.15s; }
 .calc-details[open] .calc-details-arrow { transform: rotate(180deg); }
 .calc-details-body { padding: 0 14px 6px; }
-.file-pick-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px dashed #a5b4fc; border-radius: 10px; background: #eef2ff; color: #4338ca; font-size: 14px; font-weight: 600; cursor: pointer; }
+.file-pick-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px dashed #9fb0d8; border-radius: 10px; background: #eef2f9; color: #1c3473; font-size: 14px; font-weight: 600; cursor: pointer; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.file-pick-btn:focus-within { outline: 2px solid #4f46e5; outline-offset: 2px; }
+.file-pick-btn:focus-within { outline: 2px solid #23408e; outline-offset: 2px; }
 
-.calc-bar { display: none; position: fixed; left: 0; right: 0; z-index: 49; bottom: calc(67px + env(safe-area-inset-bottom, 0px)); background: #0f172a; box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.12); }
+.calc-bar { display: none; position: fixed; left: 0; right: 0; z-index: 49; bottom: calc(67px + env(safe-area-inset-bottom, 0px)); background: #1d2733; box-shadow: 0 -4px 16px rgba(29, 39, 51, 0.12); }
 .calc-bar-inner { display: flex; align-items: center; gap: 8px; max-width: 680px; margin: 0 auto; padding: 8px 10px; }
-.calc-bar-total { flex: 1; min-width: 0; color: #cbd5e1; font-size: 12px; line-height: 1.2; }
-.calc-bar-total b { display: block; color: #34d399; font-size: 19px; font-weight: 800; white-space: nowrap; }
-.calc-bar-save { min-height: 46px; padding: 10px 16px; border: none; border-radius: 10px; background: #4f46e5; color: #ffffff; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-.calc-bar-more { flex: 0 0 46px; min-height: 46px; border: 1px solid #334155; border-radius: 10px; background: transparent; color: #ffffff; font-size: 19px; cursor: pointer; }
+.calc-bar-total { flex: 1; min-width: 0; color: #cfd5dd; font-size: 12px; line-height: 1.2; }
+.calc-bar-total b { display: block; color: #8fd3b0; font-size: 19px; font-weight: 700; white-space: nowrap; }
+.calc-bar-save { min-height: 46px; padding: 10px 16px; border: none; border-radius: 10px; background: #23408e; color: #ffffff; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.calc-bar-more { flex: 0 0 46px; min-height: 46px; border: 1px solid #33404f; border-radius: 10px; background: transparent; color: #ffffff; font-size: 19px; cursor: pointer; }
 /* Полоса с итогом появляется, только когда в счёте есть хотя бы одна позиция */
 body.calc-active.calc-has-items .calc-bar { display: block; animation: calc-bar-in 0.22s ease-out; }
 body.calc-active.calc-has-items.has-bottom-nav { padding-bottom: calc(152px + env(safe-area-inset-bottom, 0px)); }
@@ -219,28 +229,28 @@ body.calc-active.calc-has-items.has-bottom-nav { padding-bottom: calc(152px + en
 body.keyboard-open .calc-bar { display: none !important; }
 /* ---------- Объекты ---------- */
 .object-card { cursor: pointer; position: relative; }
-.object-card:active { background: #f8fafc; }
+.object-card:active { background: #f4f6f8; }
 .obj-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.obj-name { font-size: 15px; font-weight: 700; color: #0f172a; overflow-wrap: anywhere; }
-.obj-chevron { color: #94a3b8; font-size: 20px; line-height: 1; }
-.obj-line { color: #475569; font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
+.obj-name { font-size: 15px; font-weight: 700; color: #1d2733; overflow-wrap: anywhere; }
+.obj-chevron { color: #8d97a5; font-size: 20px; line-height: 1; }
+.obj-line { color: #485566; font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
 .obj-money { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.obj-pill { padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #f1f5f9; color: #334155; }
-.obj-pill-owes { background: #fef2f2; color: #b91c1c; }
-.obj-pill-paid { background: #f0fdf4; color: #047857; }
+.obj-pill { padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #eef1f4; color: #33404f; }
+.obj-pill-owes { background: #fbeeea; color: #a5321f; }
+.obj-pill-paid { background: #eef6f1; color: #1f6442; }
 .obj-actions { display: flex; gap: 8px; margin: 14px 0 4px; }
 .obj-actions .btn { flex: 1; }
 .obj-actions .hc-btn-more { flex: 0 0 48px; min-height: 44px; }
 
 /* ---------- Черновик счёта ---------- */
-.draft-offer { display: none; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #c7d2fe; border-radius: 12px; background: #eef2ff; }
+.draft-offer { display: none; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #c9d3ea; border-radius: 12px; background: #eef2f9; }
 .draft-offer.show { display: flex; }
-.draft-offer-text { flex: 1 1 180px; font-size: 13px; color: #312e81; line-height: 1.35; }
+.draft-offer-text { flex: 1 1 180px; font-size: 13px; color: #16285a; line-height: 1.35; }
 .draft-offer-text b { display: block; font-size: 14px; }
 .draft-offer-btns { display: flex; gap: 6px; }
 .draft-offer-btns button { min-height: 40px; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; }
-.draft-continue { border: none; background: #4f46e5; color: #ffffff; }
-.draft-discard { border: 1px solid #c7d2fe; background: #ffffff; color: #475569; }
+.draft-continue { border: none; background: #23408e; color: #ffffff; }
+.draft-discard { border: 1px solid #c9d3ea; background: #ffffff; color: #485566; }
 
 .pay-balance-line { gap: 8px; flex-wrap: wrap; }
 /* Уведомления — над нижними панелями, но под шторкой действий */
@@ -251,162 +261,245 @@ body.has-bottom-nav .add-toast.show { transform: translateX(-50%) translateY(0);
 @media (prefers-reduced-motion: reduce) { .calc-details-arrow { transition: none; } }
 
 /* ---------- Оповещение «вышла новая версия» ---------- */
-.update-banner { display: none; position: fixed; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top, 0px)); z-index: 95; max-width: 520px; margin: 0 auto; padding: 10px 10px 10px 14px; align-items: center; gap: 10px; background: #0f172a; color: #ffffff; border-radius: 14px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3); font-size: 14px; font-weight: 600; }
+.update-banner { display: none; position: fixed; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top, 0px)); z-index: 95; max-width: 520px; margin: 0 auto; padding: 10px 10px 10px 14px; align-items: center; gap: 10px; background: #1d2733; color: #ffffff; border-radius: 14px; box-shadow: 0 10px 30px rgba(29, 39, 51, 0.3); font-size: 14px; font-weight: 600; }
 .update-banner.show { display: flex; }
 .update-banner-text { flex: 1; min-width: 0; line-height: 1.3; }
-.update-banner-text small { display: block; color: #94a3b8; font-weight: 500; font-size: 12px; margin-top: 2px; }
-.update-banner-btn { min-height: 40px; padding: 8px 14px; border: none; border-radius: 10px; background: #4f46e5; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-.update-banner-close { width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent; color: #94a3b8; font-size: 18px; cursor: pointer; }
+.update-banner-text small { display: block; color: #8d97a5; font-weight: 500; font-size: 12px; margin-top: 2px; }
+.update-banner-btn { min-height: 40px; padding: 8px 14px; border: none; border-radius: 10px; background: #23408e; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.update-banner-close { width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent; color: #8d97a5; font-size: 18px; cursor: pointer; }
 
 /* ===================== ЗАМЕР ===================== */
-.measure-open-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; margin: 4px 0 14px; border: 1px dashed #a5b4fc; border-radius: 12px; background: #eef2ff; color: #4338ca; font-size: 15px; font-weight: 700; cursor: pointer; }
-.mp-mini { flex: 0 0 auto; width: 40px; min-height: 36px; border: 1px solid #c7d2fe; border-radius: 8px; background: #eef2ff; font-size: 16px; cursor: pointer; }
+.measure-open-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; margin: 4px 0 14px; border: 1px dashed #9fb0d8; border-radius: 12px; background: #eef2f9; color: #1c3473; font-size: 15px; font-weight: 700; cursor: pointer; }
+.mp-mini { flex: 0 0 auto; width: 40px; min-height: 36px; border: 1px solid #c9d3ea; border-radius: 8px; background: #eef2f9; font-size: 16px; cursor: pointer; }
 .unit-row input[type="number"] { flex: 1; width: auto; min-width: 0; }
 .unit-row select { flex: 1.2; width: auto; min-width: 0; }
-.measure-note { margin: 0 0 2px 10px; font-size: 11px; color: #6366f1; line-height: 1.3; }
+.measure-note { margin: 0 0 2px 10px; font-size: 11px; color: #3556a8; line-height: 1.3; }
 .measure-note summary { cursor: pointer; list-style: none; font-weight: 600; }
 .measure-note summary::-webkit-details-marker { display: none; }
-.measure-note div { color: #475569; white-space: pre-line; margin-top: 2px; }
+.measure-note div { color: #485566; white-space: pre-line; margin-top: 2px; }
 
-.measure-panel { display: none; position: fixed; inset: 0; z-index: 92; flex-direction: column; background: #f8fafc; }
+.measure-panel { display: none; position: fixed; inset: 0; z-index: 92; flex-direction: column; background: #f4f6f8; }
 .measure-panel.open { display: flex; }
 body.measure-open { overflow: hidden; }
-.mp-head { flex: 0 0 auto; background: #ffffff; border-bottom: 1px solid #e2e8f0; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 8px; }
+.mp-head { flex: 0 0 auto; background: #ffffff; border-bottom: 1px solid #dfe3e8; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 8px; }
 .mp-head-inner, .mp-body-inner, .mp-foot-inner { max-width: 680px; margin: 0 auto; }
 .mp-head-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.mp-title { flex: 1; font-size: 17px; font-weight: 800; color: #0f172a; }
-.mp-head-btn { min-height: 38px; padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; color: #475569; font-size: 13px; font-weight: 600; cursor: pointer; }
+.mp-title { flex: 1; font-size: 17px; font-weight: 700; color: #1d2733; }
+.mp-head-btn { min-height: 38px; padding: 6px 12px; border: 1px solid #dfe3e8; border-radius: 10px; background: #ffffff; color: #485566; font-size: 13px; font-weight: 600; cursor: pointer; }
 .mp-close { width: 40px; font-size: 18px; padding: 0; }
 .mp-meta { display: flex; gap: 6px; margin-bottom: 8px; }
-.mp-meta input, .mp-meta select { flex: 1; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; background: #ffffff; color: #0f172a; }
+.mp-meta input, .mp-meta select { flex: 1; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 14px; background: #ffffff; color: #1d2733; }
 .mp-tabs .chip { min-height: 34px; padding: 6px 11px; font-size: 13px; }
-.mp-in::placeholder { color: #cbd5e1; font-weight: 500; }
-.mp-target { font-size: 12px; color: #a5b4fc; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-in::placeholder { color: #cfd5dd; font-weight: 500; }
+.mp-target { font-size: 12px; color: #9fb0d8; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; }
-.mp-sec { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 12px; margin-bottom: 12px; }
-.mp-sec-title { font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 8px; }
-.mp-hint { font-size: 12px; color: #64748b; margin: -4px 0 8px; line-height: 1.4; }
+.mp-sec { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 14px; padding: 12px; margin-bottom: 12px; }
+.mp-sec-title { font-size: 14px; font-weight: 700; color: #1d2733; margin-bottom: 8px; }
+.mp-hint { font-size: 12px; color: #5d6878; margin: -4px 0 8px; line-height: 1.4; }
 .mp-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
 .mp-row-label-sm { flex-basis: 58px !important; }
 .mp-in-h { flex: 0 0 74px; font-size: 15px; }
-.mp-name-in { flex: 1; min-width: 0; min-height: 38px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 14px; font-weight: 600; color: #0f172a; background: #ffffff; }
+.mp-name-in { flex: 1; min-width: 0; min-height: 38px; padding: 6px 10px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 14px; font-weight: 600; color: #1d2733; background: #ffffff; }
 .mp-dims-2 { grid-template-columns: 1fr auto 1fr; }
 .mp-pick button { line-height: 1.15; font-size: 12px; font-weight: 600; text-align: left; }
 .mp-pick button b { font-size: 16px; }
-.mp-row-label { flex: 0 0 72px; font-size: 13px; color: #475569; font-weight: 600; }
-.mp-in { flex: 1; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 17px; font-weight: 600; color: #0f172a; background: #ffffff; text-align: center; }
-.mp-in:focus { border-color: #6366f1; outline: 2px solid #c7d2fe; }
-.mp-in.mp-bad { border-color: #f43f5e; }
-.mp-unit { flex: 0 0 auto; font-size: 13px; color: #64748b; }
-.mp-x { flex: 0 0 auto; color: #94a3b8; font-weight: 700; }
-.mp-row-res { flex: 0 0 auto; min-width: 58px; text-align: right; font-size: 12px; color: #4338ca; font-weight: 700; }
-.mp-del { flex: 0 0 36px; height: 36px; border: none; border-radius: 9px; background: #fef2f2; color: #e11d48; font-size: 15px; cursor: pointer; }
+.mp-row-label { flex: 0 0 72px; font-size: 13px; color: #485566; font-weight: 600; }
+.mp-in { flex: 1; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 17px; font-weight: 600; color: #1d2733; background: #ffffff; text-align: center; }
+.mp-in:focus { border-color: #3556a8; outline: 2px solid #c9d3ea; }
+.mp-in.mp-bad { border-color: #b23a26; }
+.mp-unit { flex: 0 0 auto; font-size: 13px; color: #5d6878; }
+.mp-x { flex: 0 0 auto; color: #8d97a5; font-weight: 700; }
+.mp-row-res { flex: 0 0 auto; min-width: 58px; text-align: right; font-size: 12px; color: #1c3473; font-weight: 700; }
+.mp-del { flex: 0 0 36px; height: 36px; border: none; border-radius: 9px; background: #fbeeea; color: #b23a26; font-size: 15px; cursor: pointer; }
 .mp-add-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-.mp-add { flex: 1; min-height: 42px; padding: 8px 12px; border: 1px dashed #a5b4fc; border-radius: 10px; background: #eef2ff; color: #4338ca; font-size: 14px; font-weight: 700; cursor: pointer; }
-.mp-calc { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f8fafc; font-size: 13px; color: #334155; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line; }
+.mp-add { flex: 1; min-height: 42px; padding: 8px 12px; border: 1px dashed #9fb0d8; border-radius: 10px; background: #eef2f9; color: #1c3473; font-size: 14px; font-weight: 700; cursor: pointer; }
+.mp-calc { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f4f6f8; font-size: 13px; color: #33404f; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line; }
 .mp-calc:empty { display: none; }
-.mp-calc b { color: #0f172a; }
-.mp-open { border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px; margin-bottom: 8px; background: #fbfdff; }
+.mp-calc b { color: #1d2733; }
+.mp-open { border: 1px solid #dfe3e8; border-radius: 12px; padding: 8px; margin-bottom: 8px; background: #f8f9fb; }
 .mp-open-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.mp-type { min-height: 36px; padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 999px; background: #ffffff; font-size: 14px; font-weight: 700; color: #334155; cursor: pointer; }
-.mp-open-area { flex: 1; text-align: right; font-size: 13px; font-weight: 700; color: #4338ca; }
+.mp-type { min-height: 36px; padding: 6px 12px; border: 1px solid #cfd5dd; border-radius: 999px; background: #ffffff; font-size: 14px; font-weight: 700; color: #33404f; cursor: pointer; }
+.mp-open-area { flex: 1; text-align: right; font-size: 13px; font-weight: 700; color: #1c3473; }
 .mp-dims { display: grid; grid-template-columns: 1fr auto 1fr auto 0.7fr; gap: 6px; align-items: end; }
-.mp-dims label { display: block; font-size: 11px; color: #64748b; font-weight: 600; }
+.mp-dims label { display: block; font-size: 11px; color: #5d6878; font-weight: 600; }
 .mp-dims label .mp-in { width: 100%; margin-top: 2px; }
 .mp-dims .mp-x { padding-bottom: 12px; }
-.mp-link-btn { width: 100%; min-height: 42px; margin-top: 8px; border: none; border-radius: 10px; background: #0f172a; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; }
-.mp-check { display: flex; align-items: flex-start; gap: 10px; padding: 8px 4px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #334155; }
+.mp-link-btn { width: 100%; min-height: 42px; margin-top: 8px; border: none; border-radius: 10px; background: #1d2733; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; }
+.mp-check { display: flex; align-items: flex-start; gap: 10px; padding: 8px 4px; border-bottom: 1px solid #eef1f4; font-size: 13px; color: #33404f; }
 .mp-check input { width: 20px; height: 20px; margin-top: 1px; flex-shrink: 0; }
 .mp-check:last-child { border-bottom: none; }
-.mp-empty { text-align: center; color: #94a3b8; font-size: 13px; padding: 16px 8px; }
-.mp-foot { flex: 0 0 auto; background: #0f172a; color: #ffffff; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
+.mp-empty { text-align: center; color: #8d97a5; font-size: 13px; padding: 16px 8px; }
+.mp-foot { flex: 0 0 auto; background: #1d2733; color: #ffffff; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
 .mp-foot.hidden { display: none; }
-.mp-result-label { font-size: 12px; color: #94a3b8; }
-.mp-result-main { font-size: 22px; font-weight: 800; color: #34d399; }
-.mp-result-sub { font-size: 12px; color: #cbd5e1; margin-top: 2px; }
+.mp-result-label { font-size: 12px; color: #8d97a5; }
+.mp-result-main { font-size: 22px; font-weight: 700; color: #8fd3b0; }
+.mp-result-sub { font-size: 12px; color: #cfd5dd; margin-top: 2px; }
 .mp-pick { display: flex; gap: 6px; margin: 4px 0 2px; flex-wrap: wrap; }
-.mp-pick button { min-height: 40px; padding: 6px 12px; border: 1px solid #334155; border-radius: 10px; background: transparent; color: #e2e8f0; font-size: 15px; font-weight: 700; cursor: pointer; }
-.mp-pick button.active { background: #34d399; border-color: #34d399; color: #0f172a; }
+.mp-pick button { min-height: 40px; padding: 6px 12px; border: 1px solid #33404f; border-radius: 10px; background: transparent; color: #dfe3e8; font-size: 15px; font-weight: 700; cursor: pointer; }
+.mp-pick button.active { background: #8fd3b0; border-color: #8fd3b0; color: #1d2733; }
 .mp-actions { display: flex; gap: 8px; margin-top: 8px; }
-.mp-btn { min-height: 46px; padding: 8px 14px; border: 1px solid #334155; border-radius: 10px; background: transparent; color: #ffffff; font-size: 15px; font-weight: 700; cursor: pointer; }
-.mp-btn-primary { flex: 1; background: #4f46e5; border-color: #4f46e5; }
+.mp-btn { min-height: 46px; padding: 8px 14px; border: 1px solid #33404f; border-radius: 10px; background: transparent; color: #ffffff; font-size: 15px; font-weight: 700; cursor: pointer; }
+.mp-btn-primary { flex: 1; background: #23408e; border-color: #23408e; }
 .mp-btn:disabled { opacity: 0.45; cursor: default; }
-.mp-hist { border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; margin-bottom: 8px; }
+.mp-hist { border: 1px solid #dfe3e8; border-radius: 12px; background: #ffffff; margin-bottom: 8px; }
 .mp-hist > summary { list-style: none; padding: 10px 12px; cursor: pointer; }
 .mp-hist > summary::-webkit-details-marker { display: none; }
-.mp-hist-title { font-size: 14px; font-weight: 700; color: #0f172a; }
-.mp-hist-meta { font-size: 12px; color: #64748b; margin-top: 2px; }
+.mp-hist-title { font-size: 14px; font-weight: 700; color: #1d2733; }
+.mp-hist-meta { font-size: 12px; color: #5d6878; margin-top: 2px; }
 .mp-hist-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.mp-pill { padding: 3px 8px; border-radius: 999px; background: #eef2ff; color: #4338ca; font-size: 12px; font-weight: 700; }
-.mp-hist-body { padding: 0 12px 12px; font-size: 13px; color: #334155; white-space: pre-line; line-height: 1.5; }
+.mp-pill { padding: 3px 8px; border-radius: 999px; background: #eef2f9; color: #1c3473; font-size: 12px; font-weight: 700; }
+.mp-hist-body { padding: 0 12px 12px; font-size: 13px; color: #33404f; white-space: pre-line; line-height: 1.5; }
 .mp-hist-actions { display: flex; gap: 6px; margin-top: 8px; white-space: normal; }
-.mp-hist-actions button { flex: 1; min-height: 40px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; font-size: 14px; font-weight: 600; color: #334155; cursor: pointer; }
-.mp-hist-actions .danger { color: #e11d48; }
+.mp-hist-actions button { flex: 1; min-height: 40px; border: 1px solid #dfe3e8; border-radius: 10px; background: #f4f6f8; font-size: 14px; font-weight: 600; color: #33404f; cursor: pointer; }
+.mp-hist-actions .danger { color: #b23a26; }
 body.measure-open .add-toast { z-index: 99; top: auto; bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
 
 /* ===================== ПОМЕЩЕНИЯ ===================== */
 .rooms-section { margin: 4px 0 18px; }
 .rooms-section h2 { margin-top: 6px; }
-.rooms-hint { font-size: 12px; color: #64748b; margin: -4px 0 10px; }
-.room-card { background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #6366f1; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.rooms-hint { font-size: 12px; color: #5d6878; margin: -4px 0 10px; }
+.room-card { background: #ffffff; border: 1px solid #dfe3e8; border-left: 4px solid #3556a8; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
 .room-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.room-name { font-size: 16px; font-weight: 800; color: #0f172a; overflow-wrap: anywhere; }
-.room-sum { font-size: 16px; font-weight: 800; color: #0f172a; white-space: nowrap; }
+.room-name { font-size: 16px; font-weight: 700; color: #1d2733; overflow-wrap: anywhere; }
+.room-sum { font-size: 16px; font-weight: 700; color: #1d2733; white-space: nowrap; }
 .room-works { margin-top: 8px; }
-.room-work { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid #f1f5f9; }
+.room-work { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid #eef1f4; }
 .rw-main { flex: 1; min-width: 0; }
-.rw-name { font-size: 14px; font-weight: 600; color: #1e293b; overflow-wrap: anywhere; }
-.rw-meta { font-size: 12px; color: #64748b; margin-top: 1px; }
-.rw-sum { font-size: 14px; font-weight: 700; color: #0f172a; white-space: nowrap; }
-.room-empty { font-size: 13px; color: #94a3b8; padding: 8px 0 2px; }
+.rw-name { font-size: 14px; font-weight: 600; color: #1f2a37; overflow-wrap: anywhere; }
+.rw-meta { font-size: 12px; color: #5d6878; margin-top: 1px; }
+.rw-sum { font-size: 14px; font-weight: 700; color: #1d2733; white-space: nowrap; }
+.room-empty { font-size: 13px; color: #8d97a5; padding: 8px 0 2px; }
 .room-actions { display: flex; gap: 6px; margin-top: 10px; }
-.wp-cat { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; margin: 14px 2px 6px; }
-.wp-item { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 6px; }
-.wp-item.added { border-color: #86efac; }
+.wp-cat { font-size: 12px; font-weight: 700; color: #5d6878; text-transform: uppercase; letter-spacing: 0.03em; margin: 14px 2px 6px; }
+.wp-item { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 12px; margin-bottom: 6px; }
+.wp-item.added { border-color: #a9d9bd; }
 .wp-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 10px 12px; background: none; border: none; text-align: left; cursor: pointer; }
-.wp-row-name { flex: 1; font-size: 15px; font-weight: 600; color: #1e293b; }
-.wp-row-price { font-size: 13px; color: #059669; font-weight: 700; white-space: nowrap; }
-.wp-badge { font-size: 12px; color: #15803d; font-weight: 700; }
+.wp-row-name { flex: 1; font-size: 15px; font-weight: 600; color: #1f2a37; }
+.wp-row-price { font-size: 13px; color: #23704a; font-weight: 700; white-space: nowrap; }
+.wp-badge { font-size: 12px; color: #23704a; font-weight: 700; }
 .wp-opts { padding: 0 12px 12px; }
-.wp-opts-title { font-size: 12px; color: #64748b; margin-bottom: 6px; }
+.wp-opts-title { font-size: 12px; color: #5d6878; margin-bottom: 6px; }
 .wp-surfaces { display: flex; flex-wrap: wrap; gap: 6px; }
-.wp-surface { min-height: 44px; padding: 6px 12px; border: 1px solid #c7d2fe; border-radius: 10px; background: #eef2ff; color: #3730a3; font-size: 14px; font-weight: 700; cursor: pointer; text-align: left; }
-.wp-surface small { display: block; font-weight: 600; color: #6366f1; font-size: 12px; }
-.wp-surface.suggested { background: #4f46e5; border-color: #4f46e5; color: #ffffff; }
-.wp-surface.suggested small { color: #c7d2fe; }
+.wp-surface { min-height: 44px; padding: 6px 12px; border: 1px solid #c9d3ea; border-radius: 10px; background: #eef2f9; color: #1c3473; font-size: 14px; font-weight: 700; cursor: pointer; text-align: left; }
+.wp-surface small { display: block; font-weight: 600; color: #3556a8; font-size: 12px; }
+.wp-surface.suggested { background: #23408e; border-color: #23408e; color: #ffffff; }
+.wp-surface.suggested small { color: #c9d3ea; }
 .wp-manual { display: flex; gap: 6px; margin-top: 8px; }
 .wp-manual .mp-in { font-size: 16px; }
-.wp-manual select { min-height: 44px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 8px; font-size: 14px; background: #ffffff; }
-.wp-manual button { min-height: 44px; padding: 0 14px; border: none; border-radius: 10px; background: #0f172a; color: #ffffff; font-weight: 700; cursor: pointer; }
+.wp-manual select { min-height: 44px; border: 1px solid #cfd5dd; border-radius: 10px; padding: 0 8px; font-size: 14px; background: #ffffff; }
+.wp-manual button { min-height: 44px; padding: 0 14px; border: none; border-radius: 10px; background: #1d2733; color: #ffffff; font-weight: 700; cursor: pointer; }
 .hc-room { margin: 4px 0; }
-.hc-room > summary { cursor: pointer; list-style: none; font-weight: 700; color: #334155; padding: 3px 0; }
+.hc-room > summary { cursor: pointer; list-style: none; font-weight: 700; color: #33404f; padding: 3px 0; }
 .hc-room > summary::-webkit-details-marker { display: none; }
 .hc-room > div { padding-left: 4px; }
 .room-select-all { display: flex; gap: 6px; margin-bottom: 8px; }
-.room-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; margin-bottom: 6px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; }
-.room-row.on { border-color: #818cf8; background: #eef2ff; }
+.room-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; margin-bottom: 6px; border: 1px solid #dfe3e8; border-radius: 12px; background: #ffffff; }
+.room-row.on { border-color: #6f86c4; background: #eef2f9; }
 .room-check { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 48px; padding-left: 8px; cursor: pointer; }
-.room-check input { width: 22px; height: 22px; flex-shrink: 0; accent-color: #4f46e5; }
+.room-check input { width: 22px; height: 22px; flex-shrink: 0; accent-color: #23408e; }
 .room-check .room-name { display: block; font-size: 15px; }
-.room-dims { display: block; font-size: 12px; color: #64748b; margin-top: 1px; }
-.room-selbar { display: none; position: sticky; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 5; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #312e81; color: #ffffff; box-shadow: 0 6px 18px rgba(49, 46, 129, 0.25); }
+.room-dims { display: block; font-size: 12px; color: #5d6878; margin-top: 1px; }
+.room-selbar { display: none; position: sticky; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 5; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #16285a; color: #ffffff; box-shadow: 0 6px 18px rgba(22, 40, 90, 0.25); }
 body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
 .room-selbar.show { display: flex; }
 .room-selbar-text { flex: 1; font-size: 14px; font-weight: 700; line-height: 1.3; }
-.room-selbar-text small { font-weight: 500; color: #c7d2fe; font-size: 12px; }
-.room-selbar-btn { min-height: 44px; padding: 8px 16px; border: none; border-radius: 10px; background: #ffffff; color: #312e81; font-size: 15px; font-weight: 800; cursor: pointer; white-space: nowrap; }
-.rooms-breakdown { font-size: 11px; color: #4338ca; margin-top: 2px; }
+.room-selbar-text small { font-weight: 500; color: #c9d3ea; font-size: 12px; }
+.room-selbar-btn { min-height: 44px; padding: 8px 16px; border: none; border-radius: 10px; background: #ffffff; color: #16285a; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.rooms-breakdown { font-size: 11px; color: #1c3473; margin-top: 2px; }
+
+/* ===== Оформление «Сметный документ» =====
+   Белая «бумага», тонкие линейки, чернильно-синий акцент, шрифт Golos,
+   цифры ровными столбцами. Цвета по всему файлу заменены по таблице. */
+body { background-color: #f4f6f8; color: #1d2733; font-variant-numeric: tabular-nums; }
+.container { border-radius: 14px; box-shadow: none; border-color: #dfe3e8; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; color: #1d2733; }
+h1 { font-size: 22px; text-align: left; }
+h2 { font-size: 16px; }
+.form-group label { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; color: #5d6878; }
+.btn { border-radius: 8px; }
+.btn-sm { border-radius: 6px; }
+.tab-menu { border-radius: 10px; }
+.tab-btn.active { box-shadow: 0 0 0 1px #dfe3e8; }
+.accordion-category { border-radius: 10px; }
+.accordion-header { border-left: none; background: #ffffff; font-size: 14px; font-weight: 600; color: #1d2733; }
+.accordion-category.open .accordion-header { background: #f4f6f8; }
+.history-card, .profile-box, .user-card, .object-card, .service-card { border-radius: 10px; }
+.search-box { border-radius: 8px; }
+
+svg.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vertical-align: -4px; flex-shrink: 0; }
+
+/* --- калькулятор: детали --- */
+.meta-k { color: #8d97a5; margin-right: 4px; }
+.hc-name { font-size: 16px; font-weight: 600; }
+.hc-amount { font-size: 18px; font-weight: 600; }
+.hc-date { color: #5d6878; }
+.hc-btn { border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.hc-btn:not(.hc-btn-primary):not(.hc-btn-more) { flex: 0 0 48px; }
+.hc-btn-primary { background: #23408e; border-color: #23408e; }
+.obj-name, .room-name { font-weight: 600; }
+.obj-pill { border-radius: 6px; font-weight: 600; }
+.room-card { border-left: 1px solid #dfe3e8; border-radius: 10px; }
+.room-row { border-radius: 10px; }
+.room-row.on { background: #eef2f9; border-color: #6f86c4; }
+.room-selbar { background: #23408e; border-radius: 10px; box-shadow: none; }
+.room-selbar-btn { color: #23408e; border-radius: 8px; }
+.chip { border-radius: 8px; }
+.chip.active { background: #23408e; border-color: #23408e; }
+.nav-tab { border-radius: 10px; }
+.nav-tab .nav-tab-icon svg.ic { width: 22px; height: 22px; }
+.nav-tab.active { background: #eef2f9; color: #23408e; }
+.user-chip { border-radius: 8px; }
+.user-chip svg.ic { width: 18px; height: 18px; }
+.mp-mini { display: inline-flex; align-items: center; justify-content: center; background: #ffffff; border-color: #cfd5dd; color: #23408e; border-radius: 8px; }
+.mp-mini svg.ic { width: 18px; height: 18px; }
+.calc-bar { background: #1d2733; }
+.calc-bar-total b { color: #ffffff; font-weight: 600; }
+.calc-bar-save { background: #23408e; border-radius: 8px; font-weight: 600; }
+.calc-bar-more { border-radius: 8px; }
+.mp-foot { background: #1d2733; }
+.mp-result-main { color: #ffffff; font-weight: 600; }
+.mp-btn { border-radius: 8px; font-weight: 600; }
+.mp-sec, .mp-open, .wp-item { border-radius: 10px; }
+.mp-add, .measure-open-btn { border-radius: 8px; border-style: solid; background: #ffffff; border-color: #c9d3ea; color: #23408e; }
+.mp-title { font-weight: 600; }
+.sheet-item { font-weight: 500; }
+.sheet-item-icon { display: inline-flex; color: #5d6878; }
+.sheet-item-danger .sheet-item-icon { color: inherit; }
+.draft-offer { border-radius: 10px; }
+.update-banner { background: #1d2733; border-radius: 10px; }
+.update-banner-btn { background: #23408e; border-radius: 8px; }
+.calc-details { border-radius: 10px; background: #ffffff; }
+.file-pick-btn { border-style: solid; border-radius: 8px; background: #ffffff; }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+<symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h1M12 11h.01M15.5 11h.5M8 15h1M12 15h.01M15.5 15h.5M8 18.5h8"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-3.4 4-5 7-5s5.8 1.6 7 5"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v6h14v-6"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></symbol>
+<symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 16.5L16.5 3 21 7.5 7.5 21z"/><path d="M7 12.5l1.5 1.5M10 9.5l2 2M13 6.5l1.5 1.5"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+<symbol id="i-clear" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
 
 <!-- Экран авторизации -->
 <div id="authScreen" class="container">
-<a href="index.html" class="nav-btn">⬅ Прайс-лист</a>
+<a href="index.html" class="nav-btn">← Прайс-лист</a>
 
 <!-- Форма входа -->
 <div id="loginFormSection" class="auth-container">
-<h2>🔐 Вход</h2>
+<h2>Вход</h2>
 <div class="form-group">
 <label>Email или Логин</label>
 <input type="text" id="loginInput" placeholder="example@mail.ru или логин" autocomplete="username">
@@ -418,12 +511,12 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <div class="form-group">
 <label>Войти как</label>
 <div style="display:flex; gap:8px;">
-<button type="button" id="loginModeEmployeeBtn" class="role-toggle-btn active" onclick="setLoginMode('employee')">🛠 Сотрудник</button>
-<button type="button" id="loginModeCompanyBtn" class="role-toggle-btn" onclick="setLoginMode('company')">🏢 Своя компания</button>
+<button type="button" id="loginModeEmployeeBtn" class="role-toggle-btn active" onclick="setLoginMode('employee')">Сотрудник</button>
+<button type="button" id="loginModeCompanyBtn" class="role-toggle-btn" onclick="setLoginMode('company')">Своя компания</button>
 </div>
 </div>
 <button type="button" class="btn btn-primary" onclick="handleLogin()">Войти</button>
-<div id="authError" style="color:#f43f5e; font-size:12px; margin-top:10px; display:none; font-weight: 500;">Неверный логин/email или пароль</div>
+<div id="authError" style="color:#b23a26; font-size:12px; margin-top:10px; display:none; font-weight: 500;">Неверный логин/email или пароль</div>
 <div style="display: flex; justify-content: space-between; margin-top: 12px; gap: 8px;">
 <span class="link-text" onclick="switchAuthMode('recovery')">Забыли пароль?</span>
 <span class="link-text" onclick="switchAuthMode('register')">Регистрация</span>
@@ -432,12 +525,12 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 
 <!-- Форма регистрации -->
 <div id="registerFormSection" class="auth-container" style="display: none;">
-<h2>📝 Регистрация</h2>
+<h2>Регистрация</h2>
 <div class="form-group">
 <label>Я регистрируюсь как</label>
 <div style="display:flex; gap:8px;">
-<button type="button" id="regRoleMasterBtn" class="role-toggle-btn active" onclick="setRegisterRole('master')">🛠 Мастер</button>
-<button type="button" id="regRoleClientBtn" class="role-toggle-btn" onclick="setRegisterRole('client')">👤 Заказчик</button>
+<button type="button" id="regRoleMasterBtn" class="role-toggle-btn active" onclick="setRegisterRole('master')">Мастер</button>
+<button type="button" id="regRoleClientBtn" class="role-toggle-btn" onclick="setRegisterRole('client')">Заказчик</button>
 </div>
 </div>
 <div class="form-group">
@@ -453,18 +546,18 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <input type="password" id="regPassInput" placeholder="••••••••">
 </div>
 <button type="button" class="btn btn-success" onclick="handleRegister()">Зарегистрироваться</button>
-<div id="regError" style="color:#f43f5e; font-size:12px; margin-top:10px; display:none; font-weight: 500;"></div>
+<div id="regError" style="color:#b23a26; font-size:12px; margin-top:10px; display:none; font-weight: 500;"></div>
 <div>
-<span class="link-text" onclick="switchAuthMode('login')">⬅ Уже есть аккаунт? Войти</span>
+<span class="link-text" onclick="switchAuthMode('login')">← Уже есть аккаунт? Войти</span>
 </div>
 </div>
 
 <!-- Форма восстановления пароля -->
 <div id="recoveryFormSection" class="auth-container" style="display: none;">
-<h2>🔄 Восстановление доступа</h2>
-<p style="font-size: 13px; color: #475569; margin-bottom: 0; text-align: left; line-height: 1.5;">Самостоятельный сброс пароля по email отключён из соображений безопасности. Чтобы восстановить доступ, обратитесь к администратору — он сбросит пароль вручную во вкладке «Аккаунты».</p>
+<h2>Восстановление доступа</h2>
+<p style="font-size: 13px; color: #485566; margin-bottom: 0; text-align: left; line-height: 1.5;">Самостоятельный сброс пароля по email отключён из соображений безопасности. Чтобы восстановить доступ, обратитесь к администратору — он сбросит пароль вручную во вкладке «Аккаунты».</p>
 <div>
-<span class="link-text" onclick="switchAuthMode('login')">⬅ Вернуться к входу</span>
+<span class="link-text" onclick="switchAuthMode('login')">← Вернуться к входу</span>
 </div>
 </div>
 </div>
@@ -472,29 +565,29 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <!-- Основной экран приложения -->
 <div id="appScreen" class="container" style="display: none;">
 <div class="app-header">
-<a href="index.html" class="nav-btn">⬅ Прайс</a>
+<a href="index.html" class="nav-btn">← Прайс</a>
 <div class="user-menu-wrap">
 <button type="button" class="user-chip" id="userMenuBtn" aria-haspopup="true" aria-expanded="false" aria-controls="userMenu" onclick="toggleUserMenu()">
-<span aria-hidden="true">👤</span><span class="user-chip-name" id="userBadge"></span><span class="user-chip-caret" aria-hidden="true">▼</span>
+<span aria-hidden="true"><svg class="ic"><use href="#i-user"/></svg></span><span class="user-chip-name" id="userBadge"></span><span class="user-chip-caret" aria-hidden="true">▼</span>
 </button>
 <div class="user-menu" id="userMenu" role="menu">
-<button type="button" class="menu-item" role="menuitem" id="tabProfileBtn" onclick="switchTab('profile')">👤 Профиль</button>
-<button type="button" class="menu-item" role="menuitem" id="tabUsersBtn" onclick="switchTab('users')" style="display: none;">👥 Мастера</button>
-<button type="button" class="menu-item" role="menuitem" id="tabStatsBtn" onclick="switchTab('stats')" style="display: none;">📊 Статистика и копии</button>
+<button type="button" class="menu-item" role="menuitem" id="tabProfileBtn" onclick="switchTab('profile')">Профиль</button>
+<button type="button" class="menu-item" role="menuitem" id="tabUsersBtn" onclick="switchTab('users')" style="display: none;">Мастера</button>
+<button type="button" class="menu-item" role="menuitem" id="tabStatsBtn" onclick="switchTab('stats')" style="display: none;">Статистика и копии</button>
 <div class="menu-sep" id="userMenuSep"></div>
 <button type="button" class="menu-item menu-item-danger" role="menuitem" onclick="toggleUserMenu(false); handleLogout()">Выйти</button>
 </div>
 </div>
 </div>
 
-<div id="companyModePromo" style="display:none; background:linear-gradient(90deg,#4f46e5,#7c3aed); color:#fff; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; font-weight:600;">
-🆕 Новинка! Попробуй создать прайс под свою компанию — в следующий раз выбери «🏢 Своя компания» на экране входа.
+<div id="companyModePromo" style="display:none; background:linear-gradient(90deg,#23408e,#23408e); color:#fff; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; font-weight:600;">
+🆕 Новинка! Попробуй создать прайс под свою компанию — в следующий раз выбери «Своя компания» на экране входа.
 </div>
 
 <div class="measure-panel" id="measurePanel" role="dialog" aria-modal="true" aria-label="Замер помещения">
 <div class="mp-head"><div class="mp-head-inner">
 <div class="mp-head-row">
-<div class="mp-title">📏 Замер</div>
+<div class="mp-title">Замер</div>
 <button type="button" class="mp-head-btn" id="mpNewBtn" onclick="startNewMeasure()">Новый</button>
 <button type="button" class="mp-head-btn mp-close" onclick="closeMeasure()" aria-label="Закрыть">✕</button>
 </div>
@@ -514,8 +607,8 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <div class="mp-foot" id="mpFoot"><div class="mp-foot-inner">
 <div id="mpResult"></div>
 <div class="mp-actions">
-<button type="button" class="mp-btn" id="mpSaveBtn" onclick="saveMeasurementClick()">💾 Сохранить</button>
-<button type="button" class="mp-btn mp-btn-primary" id="mpPrimaryBtn" onclick="measurePrimaryAction()">📋 Скопировать</button>
+<button type="button" class="mp-btn" id="mpSaveBtn" onclick="saveMeasurementClick()">Сохранить</button>
+<button type="button" class="mp-btn mp-btn-primary" id="mpPrimaryBtn" onclick="measurePrimaryAction()">Скопировать</button>
 </div>
 </div></div>
 </div>
@@ -526,12 +619,12 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <div class="mp-title" id="wpTitle">Работы</div>
 <button type="button" class="mp-head-btn mp-close" onclick="closeWorkPicker()" aria-label="Закрыть">✕</button>
 </div>
-<input type="search" id="wpSearch" class="search-box" style="margin-bottom:0;" placeholder="🔍 Поиск работы" oninput="workPickerOpenIdx = null; renderWorkPicker()">
+<input type="search" id="wpSearch" class="search-box" style="margin-bottom:0;" placeholder="Поиск работы" oninput="workPickerOpenIdx = null; renderWorkPicker()">
 </div></div>
 <div class="mp-body" id="wpBody"></div>
 <div class="mp-foot"><div class="mp-foot-inner">
 <div class="mp-actions" style="margin-top:0;">
-<button type="button" class="mp-btn mp-btn-primary" onclick="closeWorkPicker()">✅ Готово</button>
+<button type="button" class="mp-btn mp-btn-primary" onclick="closeWorkPicker()">Готово</button>
 </div>
 </div></div>
 </div>
@@ -545,15 +638,15 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 
 <nav class="bottom-nav" id="bottomNav" aria-label="Разделы" style="display: none;">
 <div class="bottom-nav-inner">
-<button type="button" class="nav-tab active" id="tabCalcBtn" onclick="switchTab('calc')"><span class="nav-tab-icon" aria-hidden="true">📐</span>Калькулятор</button>
-<button type="button" class="nav-tab" id="tabObjectsBtn" onclick="switchTab('objects')"><span class="nav-tab-icon" aria-hidden="true">🏠</span>Объекты</button>
-<button type="button" class="nav-tab" id="tabHistoryBtn" onclick="switchTab('history')"><span class="nav-tab-icon" aria-hidden="true">📂</span>История</button>
+<button type="button" class="nav-tab active" id="tabCalcBtn" onclick="switchTab('calc')"><span class="nav-tab-icon" aria-hidden="true"><svg class="ic"><use href="#i-calc"/></svg></span>Калькулятор</button>
+<button type="button" class="nav-tab" id="tabObjectsBtn" onclick="switchTab('objects')"><span class="nav-tab-icon" aria-hidden="true"><svg class="ic"><use href="#i-home"/></svg></span>Объекты</button>
+<button type="button" class="nav-tab" id="tabHistoryBtn" onclick="switchTab('history')"><span class="nav-tab-icon" aria-hidden="true"><svg class="ic"><use href="#i-list"/></svg></span>История</button>
 </div>
 </nav>
 
 <!-- Вкладка Калькулятор -->
 <div id="calcTab">
-<h1>📐 Расчёт счёта</h1>
+<h1>Расчёт счёта</h1>
 
 <div class="draft-offer" id="draftOffer" role="status">
 <div class="draft-offer-text"><b>Незаконченный счёт</b><span id="draftOfferInfo"></span></div>
@@ -563,30 +656,30 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 </div>
 </div>
 
-<a href="index.html" id="editPriceListLink" target="_blank" rel="noopener" style="display:none; align-items:center; gap:6px; background:#ede9fe; color:#5b21b6; border:1px solid #ddd6fe; padding:8px 12px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none; margin-bottom:14px;">✏️ Редактировать свой прайс-лист</a>
+<a href="index.html" id="editPriceListLink" target="_blank" rel="noopener" style="display:none; align-items:center; gap:6px; background:#eef2f9; color:#1c3473; border:1px solid #c9d3ea; padding:8px 12px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none; margin-bottom:14px;">Редактировать свой прайс-лист</a>
 
-<div id="editModeBanner" style="display:none; align-items:center; justify-content:space-between; gap:8px; background:#fef3c7; border:1px solid #fbbf24; color:#92400e; padding:8px 12px; border-radius:8px; font-size:12px; margin-bottom:14px; flex-wrap:wrap;">
-<span id="editModeBannerText">✏️ Редактирование счёта из истории</span>
+<div id="editModeBanner" style="display:none; align-items:center; justify-content:space-between; gap:8px; background:#f6ecd2; border:1px solid #c9962e; color:#734a12; padding:8px 12px; border-radius:8px; font-size:12px; margin-bottom:14px; flex-wrap:wrap;">
+<span id="editModeBannerText">Редактирование счёта из истории</span>
 <div style="display:flex; gap:6px; flex-wrap:wrap;">
-<button type="button" class="btn-delete-item" style="background:#e0e7ff; color:#4338ca; flex-shrink:0;" onclick="duplicateAsNewFromEdit()" title="Создать отдельный новый счёт с этими же позициями, не трогая текущий">📄 Новый с этими позициями</button>
-<button type="button" class="btn-delete-item" style="background:#fff; color:#92400e; flex-shrink:0;" onclick="cancelEditRecord()">Отмена ✕</button>
+<button type="button" class="btn-delete-item" style="background:#dfe6f4; color:#1c3473; flex-shrink:0;" onclick="duplicateAsNewFromEdit()" title="Создать отдельный новый счёт с этими же позициями, не трогая текущий">Новый с этими позициями</button>
+<button type="button" class="btn-delete-item" style="background:#fff; color:#734a12; flex-shrink:0;" onclick="cancelEditRecord()">Отмена ✕</button>
 </div>
 </div>
 
 <div class="form-group">
 <label>Тип документа</label>
 <div style="display:flex; gap:8px;">
-<button type="button" id="docTypeInvoiceBtn" class="role-toggle-btn active" onclick="setDocType('invoice')">🧾 Счёт</button>
-<button type="button" id="docTypeEstimateBtn" class="role-toggle-btn" onclick="setDocType('estimate')">📋 Предв. расчёт</button>
+<button type="button" id="docTypeInvoiceBtn" class="role-toggle-btn active" onclick="setDocType('invoice')">Счёт</button>
+<button type="button" id="docTypeEstimateBtn" class="role-toggle-btn" onclick="setDocType('estimate')">Предв. расчёт</button>
 </div>
-<div style="font-size:11px; color:#94a3b8; margin-top:4px;">Расчёт не входит в сумму счетов по объекту.</div>
+<div style="font-size:11px; color:#8d97a5; margin-top:4px;">Расчёт не входит в сумму счетов по объекту.</div>
 </div>
 
 <div class="form-group">
 <label>Объект *</label>
 <select id="invoiceObjectSelect" onchange="onInvoiceObjectChange()">
 <option value="">— Выберите объект —</option>
-<option value="__new__">➕ Создать новый объект</option>
+<option value="__new__">Создать новый объект</option>
 </select>
 </div>
 
@@ -615,7 +708,7 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <label>Фото и файлы отчёта</label>
 <label class="file-pick-btn">
 <input type="file" id="reportFileInput" class="visually-hidden" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onchange="handleReportFileSelect(event)">
-📷 Добавить фото или файл
+Добавить фото или файл
 </label>
 <div id="reportAttachmentsList" style="margin-top:8px;"></div>
 </div>
@@ -623,40 +716,40 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 </details>
 
 <section class="rooms-section" id="roomsSection">
-<h2>🏠 Помещения</h2>
+<h2>Помещения</h2>
 <div class="rooms-hint">Отметьте помещения, где делали работу, и нажмите «+ Работа».</div>
 <div id="roomsList"></div>
 <button type="button" class="measure-open-btn" id="addRoomBtn" onclick="addRoom()">+ Помещение</button>
 </section>
-<h2>🛠 Услуги без помещения</h2>
-<input type="text" id="searchCalcInput" class="search-box" placeholder="🔍 Поиск услуги для счета..." oninput="renderServices()">
+<h2>Услуги без помещения</h2>
+<input type="text" id="searchCalcInput" class="search-box" placeholder="Поиск услуги для счета..." oninput="renderServices()">
 
 <div class="accordion-category">
 <div class="accordion-header" onclick="toggleAccordion(this)">
 <div style="display:flex; align-items:center; gap:8px; flex:1;">
-<span>➕ Своя позиция (разовая)</span>
+<span>Своя позиция (разовая)</span>
 </div>
 <span class="accordion-arrow">▼</span>
 </div>
 <div class="accordion-content">
-<input type="text" id="customItemName" placeholder="Название работы" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px; margin-bottom:6px;">
+<input type="text" id="customItemName" placeholder="Название работы" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #cfd5dd; border-radius:8px; font-size:14px; margin-bottom:6px;">
 <div class="unit-row">
 <input type="number" id="customItemPrice" min="0" step="1" placeholder="Цена, ₽">
 <input type="number" id="customItemQty" min="0" step="any" value="1" placeholder="Кол-во" oninput="delete this.dataset.measure">
-<button type="button" class="mp-mini" onclick="openMeasure({ kind: 'custom' })" aria-label="Посчитать замером">📏</button>
+<button type="button" class="mp-mini" onclick="openMeasure({ kind: 'custom' })" aria-label="Посчитать замером"><svg class="ic"><use href="#i-ruler"/></svg></button>
 </div>
-<select id="customItemUnit" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:14px; background:#fff; margin-top:6px;"></select>
-<button type="button" class="add-to-cart-btn" onclick="addCustomInvoiceItem()">➕ Добавить к счёту</button>
-<div style="font-size:11px; color:#94a3b8; margin-top:6px;">Не сохраняется в прайс-лист — только для этого счёта.</div>
+<select id="customItemUnit" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #cfd5dd; border-radius:8px; font-size:14px; background:#fff; margin-top:6px;"></select>
+<button type="button" class="add-to-cart-btn" onclick="addCustomInvoiceItem()">Добавить к счёту</button>
+<div style="font-size:11px; color:#8d97a5; margin-top:6px;">Не сохраняется в прайс-лист — только для этого счёта.</div>
 </div>
 </div>
 
-<div id="loader" class="loader">⏳ Загрузка услуг...</div>
+<div id="loader" class="loader">Загрузка услуг...</div>
 <div id="servicesList"></div>
 
-<h2 id="invoicePreviewHeading">🧾 Предпросмотр счета</h2>
+<h2 id="invoicePreviewHeading">Предпросмотр счета</h2>
 <div class="invoice-preview">
-<div id="invoiceInfo" style="margin-bottom: 10px; font-size: 12px; color: #475569; line-height: 1.4;"></div>
+<div id="invoiceInfo" style="margin-bottom: 10px; font-size: 12px; color: #485566; line-height: 1.4;"></div>
 <div id="invoiceItems"></div>
 <div class="total-box">
 <div>Итого:</div>
@@ -667,7 +760,7 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <div class="calc-bar" id="calcBar">
 <div class="calc-bar-inner">
 <div class="calc-bar-total"><span id="calcBarLabel">Итого</span><b id="calcBarTotal">0 ₽</b></div>
-<button type="button" class="calc-bar-save" id="calcSaveBtn" onclick="saveInvoiceToHistory(false)">💾 Сохранить</button>
+<button type="button" class="calc-bar-save" id="calcSaveBtn" onclick="saveInvoiceToHistory(false)">Сохранить</button>
 <button type="button" class="calc-bar-more" onclick="openCalcActions()" aria-label="Другие действия">⋯</button>
 </div>
 </div>
@@ -677,12 +770,12 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <div id="objectsTab" style="display: none;">
 
 <div id="objectsListView">
-<h1>🏠 Объекты</h1>
+<h1>Объекты</h1>
 
 <div class="accordion-category" id="newObjectCard">
 <div class="accordion-header" onclick="toggleAccordion(this)">
 <div style="display:flex; align-items:center; gap:8px; flex:1;">
-<span>➕ Новый объект</span>
+<span>Новый объект</span>
 </div>
 <span class="accordion-arrow">▼</span>
 </div>
@@ -707,12 +800,12 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <label>Спецификация материалов</label>
 <textarea id="newObjMaterials" placeholder="Например: грунт Ceresit CT17 — 20л, шпаклевка Vetonit — 5 меш."></textarea>
 </div>
-<button type="button" class="btn btn-success" onclick="addNewObject()">➕ Добавить объект</button>
+<button type="button" class="btn btn-success" onclick="addNewObject()">Добавить объект</button>
 </div>
 </div>
 
-<h2>📋 Список объектов</h2>
-<input type="search" id="objectsSearch" class="search-box" placeholder="🔍 Поиск: объект, заказчик, адрес" oninput="renderObjects()">
+<h2>Список объектов</h2>
+<input type="search" id="objectsSearch" class="search-box" placeholder="Поиск: объект, заказчик, адрес" oninput="renderObjects()">
 <div id="objectsListContainer">Загрузка...</div>
 </div>
 
@@ -722,10 +815,10 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 
 <!-- Вкладка История -->
 <div id="historyTab" style="display: none;">
-<h1>📂 История счетов</h1>
+<h1>История счетов</h1>
 <div id="overallPayStats"></div>
 <div class="hist-tools">
-<input type="search" id="historySearch" class="search-box" placeholder="🔍 Поиск: заказчик, объект, адрес, работа" oninput="renderHistory()">
+<input type="search" id="historySearch" class="search-box" placeholder="Поиск: заказчик, объект, адрес, работа" oninput="renderHistory()">
 <div class="chips" role="group" aria-label="Фильтр">
 <button type="button" class="chip active" data-filter="all" onclick="setHistoryFilter('all')">Все</button>
 <button type="button" class="chip" data-filter="owes" onclick="setHistoryFilter('owes')">Должны</button>
@@ -739,9 +832,9 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 
 <!-- Вкладка Профиль -->
 <div id="profileTab" style="display: none;">
-<h1>👤 Личный кабинет</h1>
+<h1>Личный кабинет</h1>
 <div class="profile-box">
-<h3 style="font-size: 14px; margin-bottom: 12px;">🔑 Данные профиля</h3>
+<h3 style="font-size: 14px; margin-bottom: 12px;">Данные профиля</h3>
 <div class="form-group">
 <label>Логин</label>
 <input type="text" id="profLogin">
@@ -756,34 +849,34 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 </div>
 <div class="form-group">
 <label>Своё примечание к счетам/расчётам (необязательно, показывается внизу PDF)</label>
-<textarea id="profInvoiceNote" rows="3" style="width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:8px; padding:8px; font-size:13px;" placeholder="Например: работы за погонный метр приравниваются к квадратному..."></textarea>
+<textarea id="profInvoiceNote" rows="3" style="width:100%; box-sizing:border-box; border:1px solid #cfd5dd; border-radius:8px; padding:8px; font-size:13px;" placeholder="Например: работы за погонный метр приравниваются к квадратному..."></textarea>
 </div>
 <div class="form-group">
 <label>Пароль</label>
 <input type="text" id="profPass" placeholder="Новый пароль" autocomplete="new-password">
-<div style="font-size:11px; color:#94a3b8; margin-top:4px;">Оставьте пустым, если не меняете пароль.</div>
+<div style="font-size:11px; color:#8d97a5; margin-top:4px;">Оставьте пустым, если не меняете пароль.</div>
 </div>
-<button type="button" class="btn btn-primary" onclick="updateProfile()">💾 Сохранить изменения</button>
+<button type="button" class="btn btn-primary" onclick="updateProfile()">Сохранить изменения</button>
 </div>
 <div class="profile-box" id="priceBackupBox" style="display:none;">
-<h3 style="font-size: 14px; margin-bottom: 12px;">🌐 Публичная витрина прайса</h3>
+<h3 style="font-size: 14px; margin-bottom: 12px;">Публичная витрина прайса</h3>
 <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600;">
 <input type="checkbox" id="publicPriceToggle" onchange="togglePublicPrice()">
 Показывать мой прайс-лист по ссылке (без входа)
 </label>
 <div id="publicPriceLinkBox" style="display:none; margin-top:10px;">
-<input type="text" id="publicPriceLinkInput" readonly style="width:100%; box-sizing:border-box; font-size:12px; padding:8px; border:1px solid #cbd5e1; border-radius:8px; background:#f8fafc;">
+<input type="text" id="publicPriceLinkInput" readonly style="width:100%; box-sizing:border-box; font-size:12px; padding:8px; border:1px solid #cfd5dd; border-radius:8px; background:#f4f6f8;">
 <div style="display:flex; gap:8px; margin-top:8px;">
-<button type="button" class="btn btn-primary btn-sm" onclick="copyPublicPriceLink()">📋 Копировать</button>
-<button type="button" class="btn btn-success btn-sm" id="sharePublicPriceBtn" onclick="sharePublicPriceLink()" style="display:none;">📤 Поделиться</button>
+<button type="button" class="btn btn-primary btn-sm" onclick="copyPublicPriceLink()">Копировать</button>
+<button type="button" class="btn btn-success btn-sm" id="sharePublicPriceBtn" onclick="sharePublicPriceLink()" style="display:none;">Поделиться</button>
 </div>
 </div>
-<h3 style="font-size: 14px; margin: 18px 0 12px;">💾 Резервная копия прайс-листа</h3>
-<p style="font-size:12px; color:#64748b; margin-top:-6px;">Прайс-лист «своей компании» хранится только у вас в облаке — стоит иногда сохранять копию на телефон, на всякий случай.</p>
+<h3 style="font-size: 14px; margin: 18px 0 12px;">Резервная копия прайс-листа</h3>
+<p style="font-size:12px; color:#5d6878; margin-top:-6px;">Прайс-лист «своей компании» хранится только у вас в облаке — стоит иногда сохранять копию на телефон, на всякий случай.</p>
 <div style="display:flex; gap:8px; flex-wrap:wrap;">
 <button type="button" class="btn btn-success btn-sm" onclick="downloadPriceBackup()">⬇ Скачать копию</button>
 <label class="btn btn-primary btn-sm" style="cursor:pointer; margin:0;">
-⬆ Восстановить из файла
+Восстановить из файла
 <input type="file" accept=".json" onchange="restorePriceBackup(event)" style="display:none;">
 </label>
 </div>
@@ -792,11 +885,11 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 
 <!-- Вкладка Управления Пользователями (Admin) -->
 <div id="usersTab" style="display: none;">
-<h1>👥 Пользователи</h1>
+<h1>Пользователи</h1>
 <div class="accordion-category" id="newUserCard">
 <div class="accordion-header" onclick="toggleAccordion(this)">
 <div style="display:flex; align-items:center; gap:8px; flex:1;">
-<span>➕ Новый аккаунт</span>
+<span>Новый аккаунт</span>
 </div>
 <span class="accordion-arrow">▼</span>
 </div>
@@ -821,36 +914,36 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <option value="admin">Администратор</option>
 </select>
 </div>
-<button type="button" class="btn btn-success" onclick="addNewUser()">➕ Создать</button>
+<button type="button" class="btn btn-success" onclick="addNewUser()">Создать</button>
 </div>
 </div>
 
-<h2>📋 Аккаунты</h2>
+<h2>Аккаунты</h2>
 <div id="usersListContainer">Загрузка...</div>
 </div>
 </div>
 
 <!-- Вкладка Статистика (Admin) -->
 <div id="statsTab" style="display: none;">
-<h1>📊 Статистика</h1>
-<p style="font-size:13px; color:#64748b; margin-top:-8px;">Только количество — содержимое личных кабинетов «своя компания» остаётся приватным.</p>
+<h1>Статистика</h1>
+<p style="font-size:13px; color:#5d6878; margin-top:-8px;">Только количество — содержимое личных кабинетов «своя компания» остаётся приватным.</p>
 <div id="statsListContainer">Загрузка...</div>
-<div style="margin-top:20px; padding-top:16px; border-top:1px solid #e2e8f0;">
-<h2 style="font-size:16px; margin:0 0 6px;">💾 Резервная копия</h2>
-<p style="font-size:13px; color:#64748b; margin:0 0 10px;">Все данные сайта одним файлом: прайс, объекты, счета, пользователи. В файле есть зашифрованные пароли — храните его в надёжном месте.</p>
+<div style="margin-top:20px; padding-top:16px; border-top:1px solid #dfe3e8;">
+<h2 style="font-size:16px; margin:0 0 6px;">Резервная копия</h2>
+<p style="font-size:13px; color:#5d6878; margin:0 0 10px;">Все данные сайта одним файлом: прайс, объекты, счета, пользователи. В файле есть зашифрованные пароли — храните его в надёжном месте.</p>
 <div style="display:flex; flex-wrap:wrap; gap:8px;">
-<button type="button" id="backupBtn" onclick="downloadBackup()" style="background:#4f46e5; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">⬇️ Скачать резервную копию</button>
-<button type="button" id="restoreBtn" onclick="document.getElementById('restoreFileInput').click()" style="background:#fff; color:#b91c1c; border:1px solid #fecaca; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">♻️ Восстановить из файла</button>
+<button type="button" id="backupBtn" onclick="downloadBackup()" style="background:#23408e; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">⬇️ Скачать резервную копию</button>
+<button type="button" id="restoreBtn" onclick="document.getElementById('restoreFileInput').click()" style="background:#fff; color:#a5321f; border:1px solid #efc6bb; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">Восстановить из файла</button>
 </div>
 <input type="file" id="restoreFileInput" accept=".json,application/json" style="display:none;" onchange="restoreFromBackup(this)">
-<p style="font-size:12px; color:#94a3b8; margin:8px 0 0;">Восстановление заменит <b>все</b> текущие данные содержимым файла. Перед этим текущие данные автоматически скачаются отдельной копией.</p>
+<p style="font-size:12px; color:#8d97a5; margin:8px 0 0;">Восстановление заменит <b>все</b> текущие данные содержимым файла. Перед этим текущие данные автоматически скачаются отдельной копией.</p>
 </div>
 </div>
 
 <!-- Модалка записи оплаты -->
 <div class="pay-modal-overlay" id="payModalOverlay">
 <div class="pay-modal-box">
-<h3>💰 Записать оплату</h3>
+<h3>Записать оплату</h3>
 <div class="pay-sub" id="payModalSub"></div>
 <div class="pay-field">
 <label>Сумма оплаты (₽)</label>
@@ -873,7 +966,7 @@ body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bott
 <input type="text" id="payNote" placeholder="Например, предоплата">
 </div>
 <div class="action-btns" style="margin-top:6px;">
-<button type="button" class="btn" style="background:#f1f5f9; color:#475569;" onclick="closePaymentModal()">Отмена</button>
+<button type="button" class="btn" style="background:#eef1f4; color:#485566;" onclick="closePaymentModal()">Отмена</button>
 <button type="button" class="btn btn-success" onclick="confirmAddPayment()">Сохранить и отправить чек</button>
 </div>
 </div>
@@ -908,7 +1001,7 @@ let objectHistorySubTab = 'invoice';
 function escapeHtml(str) {
 return String(str ?? '')
 .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+.replace(/"/g, "&quot;").replace(/'/g, "&#23408e;");
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -967,7 +1060,7 @@ for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 try {
 if (loader) {
 loader.style.display = 'block';
-loader.textContent = attempt === 1 ? '⏳ Загрузка данных...' : `⏳ Облако не отвечает, пробую ещё раз (${attempt}/${maxAttempts})...`;
+loader.textContent = attempt === 1 ? 'Загрузка данных...' : `Облако не отвечает, пробую ещё раз (${attempt}/${maxAttempts})...`;
 }
 const res = await fetch(`${WORKER_URL}/appdata`, {
 headers: { "Authorization": "Bearer " + authToken }
@@ -1015,7 +1108,7 @@ renderServices();
 async function saveCloudData() {
 const maxAttempts = 3;
 for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-showSyncStatus(attempt === 1 ? '☁️ Сохраняю в облако…' : `☁️ Не получилось, пробую ещё раз (${attempt}/${maxAttempts})…`);
+showSyncStatus(attempt === 1 ? 'Сохраняю в облако…' : `Не получилось, пробую ещё раз (${attempt}/${maxAttempts})…`);
 try {
 const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
@@ -1041,7 +1134,7 @@ const keepSelf = cloudData.self;
 cloudData = result ? result.data : cloudData;
 if (cloudData && !cloudData.self) cloudData.self = keepSelf;
 if (result && typeof result.rev === 'number') cloudRev = result.rev;
-showSyncStatus('✅ Сохранено');
+showSyncStatus('Сохранено');
 hideSyncStatus();
 return true;
 }
@@ -1130,7 +1223,7 @@ selectedDocType = type;
 if (typeof scheduleDraftSave === 'function') scheduleDraftSave();
 document.getElementById('docTypeInvoiceBtn').classList.toggle('active', type === 'invoice');
 document.getElementById('docTypeEstimateBtn').classList.toggle('active', type === 'estimate');
-document.getElementById('invoicePreviewHeading').textContent = type === 'estimate' ? '📋 Предпросмотр расчёта' : '🧾 Предпросмотр счета';
+document.getElementById('invoicePreviewHeading').textContent = type === 'estimate' ? 'Предпросмотр расчёта' : 'Предпросмотр счета';
 updateCalcBarTotal();
 }
 
@@ -1193,7 +1286,7 @@ return currentUserMode === 'company';
 function showAppScreen() {
 document.getElementById('authScreen').style.display = 'none';
 document.getElementById('appScreen').style.display = 'block';
-document.getElementById('userBadge').textContent = currentUser + (isCompanyMode() ? ' · 🏢 своя компания' : '');
+document.getElementById('userBadge').textContent = currentUser + (isCompanyMode() ? ' · своя компания' : '');
 document.getElementById('companyModePromo').style.display =
 (!isCurrentClient() && !isCompanyMode() && !currentUserHasTriedCompanyMode) ? 'block' : 'none';
 document.getElementById('tabUsersBtn').style.display = (isCurrentAdmin() && !isCompanyMode()) ? 'block' : 'none';
@@ -1377,7 +1470,7 @@ headerEl.innerHTML = `
 <span>${escapeHtml(catName)}</span>
 </div>
 <div style="display:flex; align-items:center; gap:6px;">
-<span style="font-size:11px; color:#64748b; font-weight:normal;">(${filteredItems.length})</span>
+<span style="font-size:11px; color:#5d6878; font-weight:normal;">(${filteredItems.length})</span>
 <span class="accordion-arrow">▼</span>
 </div>
 `;
@@ -1385,7 +1478,7 @@ categoryBlock.appendChild(headerEl);
 const contentEl = document.createElement('div');
 contentEl.className = 'accordion-content';
 if (filteredItems.length === 0) {
-contentEl.innerHTML = '<div style="font-size:12px; color:#94a3b8; padding:4px;">Нет услуг в этой категории</div>';
+contentEl.innerHTML = '<div style="font-size:12px; color:#8d97a5; padding:4px;">Нет услуг в этой категории</div>';
 } else {
 filteredItems.forEach(item => {
 const srv = item.service;
@@ -1398,16 +1491,16 @@ card.innerHTML = `
 <span>${escapeHtml(srv.name)}</span>
 <span style="display:flex; align-items:center; gap:4px;" title="Можно изменить цену разово, только для этого счёта">
 <input type="number" id="input_price_${idx}" class="price-edit-input" value="${srv.price}" min="0" step="1">
-<span style="font-size:12px; color:#059669; font-weight:700;">₽</span>
+<span style="font-size:12px; color:#23704a; font-weight:700;">₽</span>
 </span>
 </div>
 <div class="unit-row">
 <input type="number" id="input_qty_${idx}" min="0" step="any" value="1" placeholder="Кол-во" oninput="delete this.dataset.measure">
 <select id="select_unit_${idx}">${unitsOptions}</select>
-<button type="button" class="mp-mini" onclick="openMeasure({ kind: 'service', idx: ${idx} })" aria-label="Посчитать замером">📏</button>
+<button type="button" class="mp-mini" onclick="openMeasure({ kind: 'service', idx: ${idx} })" aria-label="Посчитать замером"><svg class="ic"><use href="#i-ruler"/></svg></button>
 </div>
-<input type="text" id="input_loc_${idx}" class="location-input" placeholder="📍 Где на объекте (необязательно, например: кухня)">
-<button type="button" class="add-to-cart-btn" data-idx="${idx}" onclick="addToInvoice(${idx})">➕ Добавить в счёт</button>
+<input type="text" id="input_loc_${idx}" class="location-input" placeholder="Где на объекте (необязательно, например: кухня)">
+<button type="button" class="add-to-cart-btn" data-idx="${idx}" onclick="addToInvoice(${idx})">Добавить в счёт</button>
 `;
 contentEl.appendChild(card);
 });
@@ -1416,7 +1509,7 @@ categoryBlock.appendChild(contentEl);
 container.appendChild(categoryBlock);
 });
 if (!hasResults && query) {
-container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">Ничего не найдено</div>';
+container.innerHTML = '<div style="text-align:center; color:#8d97a5; padding:20px;">Ничего не найдено</div>';
 }
 renderInvoice();
 }
@@ -1461,7 +1554,7 @@ const measureNote = takeMeasureNote(qtyInput, qty);
 if (unit === 'пог. м') qty = Math.max(1, qty);
 invoiceCart.push({ name, price, qty, unit, location: '', ...(measureNote ? { measure: measureNote } : {}) });
 renderInvoice();
-showAddToast(`✅ Добавлено: ${name}`);
+showAddToast(`Добавлено: ${name}`);
 nameInput.value = '';
 priceInput.value = '';
 qtyInput.value = '1';
@@ -1488,7 +1581,7 @@ const location = locInput ? locInput.value.trim() : '';
 const measureNote = takeMeasureNote(qtyInput, parseFloat(qtyInput.value));
 invoiceCart.push({ name: srv.name, price, qty, unit, location, ...(measureNote ? { measure: measureNote } : {}) });
 renderInvoice();
-showAddToast(`✅ Добавлено: ${srv.name}`);
+showAddToast(`Добавлено: ${srv.name}`);
 if (locInput) locInput.value = '';
 const btn = document.querySelector(`.add-to-cart-btn[data-idx="${idx}"]`);
 if (btn) {
@@ -1617,7 +1710,7 @@ if (idx !== -1) {
 invoiceAttachments[idx] = { url: result.url, publicId: result.publicId, resourceType: result.resourceType, name: result.name, size: result.size, type: result.type };
 }
 renderReportAttachments();
-showAddToast(`📎 Загружено: ${originalFile.name}`);
+showAddToast(`Загружено: ${originalFile.name}`);
 return;
 } catch (e) {
 console.error(`Ошибка загрузки файла (попытка ${attempt}/${maxAttempts}):`, e);
@@ -1678,7 +1771,7 @@ const downloadBtn = `<button type="button" class="attachment-download-btn" data-
 if (isImage) {
 return `<div class="attachment-chip-wrap"><a href="${att.url}" target="_blank" rel="noopener" class="attachment-link"><img src="${att.url}" class="attachment-thumb" alt="${escapeHtml(att.name)}" title="${escapeHtml(att.name)}"></a>${downloadBtn}</div>`;
 }
-return `<div class="attachment-chip-wrap"><a href="${att.url}" target="_blank" rel="noopener" class="attachment-link" style="display:flex; align-items:center; gap:4px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; padding:4px 8px; font-size:11px; color:#334155;">📄 ${escapeHtml(att.name)}</a>${downloadBtn}</div>`;
+return `<div class="attachment-chip-wrap"><a href="${att.url}" target="_blank" rel="noopener" class="attachment-link" style="display:flex; align-items:center; gap:4px; background:#eef1f4; border:1px solid #dfe3e8; border-radius:8px; padding:4px 8px; font-size:11px; color:#33404f;">${escapeHtml(att.name)}</a>${downloadBtn}</div>`;
 }).join('');
 return `<div style="display:flex; flex-wrap:wrap; gap:6px; margin: 6px 0;">${chips}</div>`;
 }
@@ -1839,7 +1932,7 @@ renderReportAttachments();
 renderServices();
 renderInvoice();
 saveDraftNow();
-showAddToast('📝 Черновик восстановлен');
+showAddToast('Черновик восстановлен');
 }
 
 function discardDraft() {
@@ -1869,10 +1962,10 @@ const client = (document.getElementById('clientName').value || '').trim();
 const address = (document.getElementById('objectAddress').value || '').trim();
 const note = (document.getElementById('invoiceNote').value || '').trim();
 const files = typeof invoiceAttachments !== 'undefined' && Array.isArray(invoiceAttachments) ? invoiceAttachments.length : 0;
-const parts = [client ? '👤 ' + client : 'Заказчик не указан'];
-if (address) parts.push('📍 ' + address);
-if (note) parts.push('📝 есть пояснение');
-if (files) parts.push('📎 ' + files);
+const parts = [client ? '' + client : 'Заказчик не указан'];
+if (address) parts.push('' + address);
+if (note) parts.push('есть пояснение');
+if (files) parts.push('' + files);
 el.textContent = parts.join('  ·  ');
 }
 
@@ -1916,7 +2009,7 @@ container.innerHTML = '';
 let total = 0;
 updateInvoiceInfo();
 if (invoiceCart.length === 0) {
-container.innerHTML = '<div style="color:#94a3b8; font-size: 12px; text-align:center; padding: 10px 0;">Счёт пока пуст</div>';
+container.innerHTML = '<div style="color:#8d97a5; font-size: 12px; text-align:center; padding: 10px 0;">Счёт пока пуст</div>';
 document.getElementById('totalSum').textContent = '0';
 return;
 }
@@ -1927,21 +2020,21 @@ const unitOptions = DEFAULT_UNITS.includes(item.unit) ? DEFAULT_UNITS : [item.un
 container.innerHTML += `
 <div class="invoice-item" style="flex-direction:column; align-items:stretch; gap:6px;">
 <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:6px;">
-<input type="text" value="${escapeHtml(item.name)}" oninput="updateInvoiceItemField(${idx}, 'name', this.value)" style="flex:1; min-width:0; border:1px solid #e2e8f0; border-radius:7px; padding:6px 8px; font-size:13px; font-weight:600;">
+<input type="text" value="${escapeHtml(item.name)}" oninput="updateInvoiceItemField(${idx}, 'name', this.value)" style="flex:1; min-width:0; border:1px solid #dfe3e8; border-radius:7px; padding:6px 8px; font-size:13px; font-weight:600;">
 <button type="button" class="btn-delete-item" onclick="removeFromInvoice(${idx})">✕</button>
 </div>
 <div style="display:flex; gap:6px; align-items:center;">
-<input type="number" min="0" step="any" value="${item.qty}" oninput="updateInvoiceItemField(${idx}, 'qty', this.value)" style="width:70px; border:1px solid #e2e8f0; border-radius:7px; padding:6px 8px; font-size:13px;" title="Объём/количество">
-<button type="button" class="mp-mini" style="width:34px; min-height:32px; font-size:14px;" onclick="openMeasure({ kind: 'cart', idx: ${idx} })" aria-label="Посчитать замером">📏</button>
-<select onchange="updateInvoiceItemField(${idx}, 'unit', this.value)" style="border:1px solid #e2e8f0; border-radius:7px; padding:6px 4px; font-size:13px; background:#fff;">
+<input type="number" min="0" step="any" value="${item.qty}" oninput="updateInvoiceItemField(${idx}, 'qty', this.value)" style="width:70px; border:1px solid #dfe3e8; border-radius:7px; padding:6px 8px; font-size:13px;" title="Объём/количество">
+<button type="button" class="mp-mini" style="width:34px; min-height:32px; font-size:14px;" onclick="openMeasure({ kind: 'cart', idx: ${idx} })" aria-label="Посчитать замером"><svg class="ic"><use href="#i-ruler"/></svg></button>
+<select onchange="updateInvoiceItemField(${idx}, 'unit', this.value)" style="border:1px solid #dfe3e8; border-radius:7px; padding:6px 4px; font-size:13px; background:#fff;">
 ${unitOptions.map(u => `<option value="${u}" ${u === item.unit ? 'selected' : ''}>${u}</option>`).join('')}
 </select>
-<input type="number" min="0" value="${item.price}" oninput="updateInvoiceItemField(${idx}, 'price', this.value)" style="width:80px; border:1px solid #e2e8f0; border-radius:7px; padding:6px 8px; font-size:13px;" title="Цена за единицу, ₽">
+<input type="number" min="0" value="${item.price}" oninput="updateInvoiceItemField(${idx}, 'price', this.value)" style="width:80px; border:1px solid #dfe3e8; border-radius:7px; padding:6px 8px; font-size:13px;" title="Цена за единицу, ₽">
 <span style="margin-left:auto; font-weight:700; white-space:nowrap;">${sum.toLocaleString('ru-RU')} ₽</span>
 </div>
 ${roomsBreakdownText(item)
-? `<div class="rooms-breakdown">🏠 ${escapeHtml(roomsBreakdownText(item))}</div>`
-: (item.location ? `<div style="font-size:11px; color:#6366f1;">📍 ${escapeHtml(item.location)}</div>` : '')}
+? `<div class="rooms-breakdown">${escapeHtml(roomsBreakdownText(item))}</div>`
+: (item.location ? `<div style="font-size:11px; color:#3556a8;">${escapeHtml(item.location)}</div>` : '')}
 ${measureNoteHtml(item)}
 </div>
 `;
@@ -2039,7 +2132,7 @@ return;
 }
 try {
 await navigator.clipboard.writeText(url);
-showAddToast('🔗 Ссылка скопирована');
+showAddToast('Ссылка скопирована');
 } catch (e) {
 prompt('Скопируйте ссылку на счёт:', url);
 }
@@ -2078,11 +2171,11 @@ const sum = item.qty * item.price;
 total += sum;
 rows += `
 <tr>
-<td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(item.name)}${roomsBreakdownText(item) ? `<br><span style="font-size:10px; color:#6366f1;">${escapeHtml(roomsBreakdownText(item))}</span>` : (item.location ? `<br><span style="font-size:10px; color:#6366f1;">📍 ${escapeHtml(item.location)}</span>` : '')}</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.qty}</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${escapeHtml(item.unit)}</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${item.price.toLocaleString('ru-RU')} ₽</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${sum.toLocaleString('ru-RU')} ₽</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px;">${escapeHtml(item.name)}${roomsBreakdownText(item) ? `<br><span style="font-size:10px; color:#3556a8;">${escapeHtml(roomsBreakdownText(item))}</span>` : (item.location ? `<br><span style="font-size:10px; color:#3556a8;">${escapeHtml(item.location)}</span>` : '')}</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: center;">${item.qty}</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: center;">${escapeHtml(item.unit)}</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: right;">${item.price.toLocaleString('ru-RU')} ₽</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: right;">${sum.toLocaleString('ru-RU')} ₽</td>
 </tr>`;
 });
 const printContainer = document.createElement('div');
@@ -2091,35 +2184,35 @@ printContainer.style.top = (window.scrollY || document.documentElement.scrollTop
 printContainer.style.left = '0';
 printContainer.style.width = '750px';
 printContainer.style.background = '#ffffff';
-printContainer.style.color = '#333333';
+printContainer.style.color = '#1d2733';
 printContainer.style.padding = '30px';
 printContainer.style.boxSizing = 'border-box';
 printContainer.style.zIndex = '999999';
 printContainer.style.fontFamily = 'Arial, sans-serif';
 printContainer.innerHTML = `
-<h2 style="color: #4f46e5; border-bottom: 2px solid #4f46e5; padding-bottom: 8px; margin-top:0; font-size: 22px;">${isEstimate ? 'ПРЕДВАРИТЕЛЬНЫЙ РАСЧЁТ' : 'СЧЕТ НА ОПЛАТУ УСЛУГ'}</h2>
-${(cloudData.self && cloudData.self.companyName) ? `<p style="margin: 0 0 10px; font-size: 15px; font-weight:700; color:#0f172a;">${escapeHtml(cloudData.self.companyName)}</p>` : ''}
-${isEstimate ? '<p style="margin: 0 0 6px; font-size: 12px; color: #b45309; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:6px 10px; display:inline-block;">⚠ Это предварительный расчёт, не счёт на оплату. Итоговая сумма может измениться.</p>' : ''}
+<h2 style="color: #23408e; border-bottom: 2px solid #23408e; padding-bottom: 8px; margin-top:0; font-size: 22px;">${isEstimate ? 'ПРЕДВАРИТЕЛЬНЫЙ РАСЧЁТ' : 'СЧЕТ НА ОПЛАТУ УСЛУГ'}</h2>
+${(cloudData.self && cloudData.self.companyName) ? `<p style="margin: 0 0 10px; font-size: 15px; font-weight:700; color:#1d2733;">${escapeHtml(cloudData.self.companyName)}</p>` : ''}
+${isEstimate ? '<p style="margin: 0 0 6px; font-size: 12px; color: #8a5a14; background:#fbf7ec; border:1px solid #ecd9a6; border-radius:6px; padding:6px 10px; display:inline-block;">Это предварительный расчёт, не счёт на оплату. Итоговая сумма может измениться.</p>' : ''}
 <p style="margin: 6px 0; font-size: 14px;"><b>Дата:</b> ${dateStr}</p>
 ${client ? `<p style="margin: 6px 0; font-size: 14px;"><b>Заказчик:</b> ${escapeHtml(client)}</p>` : ''}
 ${address ? `<p style="margin: 6px 0; font-size: 14px;"><b>Адрес объекта:</b> ${escapeHtml(address)}</p>` : ''}
 ${note ? `<p style="margin: 6px 0; font-size: 14px;"><b>Пояснение:</b> ${escapeHtml(note)}</p>` : ''}
 <table style="width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px;">
 <thead>
-<tr style="background-color: #f8fafc;">
-<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Наименование</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Кол-во</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Ед.</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">Цена</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">Сумма</th>
+<tr style="background-color: #f4f6f8;">
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: left;">Наименование</th>
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: center;">Кол-во</th>
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: center;">Ед.</th>
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: right;">Цена</th>
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: right;">Сумма</th>
 </tr>
 </thead>
 <tbody>${rows}</tbody>
 </table>
 <h3 style="text-align: right; margin-top: 20px; font-size: 18px; color: #000;">${isEstimate ? 'ИТОГО ПО РАСЧЁТУ' : 'ИТОГО К ОПЛАТЕ'}: ${total.toLocaleString('ru-RU')} ₽</h3>
 ${(cloudData.self && cloudData.self.invoiceNote) ? `
-<div style="margin-top: 25px; padding: 12px; background: #f8fafc; border-left: 4px solid #4f46e5; border-radius: 4px; font-size: 11px; color: #555; line-height: 1.5;">
-<b>📌 Примечание:</b><br>
+<div style="margin-top: 25px; padding: 12px; background: #f4f6f8; border-left: 4px solid #23408e; border-radius: 4px; font-size: 11px; color: #485566; line-height: 1.5;">
+<b>Примечание:</b><br>
 ${escapeHtml(cloudData.self.invoiceNote)}
 </div>
 ` : ''}
@@ -2203,9 +2296,9 @@ payModalRecordId = recordId;
 const info = getBalanceInfo(rec);
 document.getElementById('payModalSub').innerHTML =
 `Счёт: <b>${escapeHtml(rec.client)}</b> — ${rec.total.toLocaleString('ru-RU')} ₽. `+
-(info.status === 'owes' ? `Осталось оплатить: <b style="color:#b91c1c;">${info.balance.toLocaleString('ru-RU')} ₽</b>`
-: info.status === 'over' ? `Уже переплачено на <b style="color:#1d4ed8;">${info.balance.toLocaleString('ru-RU')} ₽</b>`
-: `<b style="color:#15803d;">Полностью оплачен</b>`);
+(info.status === 'owes' ? `Осталось оплатить: <b style="color:#a5321f;">${info.balance.toLocaleString('ru-RU')} ₽</b>`
+: info.status === 'over' ? `Уже переплачено на <b style="color:#23408e;">${info.balance.toLocaleString('ru-RU')} ₽</b>`
+: `<b style="color:#23704a;">Полностью оплачен</b>`);
 document.getElementById('payAmount').value = info.status === 'owes' ? info.balance : '';
 document.getElementById('payMethod').value = 'Наличные';
 document.getElementById('payDate').value = new Date().toISOString().slice(0, 10);
@@ -2259,36 +2352,36 @@ printContainer.style.top = (window.scrollY || document.documentElement.scrollTop
 printContainer.style.left = '0';
 printContainer.style.width = '650px';
 printContainer.style.background = '#ffffff';
-printContainer.style.color = '#333333';
+printContainer.style.color = '#1d2733';
 printContainer.style.padding = '30px';
 printContainer.style.boxSizing = 'border-box';
 printContainer.style.zIndex = '999999';
 printContainer.style.fontFamily = 'Arial, sans-serif';
 
 const statusLine = balanceInfo.status === 'owes'
-? `<p style="margin:6px 0; font-size:14px; color:#b91c1c;"><b>Остаток к оплате:</b> ${balanceInfo.balance.toLocaleString('ru-RU')} ₽</p>`
+? `<p style="margin:6px 0; font-size:14px; color:#a5321f;"><b>Остаток к оплате:</b> ${balanceInfo.balance.toLocaleString('ru-RU')} ₽</p>`
 : balanceInfo.status === 'over'
-? `<p style="margin:6px 0; font-size:14px; color:#1d4ed8;"><b>Переплата:</b> ${balanceInfo.balance.toLocaleString('ru-RU')} ₽</p>`
-: `<p style="margin:6px 0; font-size:14px; color:#15803d;"><b>Счёт оплачен полностью</b></p>`;
+? `<p style="margin:6px 0; font-size:14px; color:#23408e;"><b>Переплата:</b> ${balanceInfo.balance.toLocaleString('ru-RU')} ₽</p>`
+: `<p style="margin:6px 0; font-size:14px; color:#23704a;"><b>Счёт оплачен полностью</b></p>`;
 
 printContainer.innerHTML = `
-<h2 style="color:#059669; border-bottom:2px solid #059669; padding-bottom:8px; margin-top:0; font-size:22px;">ЧЕК ОБ ОПЛАТЕ</h2>
-${(cloudData.self && cloudData.self.companyName) ? `<p style="margin: 0 0 10px; font-size: 15px; font-weight:700; color:#0f172a;">${escapeHtml(cloudData.self.companyName)}</p>` : ''}
+<h2 style="color:#23704a; border-bottom:2px solid #23704a; padding-bottom:8px; margin-top:0; font-size:22px;">ЧЕК ОБ ОПЛАТЕ</h2>
+${(cloudData.self && cloudData.self.companyName) ? `<p style="margin: 0 0 10px; font-size: 15px; font-weight:700; color:#1d2733;">${escapeHtml(cloudData.self.companyName)}</p>` : ''}
 <p style="margin:6px 0; font-size:14px;"><b>Дата оплаты:</b> ${payment.date}</p>
 ${client ? `<p style="margin:6px 0; font-size:14px;"><b>Заказчик:</b> ${escapeHtml(client)}</p>` : ''}
 ${address ? `<p style="margin:6px 0; font-size:14px;"><b>Адрес объекта:</b> ${escapeHtml(address)}</p>` : ''}
 <p style="margin:6px 0; font-size:14px;"><b>Счёт от:</b> ${invoiceDate} на сумму ${invoiceTotal.toLocaleString('ru-RU')} ₽</p>
 <p style="margin:6px 0; font-size:14px;"><b>Способ оплаты:</b> ${escapeHtml(payment.method)}</p>
 ${payment.note ? `<p style="margin:6px 0; font-size:14px;"><b>Примечание:</b> ${escapeHtml(payment.note)}</p>` : ''}
-<div style="margin-top:16px; padding:14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
-<div style="font-size:13px; color:#166534;">Оплачено этим платежом</div>
-<div style="font-size:24px; font-weight:700; color:#059669;">${payment.amount.toLocaleString('ru-RU')} ₽</div>
+<div style="margin-top:16px; padding:14px; background:#eef6f1; border:1px solid #cfe8da; border-radius:8px;">
+<div style="font-size:13px; color:#1f5c3d;">Оплачено этим платежом</div>
+<div style="font-size:24px; font-weight:700; color:#23704a;">${payment.amount.toLocaleString('ru-RU')} ₽</div>
 </div>
-<div style="margin-top:14px; padding:12px; background:#f8fafc; border-radius:8px; font-size:13px; color:#475569;">
+<div style="margin-top:14px; padding:12px; background:#f4f6f8; border-radius:8px; font-size:13px; color:#485566;">
 <div>Оплачено всего по счёту: <b>${totalPaidSoFar.toLocaleString('ru-RU')} ₽</b> из ${invoiceTotal.toLocaleString('ru-RU')} ₽</div>
 ${statusLine}
 </div>
-<p style="margin-top:20px; font-size:11px; color:#94a3b8;">Документ сформирован автоматически как подтверждение оплаты.</p>
+<p style="margin-top:20px; font-size:11px; color:#8d97a5;">Документ сформирован автоматически как подтверждение оплаты.</p>
 `;
 document.body.appendChild(printContainer);
 await new Promise(r => setTimeout(r, 150));
@@ -2321,7 +2414,7 @@ if (navigator.canShare && navigator.canShare({ files: [file] })) {
 await navigator.share({ title: 'Чек об оплате', text: `Чек об оплате ${payment.amount.toLocaleString('ru-RU')} ₽ для ${rec.client || 'заказчика'}`, files: [file] });
 } else {
 triggerFileDownload(pdfBlob, fileName);
-showAddToast('📄 Чек скачан — отправьте его заказчику');
+showAddToast('Чек скачан — отправьте его заказчику');
 }
 } catch (err) {
 console.error('Ошибка при создании чека:', err);
@@ -2421,8 +2514,19 @@ return String(date || '').replace(/(\d{1,2}:\d{2}):\d{2}/, '$1');
 
 function renderHistoryCardHtml(rec, containerId, opts = {}) {
 const items = rec.items || [];
+// Строка позиции как в смете: название и сумма в одну строку,
+// под ними «количество × цена», помещения и как считали
+const qtyFmt = n => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
 const itemLine = i =>
-`• ${escapeHtml(i.name)} (${i.qty} ${escapeHtml(i.unit)})${i.location && !roomsBreakdownText(i) ? ` <span style="color:#6366f1;">— 📍 ${escapeHtml(i.location)}</span>` : ''} — ${(i.qty * i.price).toLocaleString('ru-RU')} ₽${roomsBreakdownText(i) ? `<div class="rooms-breakdown" style="margin-left:10px;">🏠 ${escapeHtml(roomsBreakdownText(i))}</div>` : ''}${measureNoteHtml(i)}`;
+`<div class="hc-line">
+<div class="hc-l-main">
+<div class="hc-l-name">${escapeHtml(i.name)}</div>
+<div class="hc-l-sub">${qtyFmt(i.qty)} ${escapeHtml(i.unit)} × ${Number(i.price || 0).toLocaleString('ru-RU')} ₽${i.location && !roomsBreakdownText(i) ? ` · ${escapeHtml(i.location)}` : ''}</div>
+${roomsBreakdownText(i) ? `<div class="rooms-breakdown">${escapeHtml(roomsBreakdownText(i))}</div>` : ''}
+${measureNoteHtml(i)}
+</div>
+<div class="hc-l-sum">${(i.qty * i.price).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽</div>
+</div>`;
 const VISIBLE_ITEMS = 3;
 const asLines = arr => arr.map(l => `<div>${l}</div>`).join('');
 let itemsHtml = asLines(items.slice(0, VISIBLE_ITEMS).map(itemLine));
@@ -2439,7 +2543,7 @@ g.items.push(i);
 const lineNoLoc = i => itemLine({ ...i, location: '' });
 itemsHtml = groups.map(g => {
 const sum = g.items.reduce((a, i) => a + i.qty * i.price, 0);
-const title = g.key ? `🏠 ${escapeHtml(g.key)}` : 'Прочие работы';
+const title = g.key ? `${escapeHtml(g.key)}` : 'Прочие работы';
 return `<details class="hc-room"><summary>${title} · ${g.items.length} ${pluralRu(g.items.length, 'работа', 'работы', 'работ')} · ${sum.toLocaleString('ru-RU')} ₽</summary><div>${asLines(g.items.map(g.key ? lineNoLoc : itemLine))}</div></details>`;
 }).join('');
 } else if (items.length > VISIBLE_ITEMS) {
@@ -2457,21 +2561,21 @@ return `
 <div class="history-card" id="historyCard_${recordId}">
 <div class="hc-top">
 <div class="hc-title">
-<div class="hc-name">${opts.objName ? '🏠 ' : ''}${escapeHtml(title)}${isEstimate ? '<span class="hc-badge" style="background:#fef9c3; color:#a16207;">Расчёт</span>' : ''}${rec.shareDisabled ? '<span class="hc-badge" style="background:#fee2e2; color:#b91c1c;">ссылка выкл.</span>' : ''}</div>
+<div class="hc-name">${escapeHtml(title)}${isEstimate ? '<span class="hc-badge" style="background:#f6efd6; color:#85600f;">Расчёт</span>' : ''}${rec.shareDisabled ? '<span class="hc-badge" style="background:#f6dfd8; color:#a5321f;">ссылка выкл.</span>' : ''}</div>
 <div class="hc-date">${escapeHtml(formatRecordDate(rec.date))}</div>
 </div>
 <div class="hc-amount">${Number(rec.total || 0).toLocaleString('ru-RU')} ₽</div>
 </div>
-${showClient ? `<div class="hc-meta">👤 ${escapeHtml(rec.client)}</div>` : ''}
-${showAddress ? `<div class="hc-meta">📍 ${escapeHtml(rec.address)}</div>` : ''}
-${isCurrentAdmin() ? `<div class="hc-meta">Мастер: <b>${escapeHtml(masterName)}</b></div>` : ''}
-${rec.note ? `<div class="hc-meta">📝 ${escapeHtml(rec.note)}</div>` : ''}
+${showClient ? `<div class="hc-meta"><span class="meta-k">Заказчик</span> ${escapeHtml(rec.client)}</div>` : ''}
+${showAddress ? `<div class="hc-meta"><span class="meta-k">Адрес</span> ${escapeHtml(rec.address)}</div>` : ''}
+${isCurrentAdmin() ? `<div class="hc-meta"><span class="meta-k">Мастер</span> ${escapeHtml(masterName)}</div>` : ''}
+${rec.note ? `<div class="hc-meta"><span class="meta-k">Пояснение</span> ${escapeHtml(rec.note)}</div>` : ''}
 ${renderAttachmentsHtml(rec.attachments)}
-<div class="hc-items">${itemsHtml || '<span style="color:#94a3b8;">Нет позиций</span>'}</div>
+<div class="hc-items">${itemsHtml || '<span style="color:#8d97a5;">Нет позиций</span>'}</div>
 ${!isEstimate ? renderPaymentSectionHtml(rec, recordId) : ''}
 <div class="hc-actions">
-<button type="button" class="hc-btn hc-btn-primary" onclick="sendHistoryRecordPDF('${recordId}')">📤 PDF</button>
-${canShare ? `<button type="button" class="hc-btn" onclick="shareInvoiceLink('${recordId}')">🔗 Ссылка</button>` : ''}
+<button type="button" class="hc-btn hc-btn-primary" onclick="sendHistoryRecordPDF('${recordId}')"><svg class="ic"><use href="#i-send"/></svg> Отправить PDF</button>
+${canShare ? `<button type="button" class="hc-btn" onclick="shareInvoiceLink('${recordId}')" aria-label="Ссылка для заказчика"><svg class="ic"><use href="#i-link"/></svg></button>` : ''}
 <button type="button" class="hc-btn hc-btn-more" onclick="openRecordActions('${recordId}', '${containerId}')" aria-label="Другие действия">⋯</button>
 </div>
 </div>
@@ -2486,6 +2590,13 @@ return many;
 }
 
 /* ---------- Нижняя шторка с действиями ---------- */
+// Значки в шторке действий — строгие линейные вместо эмодзи
+const SHEET_ICONS = { '⬇️': 'download', '🔗': 'link', '🔒': 'lock', '🔓': 'unlock', '✏️': 'edit', '🗑️': 'trash', '🗑': 'trash',
+'📤': 'send', '🧹': 'clear', '💬': 'chat', '📋': 'copy', '📏': 'ruler', '➕': 'plus' };
+function sheetIconHtml(icon) {
+const id = SHEET_ICONS[icon];
+return id ? `<svg class="ic"><use href="#i-${id}"/></svg>` : '';
+}
 let sheetActions = [];
 
 function openSheet(title, items) {
@@ -2493,7 +2604,7 @@ sheetActions = items.map(i => i && i.onClick);
 document.getElementById('sheetTitle').textContent = title || '';
 document.getElementById('sheetItems').innerHTML = items.map((item, idx) => {
 if (!item) return '<div class="sheet-sep"></div>';
-return `<button type="button" class="sheet-item${item.danger ? ' sheet-item-danger' : ''}" onclick="runSheetAction(${idx})"><span class="sheet-item-icon" aria-hidden="true">${item.icon || ''}</span>${escapeHtml(item.label)}</button>`;
+return `<button type="button" class="sheet-item${item.danger ? ' sheet-item-danger' : ''}" onclick="runSheetAction(${idx})"><span class="sheet-item-icon" aria-hidden="true">${sheetIconHtml(item.icon)}</span>${escapeHtml(item.label)}</button>`;
 }).join('');
 document.getElementById('sheet').classList.add('open');
 document.getElementById('sheetOverlay').classList.add('open');
@@ -2575,7 +2686,7 @@ items.push({ icon: '📤', label: 'Другое приложение…', onClic
 items.push({ icon: '📋', label: 'Скопировать текст', onClick: async () => {
 try {
 await navigator.clipboard.writeText(text);
-showAddToast('📋 Текст скопирован');
+showAddToast('Текст скопирован');
 } catch (e) {
 prompt('Скопируйте текст напоминания:', text);
 }
@@ -2610,10 +2721,10 @@ const balanceLabel = info.status === 'owes' ? `Должен: ${info.balance.toLo
 const payments = rec.payments || [];
 const paymentsHtml = payments.length === 0 ? '' : payments.map(p => `
 <div class="pay-history-item">
-<span>💵 ${p.date} — ${Number(p.amount).toLocaleString('ru-RU')} ₽ <span style="color:#94a3b8;">(${escapeHtml(p.method)})</span></span>
+<span>${p.date} — ${Number(p.amount).toLocaleString('ru-RU')} ₽ <span style="color:#8d97a5;">(${escapeHtml(p.method)})</span></span>
 <span style="display:flex; gap:6px;">
 <button type="button" onclick="resendPaymentReceipt('${recordId}', '${p.id}')" title="Отправить чек ещё раз" style="border:none; background:none; cursor:pointer; font-size:13px;">📤</button>
-${!isCurrentClient() ? `<button type="button" onclick="deletePayment('${recordId}', '${p.id}')" title="Удалить" style="border:none; background:none; cursor:pointer; font-size:13px; color:#dc2626;">✕</button>` : ''}
+${!isCurrentClient() ? `<button type="button" onclick="deletePayment('${recordId}', '${p.id}')" title="Удалить" style="border:none; background:none; cursor:pointer; font-size:13px; color:#a5321f;">✕</button>` : ''}
 </span>
 </div>
 `).join('');
@@ -2621,8 +2732,8 @@ return `
 <div class="pay-balance-line ${balanceClass}">
 <span>${balanceLabel}</span>
 ${!isCurrentClient() ? `<span style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
-${info.status === 'owes' && rec.id ? `<button type="button" class="btn-delete-item" style="background:#fff; border:1px solid currentColor;" onclick="openReminderActions('${recordId}')">💬 Напомнить</button>` : ''}
-<button type="button" class="btn-delete-item" style="background:#fff; border:1px solid currentColor;" onclick="openPaymentModal('${recordId}')">💰 Оплата</button>
+${info.status === 'owes' && rec.id ? `<button type="button" class="btn-delete-item" style="background:#fff; border:1px solid currentColor;" onclick="openReminderActions('${recordId}')">Напомнить</button>` : ''}
+<button type="button" class="btn-delete-item" style="background:#fff; border:1px solid currentColor;" onclick="openPaymentModal('${recordId}')">Оплата</button>
 </span>` : ''}
 </div>
 ${paymentsHtml}
@@ -2648,7 +2759,7 @@ records = records.filter(r => (r.author || r.master || r.user) === currentUser);
 renderOverallPayStats(records.filter(r => r.docType !== 'estimate'));
 const countEl = document.getElementById('historyCount');
 if (records.length === 0) {
-list.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 20px 0; font-size:13px;">Здесь появятся сохранённые счета и расчёты</div>';
+list.innerHTML = '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">Здесь появятся сохранённые счета и расчёты</div>';
 if (countEl) countEl.textContent = '';
 return;
 }
@@ -2674,7 +2785,7 @@ countEl.textContent = (query || historyFilter !== 'all')
 : '';
 }
 if (filtered.length === 0) {
-list.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 20px 0; font-size:13px;">Ничего не найдено — измените поиск или фильтр</div>';
+list.innerHTML = '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">Ничего не найдено — измените поиск или фильтр</div>';
 return;
 }
 list.innerHTML = filtered.map(rec =>
@@ -2697,9 +2808,9 @@ if (info.status === 'over') overpaid += info.balance;
 box.innerHTML = `
 <div class="object-stats" style="margin-bottom:14px;">
 <div class="object-stat-box">Выставлено<b>${totalInvoiced.toLocaleString('ru-RU')} ₽</b></div>
-<div class="object-stat-box" style="background:#f0fdf4;">Оплачено<b style="color:#059669;">${totalPaid.toLocaleString('ru-RU')} ₽</b></div>
-${owed > 0 ? `<div class="object-stat-box" style="background:#fef2f2;">Должны заказчики<b style="color:#b91c1c;">${owed.toLocaleString('ru-RU')} ₽</b></div>` : ''}
-${overpaid > 0 ? `<div class="object-stat-box" style="background:#eff6ff;">Переплата<b style="color:#1d4ed8;">${overpaid.toLocaleString('ru-RU')} ₽</b></div>` : ''}
+<div class="object-stat-box" style="background:#eef6f1;">Оплачено<b style="color:#23704a;">${totalPaid.toLocaleString('ru-RU')} ₽</b></div>
+${owed > 0 ? `<div class="object-stat-box" style="background:#fbeeea;">Должны заказчики<b style="color:#a5321f;">${owed.toLocaleString('ru-RU')} ₽</b></div>` : ''}
+${overpaid > 0 ? `<div class="object-stat-box" style="background:#eef2f9;">Переплата<b style="color:#23408e;">${overpaid.toLocaleString('ru-RU')} ₽</b></div>` : ''}
 </div>
 `;
 }
@@ -2762,7 +2873,7 @@ currentUser = result.self.login;
 localStorage.setItem('authToken', authToken);
 localStorage.setItem('currentUser', currentUser);
 if (isCurrentAdmin()) localStorage.setItem('isAdminAuthorized', 'true');
-document.getElementById('userBadge').textContent = currentUser + (isCompanyMode() ? ' · 🏢 своя компания' : '');
+document.getElementById('userBadge').textContent = currentUser + (isCompanyMode() ? ' · своя компания' : '');
 document.getElementById('profPass').value = '';
 alert('Данные профиля обновлены!');
 } catch (e) {
@@ -2876,7 +2987,7 @@ const list = document.getElementById('usersListContainer');
 if (!list) return;
 list.innerHTML = '';
 if (!cloudData.users || cloudData.users.length === 0) {
-list.innerHTML = '<div style="color:#94a3b8; font-size:13px;">Список пуст</div>';
+list.innerHTML = '<div style="color:#8d97a5; font-size:13px;">Список пуст</div>';
 return;
 }
 const roleLabels = { admin: 'Админ', master: 'Мастер', client: 'Заказчик' };
@@ -2889,19 +3000,19 @@ const roleName = roleLabels[role];
 list.innerHTML += `
 <div class="user-card">
 <div style="flex: 1 1 100%; min-width: 0; padding-right: 8px;">
-<b>👤 ${escapeHtml(u.login)}</b> <span class="badge ${badgeClass}">${roleName}</span><br>
-<span style="color:#64748b; font-size:11px; word-break: break-word; overflow-wrap: anywhere;">✉️ ${escapeHtml(u.email || 'нет почты')} | Пароль скрыт 🔒</span>
+<b>${escapeHtml(u.login)}</b> <span class="badge ${badgeClass}">${roleName}</span><br>
+<span style="color:#5d6878; font-size:11px; word-break: break-word; overflow-wrap: anywhere;">${escapeHtml(u.email || 'нет почты')} | Пароль скрыт 🔒</span>
 </div>
 <div style="display: flex; gap: 4px; flex-shrink: 0; align-items: center; flex-wrap: wrap;">
-<button type="button" class="btn btn-warning btn-sm" onclick="resetUserPassword(${idx})">🔑 Сброс пароля</button>
+<button type="button" class="btn btn-warning btn-sm" onclick="resetUserPassword(${idx})">Сброс пароля</button>
 ${!isSelf ? `
-<select onchange="setUserRole(${idx}, this.value)" style="font-size:12px; padding:6px 8px; border-radius:8px; border:1px solid #cbd5e1; background:#fff;">
+<select onchange="setUserRole(${idx}, this.value)" style="font-size:12px; padding:6px 8px; border-radius:8px; border:1px solid #cfd5dd; background:#fff;">
 <option value="master" ${role === 'master' ? 'selected' : ''}>Мастер</option>
 <option value="client" ${role === 'client' ? 'selected' : ''}>Заказчик</option>
 <option value="admin" ${role === 'admin' ? 'selected' : ''}>Админ</option>
 </select>
 <button type="button" class="btn btn-danger btn-sm" onclick="deleteUser(${idx})">Удалить</button>
-` : '<span style="font-size:11px; color:#94a3b8; font-weight:600;">Вы</span>'}
+` : '<span style="font-size:11px; color:#8d97a5; font-weight:600;">Вы</span>'}
 </div>
 </div>
 `;
@@ -2911,24 +3022,24 @@ ${!isSelf ? `
 async function renderStats() {
 const container = document.getElementById('statsListContainer');
 if (!container) return;
-container.innerHTML = '<div style="color:#94a3b8; font-size:13px;">Загрузка...</div>';
+container.innerHTML = '<div style="color:#8d97a5; font-size:13px;">Загрузка...</div>';
 try {
 const res = await fetch(`${WORKER_URL}/stats`, {
 headers: { "Authorization": "Bearer " + authToken }
 });
 const result = await res.json();
 if (!res.ok) {
-container.innerHTML = `<div style="color:#f43f5e; font-size:13px;">${escapeHtml(result.error || 'Не удалось загрузить статистику')}</div>`;
+container.innerHTML = `<div style="color:#b23a26; font-size:13px;">${escapeHtml(result.error || 'Не удалось загрузить статистику')}</div>`;
 return;
 }
 const stats = result.stats || [];
 if (stats.length === 0) {
-container.innerHTML = '<div style="color:#94a3b8; font-size:13px;">Пока никто не работал в режиме «своя компания» — статистики нет.</div>';
+container.innerHTML = '<div style="color:#8d97a5; font-size:13px;">Пока никто не работал в режиме «своя компания» — статистики нет.</div>';
 return;
 }
 container.innerHTML = stats.map(s => `
-<div class="user-card" style="border:1px solid #e2e8f0; border-radius:10px; padding:12px; margin-bottom:8px;">
-<div style="font-weight:700; font-size:14px; margin-bottom:8px;">🏢 ${escapeHtml(s.login)}</div>
+<div class="user-card" style="border:1px solid #dfe3e8; border-radius:10px; padding:12px; margin-bottom:8px;">
+<div style="font-weight:700; font-size:14px; margin-bottom:8px;">${escapeHtml(s.login)}</div>
 <div class="object-stats">
 <div class="object-stat-box">Объекты<b>${s.objects}</b></div>
 <div class="object-stat-box">Счета<b>${s.invoices}</b></div>
@@ -2938,7 +3049,7 @@ container.innerHTML = stats.map(s => `
 </div>
 `).join('');
 } catch (e) {
-container.innerHTML = '<div style="color:#f43f5e; font-size:13px;">Ошибка сети — не удалось загрузить статистику</div>';
+container.innerHTML = '<div style="color:#b23a26; font-size:13px;">Ошибка сети — не удалось загрузить статистику</div>';
 }
 }
 
@@ -2973,11 +3084,11 @@ const originalText = btn.textContent;
 btn.disabled = true;
 try {
 // 1. Страховка: сохраняем текущие данные
-btn.textContent = '⏳ Сохраняю текущие данные...';
+btn.textContent = 'Сохраняю текущие данные...';
 const saved = await downloadBackup({ silent: true, prefix: 'before-restore' });
 if (!saved && !confirm('Не удалось скачать копию текущих данных. Всё равно восстановить? Текущие данные будут потеряны безвозвратно.')) return;
 // 2. Восстановление
-btn.textContent = '⏳ Восстанавливаю...';
+btn.textContent = 'Восстанавливаю...';
 const res = await fetch(`${WORKER_URL}/restore`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
@@ -3004,7 +3115,7 @@ async function downloadBackup(opts = {}) {
 const btn = document.getElementById('backupBtn');
 const originalText = btn.textContent;
 btn.disabled = true;
-btn.textContent = '⏳ Готовлю файл...';
+btn.textContent = 'Готовлю файл...';
 try {
 const res = await fetch(`${WORKER_URL}/backup`, {
 headers: { "Authorization": "Bearer " + authToken }
@@ -3130,7 +3241,7 @@ function populateObjectSelect() {
 const select = document.getElementById('invoiceObjectSelect');
 if (!select) return;
 const prevValue = select.value;
-select.innerHTML = '<option value="">— Выберите объект —</option><option value="__new__">➕ Создать новый объект</option>';
+select.innerHTML = '<option value="">— Выберите объект —</option><option value="__new__">Создать новый объект</option>';
 getVisibleObjects().forEach(obj => {
 const opt = document.createElement('option');
 opt.value = obj.id;
@@ -3193,7 +3304,7 @@ clientInput.value = newObj.client;
 updateInvoiceInfo();
 }
 renderObjects();
-showAddToast(`🏠 Объект «${newObj.name}» создан`);
+showAddToast(`Объект «${newObj.name}» создан`);
 }
 
 async function createObject({ name, client, address = '', access = '', materials = '' }) {
@@ -3243,7 +3354,7 @@ const objects = getVisibleObjects();
 const searchEl = document.getElementById('objectsSearch');
 if (searchEl) searchEl.style.display = objects.length > 3 ? 'block' : 'none';
 if (objects.length === 0) {
-container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 20px 0; font-size:13px;">Добавьте первый объект — кнопка «Новый объект» выше</div>';
+container.innerHTML = '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">Добавьте первый объект — кнопка «Новый объект» выше</div>';
 return;
 }
 const query = (searchEl ? searchEl.value : '').trim().toLowerCase();
@@ -3251,7 +3362,7 @@ const shown = query
 ? objects.filter(o => [o.name, o.client, o.address].filter(Boolean).join(' ').toLowerCase().includes(query))
 : objects;
 if (shown.length === 0) {
-container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding: 20px 0; font-size:13px;">Ничего не найдено</div>';
+container.innerHTML = '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">Ничего не найдено</div>';
 return;
 }
 container.innerHTML = '';
@@ -3268,7 +3379,7 @@ if (isCurrentAdmin()) {
 const visibleTo = getObjectVisibleTo(obj);
 const hiddenFromAuthor = obj.author && !visibleTo.includes(obj.author);
 const visibleText = visibleTo.length ? escapeHtml(visibleTo.join(', ')) : 'только админ';
-adminInfoHtml = `<div style="font-size:11px; color:#64748b; margin-top:8px;">Автор: <b>${escapeHtml(obj.author || '—')}</b> · Видят: ${visibleText}${hiddenFromAuthor ? ' <span style="color:#f43f5e; font-weight:600;">(скрыт от автора)</span>' : ''}</div>`;
+adminInfoHtml = `<div style="font-size:11px; color:#5d6878; margin-top:8px;">Автор: <b>${escapeHtml(obj.author || '—')}</b> · Видят: ${visibleText}${hiddenFromAuthor ? ' <span style="color:#b23a26; font-weight:600;">(скрыт от автора)</span>' : ''}</div>`;
 }
 let moneyHtml = '';
 if (stats.count > 0) {
@@ -3284,11 +3395,11 @@ moneyHtml = '<div class="obj-money"><span class="obj-pill">Счетов пока
 }
 card.innerHTML = `
 <div class="obj-head">
-<div class="obj-name">🏠 ${escapeHtml(obj.name)}</div>
+<div class="obj-name">${escapeHtml(obj.name)}</div>
 <span class="obj-chevron" aria-hidden="true">›</span>
 </div>
-<div class="obj-line">👤 ${escapeHtml(obj.client)}</div>
-${obj.address ? `<div class="obj-line">📍 ${escapeHtml(obj.address)}</div>` : ''}
+<div class="obj-line"><span class="meta-k">Заказчик</span> ${escapeHtml(obj.client)}</div>
+${obj.address ? `<div class="obj-line"><span class="meta-k">Адрес</span> ${escapeHtml(obj.address)}</div>` : ''}
 ${moneyHtml}
 ${adminInfoHtml}
 `;
@@ -3334,15 +3445,15 @@ const invoiceRecords = allRecords.filter(r => r.docType !== 'estimate');
 const estimateRecords = allRecords.filter(r => r.docType === 'estimate');
 
 const invoiceHtml = invoiceRecords.length === 0
-? '<div style="text-align:center; color:#94a3b8; padding: 16px 0; font-size:13px;">По этому объекту пока нет счетов</div>'
+? '<div style="text-align:center; color:#8d97a5; padding: 16px 0; font-size:13px;">По этому объекту пока нет счетов</div>'
 : invoiceRecords.map(rec => renderHistoryCardHtml(rec, 'objectHistoryList')).join('');
 const estimateHtml = estimateRecords.length === 0
-? '<div style="text-align:center; color:#94a3b8; padding: 16px 0; font-size:13px;">По этому объекту пока нет предварительных расчётов</div>'
+? '<div style="text-align:center; color:#8d97a5; padding: 16px 0; font-size:13px;">По этому объекту пока нет предварительных расчётов</div>'
 : estimateRecords.map(rec => renderHistoryCardHtml(rec, 'objectHistoryList')).join('');
 
 container.innerHTML = `
-<span class="link-text" onclick="closeObjectDetail(); renderObjects();">⬅ К списку объектов</span>
-<h1 style="margin-top:10px;">🏠 ${escapeHtml(obj.name)}</h1>
+<span class="link-text" onclick="closeObjectDetail(); renderObjects();">← К списку объектов</span>
+<h1 style="margin-top:10px;">${escapeHtml(obj.name)}</h1>
 
 <div class="profile-box">
 <div class="object-detail-field">
@@ -3351,38 +3462,38 @@ ${escapeHtml(obj.client)}
 </div>
 <div class="object-detail-field">
 <b>Адрес</b>
-${obj.address ? escapeHtml(obj.address) : '<span style="color:#94a3b8;">не указан</span>'}
+${obj.address ? escapeHtml(obj.address) : '<span style="color:#8d97a5;">не указан</span>'}
 </div>
 <div class="object-detail-field">
 <b>Доступ на объект</b>
-${obj.access ? escapeHtml(obj.access).replace(/\n/g, '<br>') : '<span style="color:#94a3b8;">не указан</span>'}
+${obj.access ? escapeHtml(obj.access).replace(/\n/g, '<br>') : '<span style="color:#8d97a5;">не указан</span>'}
 </div>
 <div class="object-detail-field">
 <b>Спецификация материалов</b>
-${obj.materials ? escapeHtml(obj.materials).replace(/\n/g, '<br>') : '<span style="color:#94a3b8;">не указана</span>'}
+${obj.materials ? escapeHtml(obj.materials).replace(/\n/g, '<br>') : '<span style="color:#8d97a5;">не указана</span>'}
 </div>
 </div>
 
 <div class="object-stats">
 <div class="object-stat-box">Всего счетов<b>${stats.count}</b></div>
 <div class="object-stat-box">Сумма по объекту<b>${stats.total.toLocaleString('ru-RU')} ₽</b></div>
-<div class="object-stat-box" style="background:#f0fdf4;">Оплачено<b style="color:#059669;">${stats.paid.toLocaleString('ru-RU')} ₽</b></div>
-${stats.owed > 0 ? `<div class="object-stat-box" style="background:#fef2f2;">Должен<b style="color:#b91c1c;">${stats.owed.toLocaleString('ru-RU')} ₽</b></div>` : ''}
-${stats.overpaid > 0 ? `<div class="object-stat-box" style="background:#eff6ff;">Переплата<b style="color:#1d4ed8;">${stats.overpaid.toLocaleString('ru-RU')} ₽</b></div>` : ''}
+<div class="object-stat-box" style="background:#eef6f1;">Оплачено<b style="color:#23704a;">${stats.paid.toLocaleString('ru-RU')} ₽</b></div>
+${stats.owed > 0 ? `<div class="object-stat-box" style="background:#fbeeea;">Должен<b style="color:#a5321f;">${stats.owed.toLocaleString('ru-RU')} ₽</b></div>` : ''}
+${stats.overpaid > 0 ? `<div class="object-stat-box" style="background:#eef2f9;">Переплата<b style="color:#23408e;">${stats.overpaid.toLocaleString('ru-RU')} ₽</b></div>` : ''}
 </div>
 
-${!isCurrentClient() ? `<button type="button" class="btn btn-primary" style="margin-top:14px;" onclick="goToCalcForObject('${obj.id}')">🧾 Выставить счёт по объекту</button>
+${!isCurrentClient() ? `<button type="button" class="btn btn-primary" style="margin-top:14px;" onclick="goToCalcForObject('${obj.id}')">Выставить счёт по объекту</button>
 <div class="obj-actions">
-<button type="button" class="hc-btn" onclick="startEditObject('${obj.id}')">✏️ Редактировать</button>
+<button type="button" class="hc-btn" onclick="startEditObject('${obj.id}')">Редактировать</button>
 <button type="button" class="hc-btn hc-btn-more" onclick="openObjectActions('${obj.id}')" aria-label="Другие действия">⋯</button>
 </div>` : ''}
 
 ${renderObjectRoomsHtml(obj)}
-${(obj.measurements || []).length ? `<details style="margin:8px 0;"><summary style="cursor:pointer; font-weight:700; color:#475569; padding:6px 0;">📏 История замеров (${obj.measurements.length})</summary>${renderMeasureHistoryHtml(obj.id)}</details>` : ''}
+${(obj.measurements || []).length ? `<details style="margin:8px 0;"><summary style="cursor:pointer; font-weight:700; color:#485566; padding:6px 0;">История замеров (${obj.measurements.length})</summary>${renderMeasureHistoryHtml(obj.id)}</details>` : ''}
 
 <div class="tab-menu" style="margin-top:16px;">
-<button type="button" class="tab-btn ${objectHistorySubTab === 'invoice' ? 'active' : ''}" onclick="switchObjectHistoryTab('invoice')">🧾 Счета (${invoiceRecords.length})</button>
-<button type="button" class="tab-btn ${objectHistorySubTab === 'estimate' ? 'active' : ''}" onclick="switchObjectHistoryTab('estimate')">📋 Расчёты (${estimateRecords.length})</button>
+<button type="button" class="tab-btn ${objectHistorySubTab === 'invoice' ? 'active' : ''}" onclick="switchObjectHistoryTab('invoice')">Счета (${invoiceRecords.length})</button>
+<button type="button" class="tab-btn ${objectHistorySubTab === 'estimate' ? 'active' : ''}" onclick="switchObjectHistoryTab('estimate')">Расчёты (${estimateRecords.length})</button>
 </div>
 <div id="objectHistoryList" style="display:${objectHistorySubTab === 'invoice' ? 'block' : 'none'};">${invoiceHtml}</div>
 <div id="objectEstimateList" style="display:${objectHistorySubTab === 'estimate' ? 'block' : 'none'};">${estimateHtml}</div>
@@ -3404,27 +3515,27 @@ if (isCurrentAdmin()) {
 const visibleTo = getObjectVisibleTo(obj);
 const masters = (cloudData.users || []).filter(u => u.role !== 'admin');
 const checkboxesHtml = masters.length === 0
-? '<div style="font-size:12px; color:#94a3b8;">Пока нет мастеров или заказчиков</div>'
+? '<div style="font-size:12px; color:#8d97a5;">Пока нет мастеров или заказчиков</div>'
 : masters.map(m => `
-<label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:normal; text-transform:none; letter-spacing:normal; color:#334155;">
+<label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:normal; text-transform:none; letter-spacing:normal; color:#33404f;">
 <input type="checkbox" class="editObjVisibleCheckbox" value="${escapeHtml(m.login)}" ${visibleTo.includes(m.login) ? 'checked' : ''}>
-${escapeHtml(m.login)} <span class="badge ${m.role === 'client' ? 'badge-client' : 'badge-master'}">${m.role === 'client' ? 'Заказчик' : 'Мастер'}</span>${m.login === obj.author ? ' <span style="color:#94a3b8;">(автор объекта)</span>' : ''}
+${escapeHtml(m.login)} <span class="badge ${m.role === 'client' ? 'badge-client' : 'badge-master'}">${m.role === 'client' ? 'Заказчик' : 'Мастер'}</span>${m.login === obj.author ? ' <span style="color:#8d97a5;">(автор объекта)</span>' : ''}
 </label>
 `).join('');
 visibilityHtml = `
 <div class="form-group">
 <label>Кто видит объект (мастера и заказчики)</label>
-<div style="display:flex; flex-direction:column; gap:8px; border:1px solid #cbd5e1; border-radius:10px; padding:10px; background:#fff;">
+<div style="display:flex; flex-direction:column; gap:8px; border:1px solid #cfd5dd; border-radius:10px; padding:10px; background:#fff;">
 ${checkboxesHtml}
 </div>
-<div style="font-size:11px; color:#94a3b8; margin-top:4px; text-transform:none; letter-spacing:normal; font-weight:normal;">Отметьте заказчика, чтобы дать ему доступ к счетам по этому объекту. Снимите галочку, чтобы скрыть объект — даже от того, кто его создал. Вам как админу объект виден всегда.</div>
+<div style="font-size:11px; color:#8d97a5; margin-top:4px; text-transform:none; letter-spacing:normal; font-weight:normal;">Отметьте заказчика, чтобы дать ему доступ к счетам по этому объекту. Снимите галочку, чтобы скрыть объект — даже от того, кто его создал. Вам как админу объект виден всегда.</div>
 </div>
 `;
 }
 
 container.innerHTML = `
-<span class="link-text" onclick="renderObjectDetail()">⬅ Отмена</span>
-<h1 style="margin-top:10px;">✏️ Редактирование объекта</h1>
+<span class="link-text" onclick="renderObjectDetail()">← Отмена</span>
+<h1 style="margin-top:10px;">Редактирование объекта</h1>
 <div class="profile-box">
 <div class="form-group">
 <label>Название объекта</label>
@@ -3447,7 +3558,7 @@ container.innerHTML = `
 <textarea id="editObjMaterials">${escapeHtml(obj.materials || '')}</textarea>
 </div>
 ${visibilityHtml}
-<button type="button" class="btn btn-success" onclick="saveObjectEdit('${obj.id}')">💾 Сохранить</button>
+<button type="button" class="btn btn-success" onclick="saveObjectEdit('${obj.id}')">Сохранить</button>
 </div>
 `;
 }
@@ -3528,7 +3639,7 @@ if (!confirm('Текущий счёт останется без изменени
 editingRecordId = null;
 editingReturnContext = null;
 updateEditModeUI();
-showAddToast('📄 Теперь это новый счёт — проверьте данные и сохраните');
+showAddToast('Теперь это новый счёт — проверьте данные и сохраните');
 window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -3538,8 +3649,8 @@ const bannerText = document.getElementById('editModeBannerText');
 const saveBtn = document.getElementById('calcSaveBtn');
 const docTypeBtns = [document.getElementById('docTypeInvoiceBtn'), document.getElementById('docTypeEstimateBtn')];
 if (banner) banner.style.display = editingRecordId ? 'flex' : 'none';
-if (bannerText) bannerText.textContent = editingRecordId ? (selectedDocType === 'estimate' ? '✏️ Редактирование расчёта из истории' : '✏️ Редактирование счёта из истории') : '✏️ Редактирование счёта из истории';
-if (saveBtn) saveBtn.textContent = editingRecordId ? '💾 Сохранить изменения' : '💾 Сохранить';
+if (bannerText) bannerText.textContent = editingRecordId ? (selectedDocType === 'estimate' ? 'Редактирование расчёта из истории' : 'Редактирование счёта из истории') : 'Редактирование счёта из истории';
+if (saveBtn) saveBtn.textContent = editingRecordId ? 'Сохранить изменения' : 'Сохранить';
 docTypeBtns.forEach(btn => { if (btn) btn.disabled = !!editingRecordId; });
 }
 
@@ -3594,7 +3705,7 @@ if ('serviceWorker' in navigator) {
 
 <script>
 /* ===================== ЗАМЕР ПОМЕЩЕНИЯ ===================== */
-// Окно «📏 Замер»: стены (минус окна и двери), потолок, откосы, узкие
+// Окно «Замер»: стены (минус окна и двери), потолок, откосы, узкие
 // поверхности и история. Результат вставляется в количество услуги или
 // позиции счёта, а к позиции прикрепляется, как именно считали.
 // Замер сохраняется в объект (в облако), без объекта — на этом телефоне.
@@ -3854,7 +3965,7 @@ function fillMeasureObjectSelect() {
 const sel = document.getElementById('mpObject');
 const objs = typeof getVisibleObjects === 'function' ? getVisibleObjects() : [];
 sel.innerHTML = `<option value="">Без объекта (на этом телефоне)</option>` +
-objs.map(o => `<option value="${escapeHtml(o.id)}">🏠 ${escapeHtml(o.name)}</option>`).join('');
+objs.map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)}</option>`).join('');
 sel.value = objs.some(o => o.id === measure.objectId) ? measure.objectId : '';
 }
 
@@ -3904,7 +4015,7 @@ ${m.walls.map((w, i) => `<div class="mp-row"><span class="mp-row-label mp-row-la
 <div class="mp-hint">«+» добавляет проём с размерами предыдущего — поправьте, если отличается.</div>
 ${m.openings.map((o, i) => `<div class="mp-open">
 <div class="mp-open-top">
-<button type="button" class="mp-type" onclick="toggleOpeningType(${i})" aria-label="Сменить тип проёма">${o.type === 'door' ? '🚪 Дверь' : '🪟 Окно'}</button>
+<button type="button" class="mp-type" onclick="toggleOpeningType(${i})" aria-label="Сменить тип проёма">${o.type === 'door' ? 'Дверь' : 'Окно'}</button>
 <span class="mp-open-area" id="mpOpenArea${i}"></span>
 <button type="button" class="mp-del" onclick="removeMeasureRow('openings', ${i})" aria-label="Убрать проём">✕</button>
 </div>
@@ -3915,8 +4026,8 @@ ${m.openings.map((o, i) => `<div class="mp-open">
 </div>
 </div>`).join('')}
 <div class="mp-add-row">
-<button type="button" class="mp-add" onclick="addOpening('window')">+ 🪟 Окно</button>
-<button type="button" class="mp-add" onclick="addOpening('door')">+ 🚪 Дверь</button>
+<button type="button" class="mp-add" onclick="addOpening('window')">+ Окно</button>
+<button type="button" class="mp-add" onclick="addOpening('door')">+ Дверь</button>
 </div>
 <div class="mp-calc" id="mpCalcOpenings"></div>
 ${m.openings.length ? `<button type="button" class="mp-link-btn" onclick="setMeasureTab('slopes')">Посчитать откосы этих проёмов →</button>` : ''}
@@ -3956,7 +4067,7 @@ html += `<section class="mp-sec">
 <div class="mp-sec-title">Какие проёмы с откосами</div>
 <div class="mp-hint">Каждый откос отдельно: левый + правый + верх. Откос короче метра считается за 1 пог. м.</div>
 ${valid.map(({ o, i }) => `<label class="mp-check"><input type="checkbox" ${o.slopes !== false ? 'checked' : ''} onchange="setOpeningSlopes(${i}, this.checked)">
-<span>${o.type === 'door' ? '🚪 Дверь' : '🪟 Окно'} ширина ${mFmt(mNum(o.w))}, высота ${mFmt(mNum(o.h))}${mCount(o.n) !== 1 ? `, ${mFmt(mCount(o.n))} шт.` : ''}<br>
+<span>${o.type === 'door' ? 'Дверь' : 'Окно'} ширина ${mFmt(mNum(o.w))}, высота ${mFmt(mNum(o.h))}${mCount(o.n) !== 1 ? `, ${mFmt(mCount(o.n))} шт.` : ''}<br>
 откосы: ${slopeSidesText(mNum(o.h), mNum(o.w))}${mCount(o.n) !== 1 ? ` × ${mFmt(mCount(o.n))}` : ''} = <b>${mFmt((2 * minLen(mNum(o.h)) + minLen(mNum(o.w))) * mCount(o.n))} пог. м</b></span></label>`).join('')}
 <div class="mp-calc" id="mpCalcSlopes"></div>
 </section>`;
@@ -4028,10 +4139,10 @@ ${sub ? `<div class="mp-result-sub">${escapeHtml(sub)}</div>` : ''}
 ${target ? `<div class="mp-target">→ в «${escapeHtml(target)}»</div>` : ''}`;
 const btn = document.getElementById('mpPrimaryBtn');
 btn.disabled = !(v.value > 0);
-btn.textContent = target ? '✅ Вставить' : '📋 Скопировать';
+btn.textContent = target ? 'Вставить' : 'Скопировать';
 if (measureTarget.kind === 'room') {
 btn.disabled = false;
-btn.textContent = measureTarget.roomId ? '✅ Сохранить замер' : '✅ Добавить помещение';
+btn.textContent = measureTarget.roomId ? 'Сохранить замер' : 'Добавить помещение';
 }
 }
 
@@ -4191,13 +4302,13 @@ if (!list.length) return `<div class="mp-empty">Сохранённых заме�
 return list.map(m => `<details class="mp-hist">
 <summary>
 <div class="mp-hist-title">${escapeHtml(m.room || 'Без названия')}</div>
-<div class="mp-hist-meta">${escapeHtml(formatMeasureDate(m.savedAt))}${m._objectName ? ' · 🏠 ' + escapeHtml(m._objectName) : ' · на этом телефоне'}${m.author ? ' · ' + escapeHtml(m.author) : ''}</div>
+<div class="mp-hist-meta">${escapeHtml(formatMeasureDate(m.savedAt))}${m._objectName ? ' · ' + escapeHtml(m._objectName) : ' · на этом телефоне'}${m.author ? ' · ' + escapeHtml(m.author) : ''}</div>
 <div class="mp-hist-pills">${measurePills(m).map(p => `<span class="mp-pill">${escapeHtml(p)}</span>`).join('')}</div>
 </summary>
 <div class="mp-hist-body">${measureSummaryLines(m).map(escapeHtml).join('\n')}
 ${!isCurrentClient() ? `<div class="mp-hist-actions">
-<button type="button" onclick="openSavedMeasure('${escapeHtml(m.id)}')">✏️ Открыть</button>
-<button type="button" class="danger" onclick="deleteSavedMeasure('${escapeHtml(m.id)}')">🗑️ Удалить</button>
+<button type="button" onclick="openSavedMeasure('${escapeHtml(m.id)}')">Открыть</button>
+<button type="button" class="danger" onclick="deleteSavedMeasure('${escapeHtml(m.id)}')">Удалить</button>
 </div>` : ''}</div>
 </details>`).join('');
 }
@@ -4266,7 +4377,7 @@ if (objectsChangedByRemove) ok = (await saveCloudData()) !== false;
 if (ok) {
 measureDirty = false;
 try { localStorage.setItem(measureDraftKey(), JSON.stringify({ measure, measureTab, measureDirty })); } catch (e) { /* пусто */ }
-if (!opts.silent) showAddToast(obj ? `📏 Замер сохранён в «${obj.name}»` : '📏 Замер сохранён на телефоне');
+if (!opts.silent) showAddToast(obj ? `Замер сохранён в «${obj.name}»` : 'Замер сохранён на телефоне');
 if (typeof currentObjectId !== 'undefined' && currentObjectId) renderObjectDetail();
 }
 return ok;
@@ -4294,7 +4405,7 @@ const note = { room: measure.room, text: v.text, value, unit: v.unit, measureId:
 const t = measureTarget;
 if (t.kind === 'none') {
 const text = (measure.room ? measure.room + '\n' : '') + v.text;
-try { await navigator.clipboard.writeText(String(value).replace('.', ',')); showAddToast(`📋 Скопировано: ${mFmt(value)}`); }
+try { await navigator.clipboard.writeText(String(value).replace('.', ',')); showAddToast(`Скопировано: ${mFmt(value)}`); }
 catch (e) { prompt('Результат и расчёт:', text); }
 return;
 }
@@ -4316,7 +4427,7 @@ if (unitSel && unitForKind(v.unit) && [...unitSel.options].some(o => o.value ===
 if (loc && !loc.value.trim() && measure.room) loc.value = measure.room;
 }
 closeMeasure();
-showAddToast(`📏 Вставлено: ${mFmt(value)}${v.unit ? ' ' + v.unit : ''}`);
+showAddToast(`Вставлено: ${mFmt(value)}${v.unit ? ' ' + v.unit : ''}`);
 // Замер, по которому что-то посчитали, сохраняем в историю автоматически
 saveMeasurement({ silent: true });
 }
@@ -4325,7 +4436,7 @@ saveMeasurement({ silent: true });
 function measureNoteHtml(item) {
 if (!item || !item.measure || !item.measure.text) return '';
 const m = item.measure;
-return `<details class="measure-note"><summary>📏 Как считали${m.room ? ': ' + escapeHtml(m.room) : ''}</summary><div>${escapeHtml(m.text)}</div></details>`;
+return `<details class="measure-note"><summary>Как считали${m.room ? ': ' + escapeHtml(m.room) : ''}</summary><div>${escapeHtml(m.text)}</div></details>`;
 }
 </script>
 
@@ -4452,7 +4563,7 @@ return `<div class="room-row${on ? ' on' : ''}">
 <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleRoom('${room.id}', this.checked)">
 <span><span class="room-name">${escapeHtml(roomName(room))}</span><span class="room-dims">${escapeHtml(pills || 'замер не заполнен')}</span></span>
 </label>
-<button type="button" class="mp-mini" onclick="openMeasure({ kind: 'room', objectId: '${obj.id}', roomId: '${room.id}' })" aria-label="Замер помещения">📏</button>
+<button type="button" class="mp-mini" onclick="openMeasure({ kind: 'room', objectId: '${obj.id}', roomId: '${room.id}' })" aria-label="Замер помещения"><svg class="ic"><use href="#i-ruler"/></svg></button>
 </div>`;
 }).join('')}
 <div class="room-selbar${picked.length ? ' show' : ''}">
@@ -4506,7 +4617,7 @@ await saveCloudData();
 syncCartWithRooms();
 renderInvoice();
 if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
-showAddToast(isNew ? `🏠 «${name}» добавлено` : '📏 Замер обновлён');
+showAddToast(isNew ? `«${name}» добавлено` : 'Замер обновлён');
 }
 
 function addRoom(objectId) {
@@ -4652,7 +4763,7 @@ const qty = evalMeasureExpr(document.getElementById('wpManualQty').value);
 const unit = document.getElementById('wpManualUnit').value;
 if (!(qty > 0)) { alert('Укажите количество.'); document.getElementById('wpManualQty').focus(); return; }
 invoiceCart.push({ name: srv.name, price: Number(srv.price) || 0, qty: roundQty(qty, unit), unit, location: names, surface: 'manual' });
-showAddToast(`✅ ${srv.name}: ${mFmt(roundQty(qty, unit))} ${unit}`);
+showAddToast(`${srv.name}: ${mFmt(roundQty(qty, unit))} ${unit}`);
 } else {
 const unit = sumSurface(rooms, surfaceKey).unit || srv.unit || 'м²';
 const price = Number(srv.price) || 0;
@@ -4666,7 +4777,7 @@ rooms.forEach(room => {
 if (!item.rooms.some(r => r.roomId === room.id)) item.rooms.push({ roomId: room.id, name: roomName(room), qty: 0 });
 });
 rebuildRoomItem(item, obj);
-showAddToast(`✅ ${srv.name}: ${mFmt(item.qty)} ${item.unit}`);
+showAddToast(`${srv.name}: ${mFmt(item.qty)} ${item.unit}`);
 }
 workPickerOpenIdx = null;
 renderInvoice();
@@ -4709,18 +4820,18 @@ return `<div class="room-card">
 ${canEdit ? `<button type="button" class="hc-btn hc-btn-more" style="flex:0 0 44px; min-height:38px;" onclick="openRoomActions('${obj.id}', '${room.id}')" aria-label="Действия">⋯</button>` : ''}
 </div>
 <div class="obj-money">${pills || '<span class="obj-pill">замер не заполнен</span>'}</div>
-<details class="measure-note" style="margin:6px 0 0;"><summary>📏 Как мерили</summary><div>${escapeHtml(measureSummaryLines(room.measure).join('\n'))}</div></details>
+<details class="measure-note" style="margin:6px 0 0;"><summary>Как мерили</summary><div>${escapeHtml(measureSummaryLines(room.measure).join('\n'))}</div></details>
 </div>`;
 }).join('')
-: '<div style="font-size:13px; color:#94a3b8; margin-bottom:8px;">Помещений пока нет. Замерьте их один раз — дальше в калькуляторе останется только отмечать нужные.</div>';
-return `<h2 style="margin-top:18px;">🏠 Помещения${rooms.length ? ` (${rooms.length})` : ''}</h2>
+: '<div style="font-size:13px; color:#8d97a5; margin-bottom:8px;">Помещений пока нет. Замерьте их один раз — дальше в калькуляторе останется только отмечать нужные.</div>';
+return `<h2 style="margin-top:18px;">Помещения${rooms.length ? ` (${rooms.length})` : ''}</h2>
 ${list}
 ${canEdit ? `<button type="button" class="measure-open-btn" onclick="addRoom('${obj.id}')">+ Помещение</button>` : ''}`;
 }
 </script>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
-<div class="update-banner-text">🔄 Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>
+<div class="update-banner-text">Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>
 <button type="button" class="update-banner-btn" onclick="reloadForUpdate()">Обновить</button>
 <button type="button" class="update-banner-close" onclick="dismissUpdateBanner()" aria-label="Скрыть">✕</button>
 </div>

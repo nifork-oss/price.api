@@ -4,46 +4,85 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Счёт — Кабинет мастера</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f1f5f9; margin: 0; padding: 16px; color: #0f172a; }
+body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #eef1f4; margin: 0; padding: 16px; color: #1d2733; }
 .container { max-width: 640px; margin: 0 auto; }
-.loader { text-align: center; color: #64748b; padding: 60px 0; font-size: 14px; }
-.error-box { background: #fff; border: 1px solid #fecaca; border-radius: 14px; padding: 24px; text-align: center; color: #b91c1c; font-size: 14px; margin-top: 40px; }
-.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 20px; margin-bottom: 14px; }
+.loader { text-align: center; color: #5d6878; padding: 60px 0; font-size: 14px; }
+.error-box { background: #fff; border: 1px solid #efc6bb; border-radius: 14px; padding: 24px; text-align: center; color: #a5321f; font-size: 14px; margin-top: 40px; }
+.card { background: #fff; border: 1px solid #dfe3e8; border-radius: 14px; padding: 20px; margin-bottom: 14px; }
 .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
-.doc-title { font-size: 20px; font-weight: 800; color: #4f46e5; margin: 0; }
-.doc-badge { background: #fef9c3; color: #a16207; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
-.meta-row { font-size: 13px; color: #475569; margin: 4px 0; }
-.meta-row b { color: #0f172a; }
-.note-box { background: #f8fafc; border-left: 4px solid #4f46e5; border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #334155; margin-top: 10px; }
+.doc-title { font-size: 20px; font-weight: 800; color: #23408e; margin: 0; }
+.doc-badge { background: #f6efd6; color: #85600f; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.meta-row { font-size: 13px; color: #485566; margin: 4px 0; }
+.meta-row b { color: #1d2733; }
+.note-box { background: #f4f6f8; border-left: 4px solid #23408e; border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #33404f; margin-top: 10px; }
 .items-list { margin-top: 4px; }
-.item-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+.item-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #dfe3e8; font-size: 13px; }
 .item-row:last-child { border-bottom: none; }
-.item-name { color: #334155; flex: 1; min-width: 0; }
-.item-meta { color: #94a3b8; font-size: 12px; }
-.item-sum { font-weight: 700; color: #0f172a; white-space: nowrap; }
-.total-box { display: flex; justify-content: space-between; align-items: center; background: #0f172a; color: #fff; border-radius: 10px; padding: 14px 16px; margin-top: 14px; font-weight: 700; font-size: 16px; }
+.item-name { color: #33404f; flex: 1; min-width: 0; }
+.item-meta { color: #8d97a5; font-size: 12px; }
+.item-sum { font-weight: 700; color: #1d2733; white-space: nowrap; }
+.total-box { display: flex; justify-content: space-between; align-items: center; background: #1d2733; color: #fff; border-radius: 10px; padding: 14px 16px; margin-top: 14px; font-weight: 700; font-size: 16px; }
 .attachment-chip-wrap { display: flex; align-items: center; gap: 4px; }
-.attachment-thumb { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: #e2e8f0; }
+.attachment-thumb { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: #dfe3e8; }
 .attachment-link { text-decoration: none; }
-.attachment-download-btn { background: #e0e7ff; color: #4338ca; border: none; border-radius: 6px; width: 30px; height: 30px; font-size: 13px; cursor: pointer; flex-shrink: 0; }
+.attachment-download-btn { background: #dfe6f4; color: #1c3473; border: none; border-radius: 6px; width: 30px; height: 30px; font-size: 13px; cursor: pointer; flex-shrink: 0; }
 .attachment-download-btn:disabled { opacity: 0.6; }
 .pay-box { margin-top: 12px; border-radius: 10px; padding: 12px 14px; font-size: 14px; }
-.pay-box-owes { background: #fef2f2; color: #991b1b; }
-.pay-box-paid { background: #f0fdf4; color: #166534; }
-.pay-box-over { background: #eff6ff; color: #1e40af; }
+.pay-box-owes { background: #fbeeea; color: #8c2a1a; }
+.pay-box-paid { background: #eef6f1; color: #1f5c3d; }
+.pay-box-over { background: #eef2f9; color: #1c3473; }
 .pay-box-main { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
 .pay-box-sub { font-size: 13px; margin-top: 4px; opacity: 0.85; }
 .pay-list { margin-top: 8px; padding-top: 8px; border-top: 1px dashed currentColor; font-size: 13px; }
 .pay-list-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
-.item-rooms { font-size: 12px; color: #4338ca; margin-top: 2px; }
-.footer-link { display: block; text-align: center; font-size: 12px; color: #94a3b8; margin-top: 18px; text-decoration: none; }
+.item-rooms { font-size: 12px; color: #1c3473; margin-top: 2px; }
+.footer-link { display: block; text-align: center; font-size: 12px; color: #8d97a5; margin-top: 18px; text-decoration: none; }
+
+/* ===== Оформление «Сметный документ» =====
+   Белая «бумага», тонкие линейки, чернильно-синий акцент, шрифт Golos,
+   цифры ровными столбцами. Цвета по всему файлу заменены по таблице. */
+body { background-color: #f4f6f8; color: #1d2733; font-variant-numeric: tabular-nums; }
+.container { border-radius: 14px; box-shadow: none; border-color: #dfe3e8; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; color: #1d2733; }
+h1 { font-size: 22px; text-align: left; }
+h2 { font-size: 16px; }
+.form-group label { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; color: #5d6878; }
+.btn { border-radius: 8px; }
+.btn-sm { border-radius: 6px; }
+.tab-menu { border-radius: 10px; }
+.tab-btn.active { box-shadow: 0 0 0 1px #dfe3e8; }
+.accordion-category { border-radius: 10px; }
+.accordion-header { border-left: none; background: #ffffff; font-size: 14px; font-weight: 600; color: #1d2733; }
+.accordion-category.open .accordion-header { background: #f4f6f8; }
+.history-card, .profile-box, .user-card, .object-card, .service-card { border-radius: 10px; }
+.search-box { border-radius: 8px; }
+
+svg.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vertical-align: -4px; flex-shrink: 0; }
+
+/* --- страница счёта для заказчика: как бланк сметы --- */
+body { background: #f4f6f8; }
+.card { border-radius: 10px; border-color: #dfe3e8; }
+.doc-title { color: #1d2733; font-weight: 600; font-size: 22px; letter-spacing: -0.01em; }
+.doc-badge { border-radius: 6px; }
+.meta-row b { font-weight: 500; color: #5d6878; }
+.note-box { border-left: none; border: 1px solid #dfe3e8; border-radius: 8px; background: #f4f6f8; }
+.item-row { padding: 11px 0; }
+.item-name { font-size: 14px; font-weight: 500; color: #1d2733; }
+.item-sum { font-weight: 600; }
+.item-rooms { color: #23408e; }
+.total-box { background: #1d2733; border-radius: 8px; font-weight: 600; }
+.pay-box { border-radius: 8px; }
+.attachment-download-btn { border-radius: 8px; }
 </style>
 </head>
 <body>
 <div class="container">
-<div id="loadingState" class="loader">⏳ Загрузка счёта...</div>
+<div id="loadingState" class="loader">Загрузка счёта...</div>
 <div id="errorState" class="error-box" style="display:none;"></div>
 <div id="contentState" style="display:none;"></div>
 </div>
@@ -54,7 +93,7 @@ const WORKER_URL = "https://price-api.nifork.workers.dev";
 function escapeHtml(str) {
 return String(str ?? '')
 .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+.replace(/"/g, "&quot;").replace(/'/g, "&#23408e;");
 }
 
 function getIdFromUrl() {
@@ -90,7 +129,7 @@ const downloadBtn = `<button type="button" class="attachment-download-btn" data-
 if (isImage) {
 return `<div class="attachment-chip-wrap"><a href="${safeHref}" target="_blank" rel="noopener" class="attachment-link"><img src="${safeHref}" class="attachment-thumb" alt="${escapeHtml(att.name)}" title="${escapeHtml(att.name)}"></a>${downloadBtn}</div>`;
 }
-return `<div class="attachment-chip-wrap"><a href="${safeHref}" target="_blank" rel="noopener" class="attachment-link" style="display:flex; align-items:center; gap:4px; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:8px; padding:6px 10px; font-size:12px; color:#334155;">📄 ${escapeHtml(att.name)}</a>${downloadBtn}</div>`;
+return `<div class="attachment-chip-wrap"><a href="${safeHref}" target="_blank" rel="noopener" class="attachment-link" style="display:flex; align-items:center; gap:4px; background:#eef1f4; border:1px solid #dfe3e8; border-radius:8px; padding:6px 10px; font-size:12px; color:#33404f;">${escapeHtml(att.name)}</a>${downloadBtn}</div>`;
 }).join('');
 return `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">${chips}</div>`;
 }
@@ -162,7 +201,7 @@ items.forEach(i => {
 const sum = (Number(i.qty) || 0) * (Number(i.price) || 0);
 rows += `
 <div class="item-row">
-<div class="item-name">${escapeHtml(i.name)}<div class="item-meta">${i.qty} ${escapeHtml(i.unit)} × ${Number(i.price).toLocaleString('ru-RU')} ₽${i.location && !roomsLine(i) ? ` · 📍 ${escapeHtml(i.location)}` : ''}</div>${roomsLine(i) ? `<div class="item-rooms">🏠 ${escapeHtml(roomsLine(i))}</div>` : ''}</div>
+<div class="item-name">${escapeHtml(i.name)}<div class="item-meta">${Number(i.qty).toLocaleString('ru-RU', { maximumFractionDigits: 3 })} ${escapeHtml(i.unit)} × ${Number(i.price).toLocaleString('ru-RU')} ₽${i.location && !roomsLine(i) ? ` · ${escapeHtml(i.location)}` : ''}</div>${roomsLine(i) ? `<div class="item-rooms">${escapeHtml(roomsLine(i))}</div>` : ''}</div>
 <div class="item-sum">${sum.toLocaleString('ru-RU')} ₽</div>
 </div>`;
 });
@@ -171,18 +210,18 @@ const content = document.getElementById('contentState');
 content.innerHTML = `
 <div class="card">
 <div class="doc-header">
-<h1 class="doc-title">${isEstimate ? '📋 Предварительный расчёт' : '🧾 Счёт'}</h1>
+<h1 class="doc-title">${isEstimate ? 'Предварительный расчёт' : 'Счёт'}</h1>
 ${isEstimate ? '<span class="doc-badge">Не счёт на оплату</span>' : ''}
 </div>
-<div class="meta-row">📅 <b>Дата:</b> ${escapeHtml(rec.date || '')}</div>
-${rec.objectName ? `<div class="meta-row">🏠 <b>Объект:</b> ${escapeHtml(rec.objectName)}</div>` : ''}
-${rec.client ? `<div class="meta-row">👤 <b>Заказчик:</b> ${escapeHtml(rec.client)}</div>` : ''}
-${rec.address ? `<div class="meta-row">📍 <b>Адрес:</b> ${escapeHtml(rec.address)}</div>` : ''}
-${rec.note ? `<div class="note-box">📝 ${escapeHtml(rec.note)}</div>` : ''}
+<div class="meta-row"><b>Дата:</b> ${escapeHtml(rec.date || '')}</div>
+${rec.objectName ? `<div class="meta-row"><b>Объект:</b> ${escapeHtml(rec.objectName)}</div>` : ''}
+${rec.client ? `<div class="meta-row"><b>Заказчик:</b> ${escapeHtml(rec.client)}</div>` : ''}
+${rec.address ? `<div class="meta-row"><b>Адрес:</b> ${escapeHtml(rec.address)}</div>` : ''}
+${rec.note ? `<div class="note-box">${escapeHtml(rec.note)}</div>` : ''}
 </div>
 
 <div class="card">
-<div class="items-list">${rows || '<div style="text-align:center; color:#94a3b8; padding:16px 0;">Нет позиций</div>'}</div>
+<div class="items-list">${rows || '<div style="text-align:center; color:#8d97a5; padding:16px 0;">Нет позиций</div>'}</div>
 <div class="total-box">
 <div>${isEstimate ? 'Итого по расчёту' : 'Итого'}</div>
 <div>${Number(rec.total || 0).toLocaleString('ru-RU')} ₽</div>
@@ -192,7 +231,7 @@ ${renderPaymentsHtml(rec)}
 
 ${Array.isArray(rec.attachments) && rec.attachments.length > 0 ? `
 <div class="card">
-<div style="font-weight:700; font-size:13px; color:#334155; margin-bottom:4px;">📎 Фото и файлы отчёта</div>
+<div style="font-weight:700; font-size:13px; color:#33404f; margin-bottom:4px;">Фото и файлы отчёта</div>
 ${renderAttachmentsHtml(rec.attachments)}
 </div>
 ` : ''}

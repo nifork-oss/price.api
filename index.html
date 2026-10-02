@@ -9,84 +9,87 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-* { box-sizing: border-box; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; -webkit-tap-highlight-color: transparent; }
-body { background-color: #f8fafc; margin: 0; padding: 12px 8px; color: #1e293b; }
-.container { max-width: 680px; margin: 0 auto; background: #ffffff; padding: 20px 16px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05); }
+* { box-sizing: border-box; font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+body { background-color: #f4f6f8; margin: 0; padding: 12px 8px; color: #1f2a37; }
+.container { max-width: 680px; margin: 0 auto; background: #ffffff; padding: 20px 16px; border-radius: 16px; border: 1px solid #dfe3e8; box-shadow: 0 4px 20px rgba(29, 39, 51, 0.05); }
 /* Стили шапки сайта */
-.site-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid #e2e8f0; gap: 12px; }
+.site-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid #dfe3e8; gap: 12px; }
 .site-logo-area { display: flex; align-items: center; gap: 12px; }
-.site-logo-icon { width: 42px; height: 42px; background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2); }
-.site-title-block h2 { font-size: 16px; margin: 0; color: #0f172a; font-weight: 700; letter-spacing: -0.01em; }
-.site-title-block p { font-size: 11px; margin: 2px 0 0 0; color: #64748b; font-weight: 500; }
-.header-status { display: flex; align-items: center; gap: 6px; background: #f0fdf4; border: 1px solid #dcfce7; padding: 6px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #16a34a; white-space: nowrap; }
-.status-dot { width: 7px; height: 7px; background: #22c55e; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2); }
-h1, h2, h3 { color: #0f172a; margin-top: 0; font-weight: 700; letter-spacing: -0.02em; }
+.site-logo-icon { width: 42px; height: 42px; background: linear-gradient(135deg, #23408e 0%, #3556a8 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; box-shadow: 0 4px 12px rgba(35, 64, 142, 0.2); }
+.site-title-block h2 { font-size: 16px; margin: 0; color: #1d2733; font-weight: 700; letter-spacing: -0.01em; }
+.site-title-block p { font-size: 11px; margin: 2px 0 0 0; color: #5d6878; font-weight: 500; }
+.header-status { display: flex; align-items: center; gap: 6px; background: #eef6f1; border: 1px solid #dcefe3; padding: 6px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #23704a; white-space: nowrap; }
+.status-dot { width: 7px; height: 7px; background: #2f7d55; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 2px rgba(35, 112, 74, 0.2); }
+h1, h2, h3 { color: #1d2733; margin-top: 0; font-weight: 700; letter-spacing: -0.02em; }
 h1 { font-size: 18px; text-align: center; margin-bottom: 16px; }
 h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .nav-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.nav-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; background: #f1f5f9; color: #475569; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; border: 1px solid #e2e8f0; min-height: 38px; }
-.tab-menu { display: flex; gap: 6px; margin-bottom: 16px; background: #f1f5f9; padding: 4px; border-radius: 12px; border: 1px solid #e2e8f0; }
-.tab-btn { flex: 1; padding: 8px 12px; background: transparent; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 12px; color: #64748b; white-space: nowrap; text-align: center; }
-.tab-btn.active { background: #ffffff; color: #0f172a; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-.search-box { width: 100%; padding: 12px 14px; margin-bottom: 16px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 15px; outline: none; background: #fff; }
-.accordion-category { margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff; }
-.accordion-header { background: #f8fafc; font-weight: 700; padding: 12px 14px; font-size: 13px; color: #334155; border-left: 4px solid #6366f1; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
-.accordion-header:hover { background: #f1f5f9; }
-.accordion-content { display: none; padding: 10px; background: #fff; border-top: 1px solid #e2e8f0; }
+.nav-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; background: #eef1f4; color: #485566; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; border: 1px solid #dfe3e8; min-height: 38px; }
+.tab-menu { display: flex; gap: 6px; margin-bottom: 16px; background: #eef1f4; padding: 4px; border-radius: 12px; border: 1px solid #dfe3e8; }
+.tab-btn { flex: 1; padding: 8px 12px; background: transparent; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 12px; color: #5d6878; white-space: nowrap; text-align: center; }
+.tab-btn.active { background: #ffffff; color: #1d2733; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.search-box { width: 100%; padding: 12px 14px; margin-bottom: 16px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 15px; outline: none; background: #fff; }
+.accordion-category { margin-bottom: 10px; border: 1px solid #dfe3e8; border-radius: 12px; overflow: hidden; background: #ffffff; }
+.accordion-header { background: #f4f6f8; font-weight: 700; padding: 12px 14px; font-size: 13px; color: #33404f; border-left: 4px solid #3556a8; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.accordion-header:hover { background: #eef1f4; }
+.accordion-content { display: none; padding: 10px; background: #fff; border-top: 1px solid #dfe3e8; }
 .accordion-category.open .accordion-content { display: block; }
-.accordion-arrow { transition: transform 0.2s ease; font-size: 12px; color: #64748b; }
+.accordion-arrow { transition: transform 0.2s ease; font-size: 12px; color: #5d6878; }
 .accordion-category.open .accordion-arrow { transform: rotate(180deg); }
-.service-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.service-card { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .service-card:last-child { margin-bottom: 0; }
 .service-info { flex: 1; }
-.service-title { font-weight: 600; font-size: 13px; color: #0f172a; margin-bottom: 2px; }
-.service-price { color: #059669; font-weight: 700; font-size: 13px; white-space: nowrap; }
-.calc-square-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+.service-title { font-weight: 600; font-size: 13px; color: #1d2733; margin-bottom: 2px; }
+.service-price { color: #23704a; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.calc-square-box { background: #f4f6f8; border: 1px solid #dfe3e8; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
 .form-group { margin-bottom: 12px; }
-.form-group label { display: block; font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
-.form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 16px; background: #fff; color: #0f172a; outline: none; }
-.calc-item-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #e2e8f0; gap: 8px; }
-.total-box { margin-top: 14px; padding: 14px; background: #0f172a; border-radius: 12px; color: #ffffff; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 600; }
-.total-box span { color: #34d399; font-size: 18px; font-weight: 700; }
-.note-box { margin-top: 15px; padding: 12px; background: #f1f5f9; border-left: 4px solid #4f46e5; border-radius: 4px; font-size: 12px; color: #475569; line-height: 1.5; }
+.form-group label { display: block; font-size: 11px; color: #5d6878; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.form-group input, .form-group select { width: 100%; padding: 12px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 16px; background: #fff; color: #1d2733; outline: none; }
+.calc-item-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #dfe3e8; gap: 8px; }
+.total-box { margin-top: 14px; padding: 14px; background: #1d2733; border-radius: 12px; color: #ffffff; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 600; }
+.total-box span { color: #8fd3b0; font-size: 18px; font-weight: 700; }
+.note-box { margin-top: 15px; padding: 12px; background: #eef1f4; border-left: 4px solid #23408e; border-radius: 4px; font-size: 12px; color: #485566; line-height: 1.5; }
 .lock-btn { background: transparent; border: none; cursor: pointer; font-size: 16px; padding: 4px; transition: transform 0.1s; }
 .lock-btn:active { transform: scale(0.9); }
 .action-btns { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 .btn { padding: 12px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; width: 100%; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
-.btn-success { background: #10b981; color: white; }
-.btn-primary { background: #4f46e5; color: white; }
-.btn-danger { background: #f43f5e; color: white; }
+.btn-success { background: #2f7d55; color: white; }
+.btn-primary { background: #23408e; color: white; }
+.btn-danger { background: #b23a26; color: white; }
 .btn-sm { padding: 4px 8px; font-size: 11px; width: auto; min-height: unset; border-radius: 6px; }
-.admin-controls { display: none; background: #fef3c7; border: 1px solid #fde68a; padding: 12px; border-radius: 12px; margin-bottom: 16px; }
-.loader { text-align: center; color: #4f46e5; font-weight: 600; padding: 16px; font-size: 13px; }
-.admin-history-container { margin-top: 10px; border-top: 1px solid #fde68a; padding-top: 10px; }
-.history-toggle-btn { width: 100%; background: #f59e0b; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-.history-toggle-btn:hover { background: #d97706; }
-.badge-new { background: #ef4444; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: 700; display: none; }
-.admin-history-content { display: none; margin-top: 8px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px; max-height: 220px; overflow-y: auto; }
-.history-card { background: #fff; border: 1px solid #fcd34d; border-radius: 6px; padding: 8px; margin-bottom: 6px; font-size: 11px; position: relative; }
-.extra-works-box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 14px; margin-top: 16px; }
-.extra-work-card { background: #ffffff; border: 1px solid #fed7aa; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.admin-controls { display: none; background: #f6ecd2; border: 1px solid #ecd9a6; padding: 12px; border-radius: 12px; margin-bottom: 16px; }
+.loader { text-align: center; color: #23408e; font-weight: 600; padding: 16px; font-size: 13px; }
+.admin-history-container { margin-top: 10px; border-top: 1px solid #ecd9a6; padding-top: 10px; }
+.history-toggle-btn { width: 100%; background: #b7791f; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+.history-toggle-btn:hover { background: #9a5f12; }
+.badge-new { background: #b23a26; color: white; font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: 700; display: none; }
+.admin-history-content { display: none; margin-top: 8px; background: #fbf7ec; border: 1px solid #ecd9a6; border-radius: 8px; padding: 8px; max-height: 220px; overflow-y: auto; }
+.history-card { background: #fff; border: 1px solid #d9b45a; border-radius: 6px; padding: 8px; margin-bottom: 6px; font-size: 11px; position: relative; }
+.extra-works-box { background: #fbf5ee; border: 1px solid #ecd1b3; border-radius: 12px; padding: 14px; margin-top: 16px; }
+.extra-work-card { background: #ffffff; border: 1px solid #ecd1b3; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
 .extra-work-card:last-child { margin-bottom: 0; }
-.smeta-item-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.smeta-item-card { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
 .smeta-item-card:last-child { margin-bottom: 0; }
-.add-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px); background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 99999; opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease; max-width: 85%; text-align: center; }
+.add-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px); background: #1d2733; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 99999; opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease; max-width: 85%; text-align: center; }
 .add-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.add-to-cart-btn.just-added { background: #059669; }
+.add-to-cart-btn.just-added { background: #23704a; }
 @keyframes addPulse { 0% { transform: scale(1); } 40% { transform: scale(0.96); } 100% { transform: scale(1); } }
 .add-to-cart-btn.just-added { animation: addPulse 0.3s ease; }
 .unit-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
-.unit-row input[type="number"] { width: 45%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; }
-.unit-row select { width: 55%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; background: white; outline: none; }
-.add-to-cart-btn { background: #ea580c; color: white; border: none; padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 8px; font-weight: 600; width: 100%; min-height: 38px; }
-.invoice-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #fed7aa; gap: 8px; }
+.unit-row input[type="number"] { width: 45%; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 8px; font-size: 14px; outline: none; }
+.unit-row select { width: 55%; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 8px; font-size: 14px; background: white; outline: none; }
+.add-to-cart-btn { background: #a5521a; color: white; border: none; padding: 8px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 8px; font-weight: 600; width: 100%; min-height: 38px; }
+.invoice-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #ecd1b3; gap: 8px; }
 .invoice-item:last-child { border-bottom: none; }
-.invoice-item-info { display: flex; align-items: center; gap: 8px; flex: 1; color: #334155; word-break: break-word; }
-.btn-delete-item { background: #fee2e2; color: #ef4444; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; font-weight: bold; flex-shrink: 0; }
-.extra-works-box .accordion-header { border-left-color: #ea580c; background: #fff7ed; }
-.extra-works-box .accordion-header:hover { background: #ffedd5; }
-.extra-works-box .accordion-content { background: #fffbf7; }
+.invoice-item-info { display: flex; align-items: center; gap: 8px; flex: 1; color: #33404f; word-break: break-word; }
+.btn-delete-item { background: #f6dfd8; color: #b23a26; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; font-weight: bold; flex-shrink: 0; }
+.extra-works-box .accordion-header { border-left-color: #a5521a; background: #fbf5ee; }
+.extra-works-box .accordion-header:hover { background: #f5e6d4; }
+.extra-works-box .accordion-content { background: #fbf8f4; }
 @media (min-width: 481px) {
 body { padding: 20px 15px; }
 .container { padding: 28px; }
@@ -94,40 +97,100 @@ h1 { font-size: 20px; }
 h2 { font-size: 16px; }
 }
 /* ---------- Кнопка «⋯» и шторка действий ---------- */
-.row-more { flex: 0 0 auto; width: 40px; height: 36px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; color: #475569; font-size: 18px; line-height: 1; cursor: pointer; }
-.row-more:active { background: #f1f5f9; }
-.sheet-overlay { display: none; position: fixed; inset: 0; z-index: 90; background: rgba(15, 23, 42, 0.4); }
-.sheet { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; max-width: 680px; margin: 0 auto; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); background: #ffffff; border-radius: 18px 18px 0 0; box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.18); }
+.row-more { flex: 0 0 auto; width: 40px; height: 36px; border: 1px solid #dfe3e8; border-radius: 10px; background: #ffffff; color: #485566; font-size: 18px; line-height: 1; cursor: pointer; }
+.row-more:active { background: #eef1f4; }
+.sheet-overlay { display: none; position: fixed; inset: 0; z-index: 90; background: rgba(29, 39, 51, 0.4); }
+.sheet { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; max-width: 680px; margin: 0 auto; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); background: #ffffff; border-radius: 18px 18px 0 0; box-shadow: 0 -10px 30px rgba(29, 39, 51, 0.18); }
 .sheet.open, .sheet-overlay.open { display: block; }
-.sheet::before { content: ""; display: block; width: 40px; height: 4px; margin: 2px auto 8px; border-radius: 2px; background: #cbd5e1; }
-.sheet-title { padding: 4px 12px 10px; font-size: 13px; color: #64748b; font-weight: 600; }
-.sheet-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 12px; background: none; border: none; border-radius: 10px; text-align: left; font-size: 16px; font-weight: 600; color: #1e293b; cursor: pointer; }
-.sheet-item:active, .sheet-item:hover { background: #f1f5f9; }
+.sheet::before { content: ""; display: block; width: 40px; height: 4px; margin: 2px auto 8px; border-radius: 2px; background: #cfd5dd; }
+.sheet-title { padding: 4px 12px 10px; font-size: 13px; color: #5d6878; font-weight: 600; }
+.sheet-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 12px; background: none; border: none; border-radius: 10px; text-align: left; font-size: 16px; font-weight: 600; color: #1f2a37; cursor: pointer; }
+.sheet-item:active, .sheet-item:hover { background: #eef1f4; }
 .sheet-item-icon { width: 26px; text-align: center; font-size: 19px; }
-.sheet-item-danger { color: #e11d48; }
-.sheet-sep { height: 1px; margin: 4px 8px; background: #e2e8f0; }
-.sheet-cancel { width: 100%; min-height: 48px; margin-top: 6px; background: #f1f5f9; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; color: #475569; cursor: pointer; }
+.sheet-item-danger { color: #b23a26; }
+.sheet-sep { height: 1px; margin: 4px 8px; background: #dfe3e8; }
+.sheet-cancel { width: 100%; min-height: 48px; margin-top: 6px; background: #eef1f4; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; color: #485566; cursor: pointer; }
 body.sheet-open { overflow: hidden; }
 /* Несохранённые изменения прайса */
 .unsaved-dot { display: none; }
 body.price-unsaved .unsaved-dot { display: inline; }
-body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #fde68a; }
+body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #ecd9a6; }
 
 /* ---------- Оповещение «вышла новая версия» ---------- */
-.update-banner { display: none; position: fixed; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top, 0px)); z-index: 95; max-width: 520px; margin: 0 auto; padding: 10px 10px 10px 14px; align-items: center; gap: 10px; background: #0f172a; color: #ffffff; border-radius: 14px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.3); font-size: 14px; font-weight: 600; }
+.update-banner { display: none; position: fixed; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top, 0px)); z-index: 95; max-width: 520px; margin: 0 auto; padding: 10px 10px 10px 14px; align-items: center; gap: 10px; background: #1d2733; color: #ffffff; border-radius: 14px; box-shadow: 0 10px 30px rgba(29, 39, 51, 0.3); font-size: 14px; font-weight: 600; }
 .update-banner.show { display: flex; }
 .update-banner-text { flex: 1; min-width: 0; line-height: 1.3; }
-.update-banner-text small { display: block; color: #94a3b8; font-weight: 500; font-size: 12px; margin-top: 2px; }
-.update-banner-btn { min-height: 40px; padding: 8px 14px; border: none; border-radius: 10px; background: #4f46e5; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-.update-banner-close { width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent; color: #94a3b8; font-size: 18px; cursor: pointer; }
+.update-banner-text small { display: block; color: #8d97a5; font-weight: 500; font-size: 12px; margin-top: 2px; }
+.update-banner-btn { min-height: 40px; padding: 8px 14px; border: none; border-radius: 10px; background: #23408e; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.update-banner-close { width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent; color: #8d97a5; font-size: 18px; cursor: pointer; }
+
+/* ===== Оформление «Сметный документ» =====
+   Белая «бумага», тонкие линейки, чернильно-синий акцент, шрифт Golos,
+   цифры ровными столбцами. Цвета по всему файлу заменены по таблице. */
+body { background-color: #f4f6f8; color: #1d2733; font-variant-numeric: tabular-nums; }
+.container { border-radius: 14px; box-shadow: none; border-color: #dfe3e8; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; color: #1d2733; }
+h1 { font-size: 22px; text-align: left; }
+h2 { font-size: 16px; }
+.form-group label { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; color: #5d6878; }
+.btn { border-radius: 8px; }
+.btn-sm { border-radius: 6px; }
+.tab-menu { border-radius: 10px; }
+.tab-btn.active { box-shadow: 0 0 0 1px #dfe3e8; }
+.accordion-category { border-radius: 10px; }
+.accordion-header { border-left: none; background: #ffffff; font-size: 14px; font-weight: 600; color: #1d2733; }
+.accordion-category.open .accordion-header { background: #f4f6f8; }
+.history-card, .profile-box, .user-card, .object-card, .service-card { border-radius: 10px; }
+.search-box { border-radius: 8px; }
+
+svg.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; vertical-align: -4px; flex-shrink: 0; }
+
+/* --- прайс: детали --- */
+.site-header { border-bottom-color: #dfe3e8; }
+.site-logo-icon { background: #23408e; border-radius: 8px; box-shadow: none; font-size: 20px; font-weight: 700; }
+.site-title-block h2 { font-weight: 600; }
+.header-status { border-radius: 6px; }
+.status-dot { box-shadow: none; }
+.service-price { color: #1d2733; font-weight: 600; }
+.admin-controls { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 10px; }
+.btn-primary { background: #23408e; }
+.btn-ghost { background: #ffffff; color: #23408e; border: 1px solid #c9d3ea; }
+.history-toggle-btn { background: #f4f6f8; color: #1d2733; border: 1px solid #dfe3e8; font-size: 13px; }
+.history-toggle-btn:hover { background: #eef1f4; }
+.badge-new { background: #a5321f; border-radius: 6px; }
+.row-more { border-radius: 8px; }
+.sheet-item { font-weight: 500; }
+.sheet-item-icon { display: inline-flex; color: #5d6878; }
+.sheet-item-danger .sheet-item-icon { color: inherit; }
+.update-banner { background: #1d2733; border-radius: 10px; }
+.update-banner-btn { background: #23408e; border-radius: 8px; }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+<symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h1M12 11h.01M15.5 11h.5M8 15h1M12 15h.01M15.5 15h.5M8 18.5h8"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-3.4 4-5 7-5s5.8 1.6 7 5"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v6h14v-6"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></symbol>
+<symbol id="i-ruler" viewBox="0 0 24 24"><path d="M3 16.5L16.5 3 21 7.5 7.5 21z"/><path d="M7 12.5l1.5 1.5M10 9.5l2 2M13 6.5l1.5 1.5"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 19h14"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+<symbol id="i-unlock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+<symbol id="i-clear" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
 <div class="container">
 <!-- Шапка сайта -->
 <header class="site-header">
 <div class="site-logo-area">
-<div class="site-logo-icon">📐</div>
+<div class="site-logo-icon" aria-hidden="true">₽</div>
 <div class="site-title-block">
 <h2>Прайс и Сметы Онлайн</h2>
 <p>Калькулятор стоимости строительных работ</p>
@@ -138,30 +201,30 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #fde68a; }
 </div>
 </header>
 
-<div id="publicCompanyBanner" style="display:none; background:linear-gradient(90deg,#4f46e5,#7c3aed); color:#fff; border-radius:12px; padding:14px; margin-bottom:14px; text-align:center;"></div>
+<div id="publicCompanyBanner" style="display:none; background:linear-gradient(90deg,#23408e,#23408e); color:#fff; border-radius:12px; padding:14px; margin-bottom:14px; text-align:center;"></div>
 
 <div class="nav-header">
-<a href="calc.html" class="nav-btn">🔑 Личный кабинет для мастера и заказчика</a>
-<div id="adminBadge" style="font-size:12px; font-weight:600; color:#d97706; display:none;">⚙️ Режим редактирования</div>
+<a href="calc.html" class="nav-btn">Личный кабинет для мастера и заказчика</a>
+<div id="adminBadge" style="font-size:12px; font-weight:600; color:#9a5f12; display:none;">Режим редактирования</div>
 </div>
 
 <div class="tab-menu">
-<button type="button" class="tab-btn active" id="tabPriceBtn" onclick="switchTab('price')">📋 Прайс-лист</button>
-<button type="button" class="tab-btn" id="tabCalcBtn" onclick="switchTab('calc')">📐 Смета</button>
+<button type="button" class="tab-btn active" id="tabPriceBtn" onclick="switchTab('price')">Прайс-лист</button>
+<button type="button" class="tab-btn" id="tabCalcBtn" onclick="switchTab('calc')">Смета</button>
 </div>
 
 <div id="adminPanel" class="admin-controls">
-<h3 style="color: #b45309; font-size: 14px; margin-top:0;">Панель администратора</h3>
+<h3 style="font-size: 15px; margin-top:0;">Управление прайсом</h3>
 <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px;">
-<button type="button" class="btn btn-success btn-sm" onclick="addCategoryPrompt()">➕ Категория</button>
-<button type="button" class="btn btn-primary btn-sm" onclick="addItemPrompt()">➕ Услуга в категорию</button>
-<button type="button" class="btn btn-primary btn-sm" onclick="openPriceImportModal()" style="background:#7c3aed;">📋 Импорт текстом</button>
-<button type="button" class="btn btn-primary btn-sm" id="saveCloudBtn" onclick="saveToCloud()" style="background:#059669;">💾 Сохранить в облако<span class="unsaved-dot"> •</span></button>
+<button type="button" class="btn btn-ghost btn-sm" onclick="addCategoryPrompt()">+ Категория</button>
+<button type="button" class="btn btn-ghost btn-sm" onclick="addItemPrompt()">+ Услуга</button>
+<button type="button" class="btn btn-ghost btn-sm" onclick="openPriceImportModal()">Импорт текстом</button>
+<button type="button" class="btn btn-primary btn-sm" id="saveCloudBtn" onclick="saveToCloud()">Сохранить в облако<span class="unsaved-dot"> •</span></button>
 </div>
 <div id="adminHistorySection" class="admin-history-container">
 <button type="button" class="history-toggle-btn" onclick="toggleAdminHistory()">
-<span>📊 История расчетов «Пирога»</span>
-<span id="historyBadge" class="badge-new">Новые!</span>
+<span>История расчетов «Пирога»</span>
+<span id="historyBadge" class="badge-new">новые</span>
 </button>
 <div id="adminHistoryContent" class="admin-history-content">
 <div id="adminHistoryList"></div>
@@ -169,34 +232,34 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #fde68a; }
 </div>
 </div>
 
-<div id="priceImportOverlay" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center; padding:14px;">
+<div id="priceImportOverlay" style="display:none; position:fixed; inset:0; background:rgba(29,39,51,0.6); z-index:9999; align-items:center; justify-content:center; padding:14px;">
 <div style="background:#fff; border-radius:14px; padding:18px; max-width:520px; width:100%; max-height:90vh; overflow-y:auto;">
-<h3 style="margin-top:0; font-size:16px;">📋 Импорт прайс-листа текстом</h3>
-<p style="font-size:12px; color:#64748b;">Категория — строка, начинающаяся с <code>##</code>. Услуга — строка вида <code>Название - Цена - Единица</code> (единицу можно не указывать, по умолчанию «м²»). Пример:</p>
-<pre style="background:#f1f5f9; border-radius:8px; padding:10px; font-size:11px; overflow-x:auto;">## Штукатурка
+<h3 style="margin-top:0; font-size:16px;">Импорт прайс-листа текстом</h3>
+<p style="font-size:12px; color:#5d6878;">Категория — строка, начинающаяся с <code>##</code>. Услуга — строка вида <code>Название - Цена - Единица</code> (единицу можно не указывать, по умолчанию «м²»). Пример:</p>
+<pre style="background:#eef1f4; border-radius:8px; padding:10px; font-size:11px; overflow-x:auto;">## Штукатурка
 Штукатурка стен - 350 - м²
 Грунтовка - 80 - м²
 
 ## Электрика
 Розетка - 500 - шт.</pre>
-<textarea id="priceImportText" rows="8" style="width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:8px; padding:8px; font-family:monospace; font-size:12px; margin-top:8px;" placeholder="Вставьте сюда список..."></textarea>
+<textarea id="priceImportText" rows="8" style="width:100%; box-sizing:border-box; border:1px solid #cfd5dd; border-radius:8px; padding:8px; font-family:monospace; font-size:12px; margin-top:8px;" placeholder="Вставьте сюда список..."></textarea>
 <button type="button" class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="previewPriceImport()">Разобрать и посмотреть</button>
 <div id="priceImportPreview" style="margin-top:10px;"></div>
 <div style="display:flex; gap:8px; margin-top:14px;">
-<button type="button" class="btn btn-sm" style="background:#e2e8f0; color:#334155;" onclick="closePriceImportModal()">Отмена</button>
+<button type="button" class="btn btn-sm" style="background:#dfe3e8; color:#33404f;" onclick="closePriceImportModal()">Отмена</button>
 </div>
 </div>
 </div>
 
 <div id="priceTab">
-<h1>📋 Прайс-лист услуг</h1>
-<input type="text" id="searchInput" class="search-box" placeholder="🔍 Поиск услуги..." oninput="renderPriceList()">
-<div id="loader" class="loader">⏳ Загрузка прайса...</div>
+<h1>Прайс-лист услуг</h1>
+<input type="text" id="searchInput" class="search-box" placeholder="Поиск услуги..." oninput="renderPriceList()">
+<div id="loader" class="loader">Загрузка прайса...</div>
 <div id="priceListContainer"></div>
 </div>
 
 <div id="calcTab" style="display: none;">
-<h1>📐 Смета</h1>
+<h1>Смета</h1>
 
 <div class="calc-square-box">
 <div class="form-group">
@@ -205,11 +268,11 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #fde68a; }
 </div>
 <div class="form-group">
 <label id="calcLabelTitle">Укажите объём по нужным работам и добавьте их к смете:</label>
-<div id="calcCheckboxesContainer" style="max-height: 450px; overflow-y: auto; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; background: #fff;"></div>
+<div id="calcCheckboxesContainer" style="max-height: 450px; overflow-y: auto; border: 1px solid #cfd5dd; border-radius: 8px; padding: 8px; background: #fff;"></div>
 </div>
 </div>
 
-<h2 id="smetaPreviewHeading">🧾 Предпросмотр сметы</h2>
+<h2 id="smetaPreviewHeading">Предпросмотр сметы</h2>
 <div class="invoice-preview">
 <div id="extraWorksCartContainer"></div>
 <div class="total-box">
@@ -219,25 +282,25 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #fde68a; }
 </div>
 
 <div class="calc-square-box" style="margin-top:16px;">
-<h2 style="margin-top:0;">📐 Пирог за 1 м² <span style="font-size:12px; font-weight:normal; color:#64748b;">(только для справки, в сумму сметы не входит)</span></h2>
+<h2 style="margin-top:0;">Пирог за 1 м² <span style="font-size:12px; font-weight:normal; color:#5d6878;">(только для справки, в сумму сметы не входит)</span></h2>
 <div id="calcResultItems"></div>
 <div class="total-box">
 <div>Пирог за 1 м²:</div>
 <div><span id="calcTotalSum">0</span> ₽</div>
 </div>
 <div class="note-box" id="pieNoteDisplay" style="display:none;">
-<b>📌 Примечание к расчёту:</b><br>
+<b>Примечание к расчёту:</b><br>
 <span id="pieNoteText"></span>
 </div>
 <div id="pieNoteEditBox" style="display:none; margin-top:10px;">
-<label style="font-size:12px; font-weight:600; color:#64748b;">Своё примечание к расчёту «1 м²» (показывается всем, кто видит этот прайс, включая PDF)</label>
-<textarea id="pieNoteInput" rows="3" style="width:100%; box-sizing:border-box; border:1px solid #cbd5e1; border-radius:8px; padding:8px; font-size:12px; margin-top:4px;" placeholder="Например: периферийные работы тарифицируются отдельно..."></textarea>
-<button type="button" class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="savePieNote()">💾 Сохранить примечание</button>
+<label style="font-size:12px; font-weight:600; color:#5d6878;">Своё примечание к расчёту «1 м²» (показывается всем, кто видит этот прайс, включая PDF)</label>
+<textarea id="pieNoteInput" rows="3" style="width:100%; box-sizing:border-box; border:1px solid #cfd5dd; border-radius:8px; padding:8px; font-size:12px; margin-top:4px;" placeholder="Например: периферийные работы тарифицируются отдельно..."></textarea>
+<button type="button" class="btn btn-primary btn-sm" style="margin-top:6px;" onclick="savePieNote()">Сохранить примечание</button>
 </div>
 </div>
 
 <div class="action-btns">
-<button type="button" class="btn btn-success" onclick="sendSquarePDF()">📤 Отправить PDF</button>
+<button type="button" class="btn btn-success" onclick="sendSquarePDF()">Отправить PDF</button>
 <button type="button" class="btn btn-primary" onclick="downloadSquarePDF()">⬇️ Скачать PDF</button>
 </div>
 
@@ -314,7 +377,7 @@ banner.style.display = 'block';
 banner.innerHTML = `<div style="font-size:11px; opacity:0.85; margin-bottom:2px;">Прайс-лист компании</div><div style="font-size:18px; font-weight:700;">${escapeHtml(publicCompanyName)}</div>`;
 } else if (publicCompanyNotFound) {
 banner.style.display = 'block';
-banner.style.background = '#dc2626';
+banner.style.background = '#a5321f';
 banner.innerHTML = `<div style="font-size:14px; font-weight:600;">Эта витрина недоступна — ссылка устарела или отключена владельцем.</div>`;
 }
 }
@@ -322,7 +385,7 @@ banner.innerHTML = `<div style="font-size:14px; font-weight:600;">Эта вит�
 function escapeHtml(str) {
 return String(str ?? '')
 .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+.replace(/"/g, "&quot;").replace(/'/g, "&#23408e;");
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -369,7 +432,7 @@ headers: { "Authorization": "Bearer " + authToken }
 }, 3, (attempt, max) => {
 if (loader) {
 loader.style.display = 'block';
-loader.textContent = `⏳ Облако не отвечает, пробую ещё раз (${attempt}/${max})...`;
+loader.textContent = `Облако не отвечает, пробую ещё раз (${attempt}/${max})...`;
 }
 });
 if (res.ok) {
@@ -431,7 +494,7 @@ console.error("Ошибка загрузки прайса:", e);
 }
 
 async function saveToCloud() {
-showSyncStatus('☁️ Сохраняю в облако…');
+showSyncStatus('Сохраняю в облако…');
 const savedSelf = cloudData.self;
 try {
 const res = await fetchWithRetry(`${WORKER_URL}/appdata`, {
@@ -439,7 +502,7 @@ method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
 body: JSON.stringify({ ...cloudData, self: undefined, baseRev: cloudRev ?? undefined })
 }, 3, (attempt, max) => {
-showSyncStatus(`☁️ Не получилось, пробую ещё раз (${attempt}/${max})…`);
+showSyncStatus(`Не получилось, пробую ещё раз (${attempt}/${max})…`);
 });
 if (res.status === 409) {
 hideSyncStatus(0);
@@ -451,7 +514,7 @@ const result = await res.json();
 cloudData = result.data;
 if (typeof result.rev === 'number') cloudRev = result.rev;
 cloudData.self = savedSelf;
-showSyncStatus('✅ Сохранено');
+showSyncStatus('Сохранено');
 hideSyncStatus();
 setPriceUnsaved(false);
 alert("Изменения успешно сохранены на сервер!");
@@ -518,7 +581,7 @@ function checkAdminMode() {
 if (isAdmin || isCompanyMode) {
 document.getElementById('adminPanel').style.display = 'block';
 document.getElementById('adminBadge').style.display = 'block';
-document.getElementById('adminBadge').textContent = isCompanyMode ? '🏢 Свой прайс-лист' : '⚙️ Режим редактирования';
+document.getElementById('adminBadge').textContent = isCompanyMode ? 'Свой прайс-лист' : 'Режим редактирования';
 }
 if (isAdmin) {
 document.getElementById('adminHistorySection').style.display = 'block';
@@ -585,25 +648,25 @@ if (!historyListEl) return;
 historyListEl.innerHTML = '';
 const history = cloudData.pirogHistory || [];
 if (history.length === 0) {
-historyListEl.innerHTML = '<div style="color: #92400e; font-size: 11px;">Пока нет сохраненных расчетов.</div>';
+historyListEl.innerHTML = '<div style="color: #734a12; font-size: 11px;">Пока нет сохраненных расчетов.</div>';
 return;
 }
 history.forEach(rec => {
 let smetaItemsHtml = (rec.extraItems || []).map(i => `• ${escapeHtml(i)}`).join('<br>');
 let pieHtml = (rec.items && rec.items.length > 0)
-? `<div style="margin-top:4px; padding-top:4px; border-top: 1px dashed #fcd34d;"><b>Пирог за 1 м² (доп.):</b><br>${rec.items.map(i => `• ${escapeHtml(i)}`).join('<br>')}</div>`
+? `<div style="margin-top:4px; padding-top:4px; border-top: 1px dashed #d9b45a;"><b>Пирог за 1 м² (доп.):</b><br>${rec.items.map(i => `• ${escapeHtml(i)}`).join('<br>')}</div>`
 : '';
-let unreadDot = rec.viewed === false ? '<span style="color:#ef4444; font-weight:bold;">● <span>' : '';
+let unreadDot = rec.viewed === false ? '<span style="color:#b23a26; font-weight:bold;">● <span>' : '';
 let recordId = rec.id || ('legacy_' + Math.random());
 historyListEl.innerHTML += `
-<div class="history-card" style="${rec.viewed === false ? 'border-color: #ef4444; background: #fff5f5;' : ''}">
+<div class="history-card" style="${rec.viewed === false ? 'border-color: #b23a26; background: #fbf1ee;' : ''}">
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-<span style="font-weight: 700; color: #b45309;">${unreadDot}🏢 ${escapeHtml(rec.object)}</span>
-<button type="button" class="btn btn-sm btn-danger" style="padding: 2px 6px; font-size: 10px;" onclick="deletePirogRecord('${recordId}')">🗑 Удалить</button>
+<span style="font-weight: 700; color: #8a5a14;">${unreadDot}${escapeHtml(rec.object)}</span>
+<button type="button" class="btn btn-sm btn-danger" style="padding: 2px 6px; font-size: 10px;" onclick="deletePirogRecord('${recordId}')">Удалить</button>
 </div>
-<div style="font-size: 10px; color: #78350f; margin-bottom: 2px;">📅 ${rec.date}</div>
-<div style="color: #059669; font-weight: 600; margin: 4px 0;">Смета: ${Number(rec.extraTotal || 0).toLocaleString('ru-RU')} ₽${rec.total ? ` + пирог за 1м²: ${Number(rec.total).toLocaleString('ru-RU')} ₽` : ''}</div>
-<div style="color: #475569; font-size: 10px; background: #f8fafc; padding: 4px; border-radius: 4px;">${smetaItemsHtml || '<span style="color:#94a3b8;">нет позиций</span>'}</div>
+<div style="font-size: 10px; color: #5c3c10; margin-bottom: 2px;">${rec.date}</div>
+<div style="color: #23704a; font-weight: 600; margin: 4px 0;">Смета: ${Number(rec.extraTotal || 0).toLocaleString('ru-RU')} ₽${rec.total ? ` + пирог за 1м²: ${Number(rec.total).toLocaleString('ru-RU')} ₽` : ''}</div>
+<div style="color: #485566; font-size: 10px; background: #f4f6f8; padding: 4px; border-radius: 4px;">${smetaItemsHtml || '<span style="color:#8d97a5;">нет позиций</span>'}</div>
 ${pieHtml}
 </div>
 `;
@@ -692,7 +755,7 @@ categoryBlock.appendChild(headerEl);
 const contentEl = document.createElement('div');
 contentEl.className = 'accordion-content';
 if (filteredItems.length === 0) {
-contentEl.innerHTML = '<div style="font-size:12px; color:#94a3b8; padding:4px;">Нет услуг в этой категории</div>';
+contentEl.innerHTML = '<div style="font-size:12px; color:#8d97a5; padding:4px;">Нет услуг в этой категории</div>';
 } else {
 filteredItems.forEach(item => {
 const srv = item.service;
@@ -717,7 +780,7 @@ categoryBlock.appendChild(contentEl);
 container.appendChild(categoryBlock);
 });
 if (!hasResults && query) {
-container.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:20px;">Ничего не найдено</div>';
+container.innerHTML = '<div style="text-align:center; color:#8d97a5; padding:20px;">Ничего не найдено</div>';
 }
 }
 
@@ -763,7 +826,7 @@ headerEl.innerHTML = `
 <span>${escapeHtml(catName)}</span>
 </div>
 <div style="display:flex; align-items:center; gap:8px;">
-<span style="font-size:11px; color:#64748b; font-weight:normal;">(${items.length})</span>
+<span style="font-size:11px; color:#5d6878; font-weight:normal;">(${items.length})</span>
 <span class="accordion-arrow">▼</span>
 </div>
 `;
@@ -779,27 +842,27 @@ let unitsOptions = DEFAULT_UNITS.map(u => `<option value="${escapeHtml(u)}" ${u 
 let lockButtonHtml = '';
 if (isAdmin || isCompanyMode) {
 lockButtonHtml = isLocked
-? `<button type="button" class="lock-btn" onclick="event.stopPropagation(); toggleLock(${idx})" title="Вернуть в пирог">🔒</button>`
-: `<button type="button" class="lock-btn" onclick="event.stopPropagation(); toggleLock(${idx})" title="Исключить из пирога">🔓</button>`;
+? `<button type="button" class="lock-btn" onclick="event.stopPropagation(); toggleLock(${idx})" title="Вернуть в пирог" aria-label="Вернуть в пирог"><svg class="ic"><use href="#i-lock"/></svg></button>`
+: `<button type="button" class="lock-btn" onclick="event.stopPropagation(); toggleLock(${idx})" title="Исключить из пирога" aria-label="Исключить из пирога"><svg class="ic"><use href="#i-unlock"/></svg></button>`;
 }
 const pieToggleHtml = !isLocked
-? `<label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#4f46e5; margin-top:6px; font-weight:600;">
-<input type="checkbox" class="calc-checkbox" value="${idx}" onchange="renderSquareCalc()" style="width:16px; height:16px; accent-color:#4f46e5;">
+? `<label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#23408e; margin-top:6px; font-weight:600;">
+<input type="checkbox" class="calc-checkbox" value="${idx}" onchange="renderSquareCalc()" style="width:16px; height:16px; accent-color:#23408e;">
 Учитывать в «Пироге» за 1 м²
 </label>`
-: `<div style="font-size:11px; color:#9a3412; margin-top:6px;">Не входит в пирог — тарифицируется отдельно по объёму</div>`;
+: `<div style="font-size:11px; color:#7a3d14; margin-top:6px;">Не входит в пирог — тарифицируется отдельно по объёму</div>`;
 contentEl.innerHTML += `
 <div class="smeta-item-card">
 <div class="service-title" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
 <span style="display:flex; align-items:center; gap:6px;">${lockButtonHtml}${escapeHtml(srv.name)}</span>
-<span class="service-price" style="font-size:12px; color:#059669; font-weight:700; white-space:nowrap;">${Number(srv.price).toLocaleString('ru-RU')} ₽</span>
+<span class="service-price" style="font-size:12px; color:#23704a; font-weight:700; white-space:nowrap;">${Number(srv.price).toLocaleString('ru-RU')} ₽</span>
 </div>
 ${pieToggleHtml}
 <div class="unit-row">
-<input type="number" id="smeta_qty_${idx}" min="0" step="0.1" value="1" placeholder="Кол-во">
+<input type="number" id="smeta_qty_${idx}" min="0" step="any" value="1" placeholder="Кол-во">
 <select id="smeta_unit_${idx}">${unitsOptions}</select>
 </div>
-<button type="button" class="add-to-cart-btn" data-idx="${idx}" onclick="addSmetaItem(${idx})">➕ Добавить к смете</button>
+<button type="button" class="add-to-cart-btn" data-idx="${idx}" onclick="addSmetaItem(${idx})">Добавить к смете</button>
 </div>
 `;
 });
@@ -807,7 +870,7 @@ categoryBlock.appendChild(contentEl);
 container.appendChild(categoryBlock);
 });
 if (totalVisibleItems === 0) {
-container.innerHTML = '<div style="font-size:12px; color:#94a3b8; text-align:center; padding: 10px;">Нет доступных для расчета позиций</div>';
+container.innerHTML = '<div style="font-size:12px; color:#8d97a5; text-align:center; padding: 10px;">Нет доступных для расчета позиций</div>';
 }
 renderSquareCalc();
 renderSmetaCart();
@@ -820,7 +883,7 @@ container.innerHTML = '';
 const checkboxes = document.querySelectorAll('.calc-checkbox:checked');
 let total = 0;
 if (checkboxes.length === 0) {
-container.innerHTML = '<div style="font-size:12px; color:#94a3b8; text-align:center; padding: 10px 0;">Отметьте галочками работы, которые входят в пирог</div>';
+container.innerHTML = '<div style="font-size:12px; color:#8d97a5; text-align:center; padding: 10px 0;">Отметьте галочками работы, которые входят в пирог</div>';
 document.getElementById('calcTotalSum').textContent = '0';
 return;
 }
@@ -831,7 +894,7 @@ if (item && !item.isLockedForSquare) {
 total += Number(item.price);
 container.innerHTML += `
 <div class="calc-item-row">
-<span style="color:#334155; flex:1;">${escapeHtml(item.name)}</span>
+<span style="color:#33404f; flex:1;">${escapeHtml(item.name)}</span>
 <span style="font-weight:600; white-space:nowrap;">${Number(item.price).toLocaleString('ru-RU')} ₽</span>
 </div>
 `;
@@ -917,10 +980,11 @@ if (isNaN(qty) || qty <= 0) {
 alert('Укажите корректное количество!');
 return;
 }
-if (unit === 'пог. м') qty = Math.ceil(qty);
+// Погонный метр: меньше одного не бывает, больше — считается как есть (1,001 → 1,001)
+if (unit === 'пог. м') qty = Math.max(1, qty);
 smetaCart.push({ name: srv.name, price: Number(srv.price), qty, unit });
 renderSmetaCart();
-showAddToast(`✅ Добавлено: ${srv.name}`);
+showAddToast(`Добавлено: ${srv.name}`);
 const btn = document.querySelector(`.add-to-cart-btn[data-idx="${idx}"]`);
 if (btn) {
 btn.classList.remove('just-added');
@@ -944,7 +1008,7 @@ const container = document.getElementById('extraWorksCartContainer');
 if (!container) return;
 container.innerHTML = '';
 if (smetaCart.length === 0) {
-container.innerHTML = '<div style="color:#94a3b8; font-size:12px; text-align:center; padding:10px 0;">Пока ничего не добавлено — укажите объём у нужных работ выше</div>';
+container.innerHTML = '<div style="color:#8d97a5; font-size:12px; text-align:center; padding:10px 0;">Пока ничего не добавлено — укажите объём у нужных работ выше</div>';
 } else {
 smetaCart.forEach((item, idx) => {
 const sum = item.qty * item.price;
@@ -991,11 +1055,11 @@ pieTotal += Number(item.price);
 pieNamesArray.push(`${item.name} (${item.price} ₽)`);
 pieRows += `
 <tr>
-<td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(item.name)}</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">1</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">м²</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${Number(item.price).toLocaleString('ru-RU')} ₽</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${Number(item.price).toLocaleString('ru-RU')} ₽</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px;">${escapeHtml(item.name)}</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: center;">1</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: center;">м²</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: right;">${Number(item.price).toLocaleString('ru-RU')} ₽</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: right;">${Number(item.price).toLocaleString('ru-RU')} ₽</td>
 </tr>`;
 }
 });
@@ -1008,11 +1072,11 @@ const sum = item.qty * item.price;
 smetaNamesArray.push(`${item.name} — ${item.qty} ${item.unit} (${sum} ₽)`);
 smetaRows += `
 <tr>
-<td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(item.name)}</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.qty}</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${escapeHtml(item.unit)}</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${Number(item.price).toLocaleString('ru-RU')} ₽</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">${sum.toLocaleString('ru-RU')} ₽</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px;">${escapeHtml(item.name)}</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: center;">${item.qty}</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: center;">${escapeHtml(item.unit)}</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: right;">${Number(item.price).toLocaleString('ru-RU')} ₽</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px; text-align: right;">${sum.toLocaleString('ru-RU')} ₽</td>
 </tr>`;
 });
 
@@ -1028,34 +1092,34 @@ printContainer.style.top = (window.scrollY || document.documentElement.scrollTop
 printContainer.style.left = '0';
 printContainer.style.width = '750px';
 printContainer.style.background = '#ffffff';
-printContainer.style.color = '#333333';
+printContainer.style.color = '#1d2733';
 printContainer.style.padding = '30px';
 printContainer.style.boxSizing = 'border-box';
 printContainer.style.zIndex = '999999';
 printContainer.style.fontFamily = 'Arial, sans-serif';
 printContainer.innerHTML = `
-<h2 style="color: #4f46e5; border-bottom: 2px solid #4f46e5; padding-bottom: 8px; margin-top:0; font-size: 22px;">СМЕТА</h2>
+<h2 style="color: #23408e; border-bottom: 2px solid #23408e; padding-bottom: 8px; margin-top:0; font-size: 22px;">СМЕТА</h2>
 <p style="margin: 6px 0; font-size: 14px;"><b>Дата:</b> ${dateStr}</p>
 <p style="margin: 6px 0; font-size: 14px;"><b>Объект:</b> ${escapeHtml(objectName)}</p>
 ${smetaRows ? `
 <table style="width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px;">
 <thead>
-<tr style="background-color: #f8fafc;">
-<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Наименование работы</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Кол-во</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Ед.</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">Цена</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">Сумма</th>
+<tr style="background-color: #f4f6f8;">
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: left;">Наименование работы</th>
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: center;">Кол-во</th>
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: center;">Ед.</th>
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: right;">Цена</th>
+<th style="border: 1px solid #cfd5dd; padding: 10px; text-align: right;">Сумма</th>
 </tr>
 </thead>
 <tbody>${smetaRows}</tbody>
 </table>
 ` : ''}
-<h3 style="text-align: right; margin-top: 20px; font-size: 20px; color: #000; border-top: 2px solid #0f172a; padding-top: 12px;">ИТОГО ПО СМЕТЕ: ${smetaTotal.toLocaleString('ru-RU')} ₽</h3>
-${pieTotal > 0 ? `<p style="text-align: right; margin-top: 8px; font-size: 12px; color: #64748b;">Справочно: стоимость 1 м² по отмеченным работам — ${pieTotal.toLocaleString('ru-RU')} ₽</p>` : ''}
+<h3 style="text-align: right; margin-top: 20px; font-size: 20px; color: #000; border-top: 2px solid #1d2733; padding-top: 12px;">ИТОГО ПО СМЕТЕ: ${smetaTotal.toLocaleString('ru-RU')} ₽</h3>
+${pieTotal > 0 ? `<p style="text-align: right; margin-top: 8px; font-size: 12px; color: #5d6878;">Справочно: стоимость 1 м² по отмеченным работам — ${pieTotal.toLocaleString('ru-RU')} ₽</p>` : ''}
 ${currentPieNote ? `
-<div style="margin-top: 25px; padding: 12px; background: #f8fafc; border-left: 4px solid #4f46e5; border-radius: 4px; font-size: 11px; color: #555; line-height: 1.5;">
-<b>📌 Примечание к расчёту:</b><br>
+<div style="margin-top: 25px; padding: 12px; background: #f4f6f8; border-left: 4px solid #23408e; border-radius: 4px; font-size: 11px; color: #485566; line-height: 1.5;">
+<b>Примечание к расчёту:</b><br>
 ${escapeHtml(currentPieNote)}
 </div>
 ` : ''}
@@ -1174,19 +1238,19 @@ const entries = parsePriceImportText(text);
 pendingPriceImportEntries = entries;
 const preview = document.getElementById('priceImportPreview');
 if (entries.length === 0) {
-preview.innerHTML = '<div style="color:#dc2626; font-size:13px;">Ничего не распознано — проверьте формат.</div>';
+preview.innerHTML = '<div style="color:#a5321f; font-size:13px;">Ничего не распознано — проверьте формат.</div>';
 return;
 }
 const catCount = entries.filter(e => e.isCategory).length;
 const itemCount = entries.filter(e => !e.isCategory).length;
 const rows = entries.map(e => e.isCategory
-? `<div style="font-weight:700; margin-top:6px; color:#7c3aed;">## ${escapeHtml(e.name)}</div>`
+? `<div style="font-weight:700; margin-top:6px; color:#23408e;">## ${escapeHtml(e.name)}</div>`
 : `<div style="font-size:12px; padding-left:8px;">${escapeHtml(e.name)} — ${e.price} ₽ / ${escapeHtml(e.unit)}</div>`
 ).join('');
 preview.innerHTML = `
-<div style="font-size:12px; color:#334155; margin-bottom:6px;">Распознано: <b>${catCount}</b> категорий, <b>${itemCount}</b> услуг</div>
-<div style="max-height:220px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; padding:8px;">${rows}</div>
-<button type="button" class="btn btn-success btn-sm" style="margin-top:10px;" onclick="confirmPriceImport()">✅ Добавить в прайс-лист (${itemCount} услуг)</button>
+<div style="font-size:12px; color:#33404f; margin-bottom:6px;">Распознано: <b>${catCount}</b> категорий, <b>${itemCount}</b> услуг</div>
+<div style="max-height:220px; overflow-y:auto; border:1px solid #dfe3e8; border-radius:8px; padding:8px;">${rows}</div>
+<button type="button" class="btn btn-success btn-sm" style="margin-top:10px;" onclick="confirmPriceImport()">Добавить в прайс-лист (${itemCount} услуг)</button>
 `;
 }
 
@@ -1197,7 +1261,7 @@ pendingPriceImportEntries = [];
 renderPriceList();
 renderCalcCheckboxes();
 closePriceImportModal();
-alert('Добавлено в прайс-лист. Не забудьте нажать «💾 Сохранить в облако».');
+alert('Добавлено в прайс-лист. Не забудьте нажать «Сохранить в облако».');
 }
 
 function addCategoryPrompt() {
@@ -1273,6 +1337,13 @@ renderCalcCheckboxes();
 }
 
 /* ---------- Шторка действий ---------- */
+// Значки в шторке действий — строгие линейные вместо эмодзи
+const SHEET_ICONS = { '⬇️': 'download', '🔗': 'link', '🔒': 'lock', '🔓': 'unlock', '✏️': 'edit', '🗑️': 'trash', '🗑': 'trash',
+'📤': 'send', '🧹': 'clear', '💬': 'chat', '📋': 'copy', '📏': 'ruler', '➕': 'plus' };
+function sheetIconHtml(icon) {
+const id = SHEET_ICONS[icon];
+return id ? `<svg class="ic"><use href="#i-${id}"/></svg>` : '';
+}
 let sheetActions = [];
 
 function openSheet(title, items) {
@@ -1280,7 +1351,7 @@ sheetActions = items.map(i => i && i.onClick);
 document.getElementById('sheetTitle').textContent = title || '';
 document.getElementById('sheetItems').innerHTML = items.map((item, idx) => {
 if (!item) return '<div class="sheet-sep"></div>';
-return `<button type="button" class="sheet-item${item.danger ? ' sheet-item-danger' : ''}" onclick="runSheetAction(${idx})"><span class="sheet-item-icon" aria-hidden="true">${item.icon || ''}</span>${escapeHtml(item.label)}</button>`;
+return `<button type="button" class="sheet-item${item.danger ? ' sheet-item-danger' : ''}" onclick="runSheetAction(${idx})"><span class="sheet-item-icon" aria-hidden="true">${sheetIconHtml(item.icon)}</span>${escapeHtml(item.label)}</button>`;
 }).join('');
 document.getElementById('sheet').classList.add('open');
 document.getElementById('sheetOverlay').classList.add('open');
@@ -1382,7 +1453,7 @@ e.returnValue = '';
 </div>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
-<div class="update-banner-text">🔄 Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>
+<div class="update-banner-text">Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>
 <button type="button" class="update-banner-btn" onclick="reloadForUpdate()">Обновить</button>
 <button type="button" class="update-banner-close" onclick="dismissUpdateBanner()" aria-label="Скрыть">✕</button>
 </div>
