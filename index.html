@@ -93,6 +93,25 @@ body { padding: 20px 15px; }
 h1 { font-size: 20px; }
 h2 { font-size: 16px; }
 }
+/* ---------- Кнопка «⋯» и шторка действий ---------- */
+.row-more { flex: 0 0 auto; width: 40px; height: 36px; border: 1px solid #e2e8f0; border-radius: 10px; background: #ffffff; color: #475569; font-size: 18px; line-height: 1; cursor: pointer; }
+.row-more:active { background: #f1f5f9; }
+.sheet-overlay { display: none; position: fixed; inset: 0; z-index: 90; background: rgba(15, 23, 42, 0.4); }
+.sheet { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 91; max-width: 680px; margin: 0 auto; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); background: #ffffff; border-radius: 18px 18px 0 0; box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.18); }
+.sheet.open, .sheet-overlay.open { display: block; }
+.sheet::before { content: ""; display: block; width: 40px; height: 4px; margin: 2px auto 8px; border-radius: 2px; background: #cbd5e1; }
+.sheet-title { padding: 4px 12px 10px; font-size: 13px; color: #64748b; font-weight: 600; }
+.sheet-item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 50px; padding: 12px; background: none; border: none; border-radius: 10px; text-align: left; font-size: 16px; font-weight: 600; color: #1e293b; cursor: pointer; }
+.sheet-item:active, .sheet-item:hover { background: #f1f5f9; }
+.sheet-item-icon { width: 26px; text-align: center; font-size: 19px; }
+.sheet-item-danger { color: #e11d48; }
+.sheet-sep { height: 1px; margin: 4px 8px; background: #e2e8f0; }
+.sheet-cancel { width: 100%; min-height: 48px; margin-top: 6px; background: #f1f5f9; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; color: #475569; cursor: pointer; }
+body.sheet-open { overflow: hidden; }
+/* Несохранённые изменения прайса */
+.unsaved-dot { display: none; }
+body.price-unsaved .unsaved-dot { display: inline; }
+body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #fde68a; }
 </style>
 </head>
 <body>
@@ -129,7 +148,7 @@ h2 { font-size: 16px; }
 <button type="button" class="btn btn-success btn-sm" onclick="addCategoryPrompt()">➕ Категория</button>
 <button type="button" class="btn btn-primary btn-sm" onclick="addItemPrompt()">➕ Услуга в категорию</button>
 <button type="button" class="btn btn-primary btn-sm" onclick="openPriceImportModal()" style="background:#7c3aed;">📋 Импорт текстом</button>
-<button type="button" class="btn btn-primary btn-sm" onclick="saveToCloud()" style="background:#059669;">💾 Сохранить в облако</button>
+<button type="button" class="btn btn-primary btn-sm" id="saveCloudBtn" onclick="saveToCloud()" style="background:#059669;">💾 Сохранить в облако<span class="unsaved-dot"> •</span></button>
 </div>
 <div id="adminHistorySection" class="admin-history-container">
 <button type="button" class="history-toggle-btn" onclick="toggleAdminHistory()">
@@ -426,6 +445,7 @@ if (typeof result.rev === 'number') cloudRev = result.rev;
 cloudData.self = savedSelf;
 showSyncStatus('✅ Сохранено');
 hideSyncStatus();
+setPriceUnsaved(false);
 alert("Изменения успешно сохранены на сервер!");
 } else {
 hideSyncStatus(0);
@@ -646,12 +666,7 @@ const catName = group.category ? group.category.name : "Без категори�
 const catIdx = group.catIdx;
 let adminCatButtons = '';
 if ((isAdmin || isCompanyMode) && group.category) {
-adminCatButtons = `
-<div style="display:flex; gap:4px;" onclick="event.stopPropagation()">
-<button type="button" class="btn btn-sm btn-primary" onclick="addItemToCategoryPrompt(${catIdx})" title="Добавить услугу в эту категорию">➕</button>
-<button type="button" class="btn btn-sm btn-primary" onclick="editItem(${catIdx})" title="Изменить категорию">✏️</button>
-<button type="button" class="btn btn-sm btn-danger" onclick="deleteItem(${catIdx})" title="Удалить категорию">🗑</button>
-</div>`;
+adminCatButtons = `<button type="button" class="row-more" onclick="event.stopPropagation(); openCategoryActions(${catIdx})" aria-label="Действия с категорией">⋯</button>`;
 }
 const headerEl = document.createElement('div');
 headerEl.className = 'accordion-header';
@@ -676,20 +691,16 @@ const srv = item.service;
 const idx = item.globalIdx;
 let adminServiceButtons = '';
 if (isAdmin || isCompanyMode) {
-adminServiceButtons = `
-<div style="display:flex; gap:4px; margin-top:4px;">
-<button type="button" class="btn btn-sm btn-primary" onclick="editItem(${idx})">✏️ Изменить</button>
-<button type="button" class="btn btn-sm btn-danger" onclick="deleteItem(${idx})">🗑 Удал.</button>
-</div>`;
+adminServiceButtons = `<button type="button" class="row-more" onclick="openServiceActions(${idx})" aria-label="Действия с услугой">⋯</button>`;
 }
 const card = document.createElement('div');
 card.className = 'service-card';
 card.innerHTML = `
 <div class="service-info">
 <div class="service-title">${escapeHtml(srv.name)}</div>
-${adminServiceButtons}
 </div>
 <div class="service-price">${Number(srv.price).toLocaleString('ru-RU')} ₽</div>
+${adminServiceButtons}
 `;
 contentEl.appendChild(card);
 });
@@ -1252,6 +1263,114 @@ cloudData.services.splice(idx, 1);
 renderPriceList();
 renderCalcCheckboxes();
 }
+
+/* ---------- Шторка действий ---------- */
+let sheetActions = [];
+
+function openSheet(title, items) {
+sheetActions = items.map(i => i && i.onClick);
+document.getElementById('sheetTitle').textContent = title || '';
+document.getElementById('sheetItems').innerHTML = items.map((item, idx) => {
+if (!item) return '<div class="sheet-sep"></div>';
+return `<button type="button" class="sheet-item${item.danger ? ' sheet-item-danger' : ''}" onclick="runSheetAction(${idx})"><span class="sheet-item-icon" aria-hidden="true">${item.icon || ''}</span>${escapeHtml(item.label)}</button>`;
+}).join('');
+document.getElementById('sheet').classList.add('open');
+document.getElementById('sheetOverlay').classList.add('open');
+document.body.classList.add('sheet-open');
+}
+
+function closeSheet() {
+document.getElementById('sheet').classList.remove('open');
+document.getElementById('sheetOverlay').classList.remove('open');
+document.body.classList.remove('sheet-open');
+}
+
+function runSheetAction(idx) {
+const fn = sheetActions[idx];
+closeSheet();
+if (typeof fn === 'function') fn();
+}
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+
+// Сколько услуг лежит в категории (до следующей категории)
+function countServicesInCategory(catIdx) {
+const services = cloudData.services || [];
+let n = 0;
+for (let i = catIdx + 1; i < services.length && !services[i].isCategory; i++) n++;
+return n;
+}
+
+function openCategoryActions(catIdx) {
+const cat = (cloudData.services || [])[catIdx];
+if (!cat) return;
+openSheet(cat.name, [
+{ icon: '➕', label: 'Добавить услугу', onClick: () => addItemToCategoryPrompt(catIdx) },
+{ icon: '✏️', label: 'Переименовать', onClick: () => editItem(catIdx) },
+null,
+{ icon: '🗑️', label: 'Удалить категорию', danger: true, onClick: () => deleteCategory(catIdx) },
+]);
+}
+
+function openServiceActions(idx) {
+const srv = (cloudData.services || [])[idx];
+if (!srv) return;
+openSheet(`${srv.name} · ${Number(srv.price).toLocaleString('ru-RU')} ₽`, [
+{ icon: '✏️', label: 'Изменить название и цену', onClick: () => editItem(idx) },
+null,
+{ icon: '🗑️', label: 'Удалить услугу', danger: true, onClick: () => deleteItem(idx) },
+]);
+}
+
+// Удаление категории удаляет только её заголовок — услуги из неё
+// оказываются в категории выше. Предупреждаем об этом заранее.
+function deleteCategory(catIdx) {
+const cat = (cloudData.services || [])[catIdx];
+if (!cat) return;
+const n = countServicesInCategory(catIdx);
+let prevCat = null;
+for (let i = catIdx - 1; i >= 0; i--) {
+if (cloudData.services[i].isCategory) { prevCat = cloudData.services[i]; break; }
+}
+const msg = n === 0
+? `Удалить категорию «${cat.name}»?`
+: `Удалить категорию «${cat.name}»?\n\nУслуги из неё (${n}) не удалятся, а перейдут в ${prevCat ? `категорию «${prevCat.name}»` : 'раздел «Без категории»'}.`;
+if (!confirm(msg)) return;
+cloudData.services.splice(catIdx, 1);
+renderPriceList();
+renderCalcCheckboxes();
+}
+
+/* ---------- Напоминание о несохранённых изменениях прайса ---------- */
+// Правки прайса сохраняются только кнопкой «Сохранить в облако». Пока
+// есть несохранённые изменения, на кнопке горит точка, а при попытке
+// закрыть страницу браузер переспросит.
+let priceUnsaved = false;
+function setPriceUnsaved(value) {
+priceUnsaved = value;
+document.body.classList.toggle('price-unsaved', value);
+}
+['confirmPriceImport', 'addCategoryPrompt', 'addItemPrompt', 'addItemToCategoryPrompt', 'editItem', 'deleteItem', 'deleteCategory'].forEach(name => {
+const original = window[name];
+if (typeof original !== 'function') return;
+window[name] = function (...args) {
+const before = JSON.stringify(cloudData.services || []);
+const result = original.apply(this, args);
+if (JSON.stringify(cloudData.services || []) !== before) setPriceUnsaved(true);
+return result;
+};
+});
+window.addEventListener('beforeunload', (e) => {
+if (!priceUnsaved) return;
+e.preventDefault();
+e.returnValue = '';
+});
 </script>
+<div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+<div class="sheet-title" id="sheetTitle"></div>
+<div id="sheetItems"></div>
+<button type="button" class="sheet-cancel" onclick="closeSheet()">Отмена</button>
+</div>
 </body>
 </html>
