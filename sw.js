@@ -5,7 +5,7 @@
 //
 // При каждом заметном обновлении сайта меняйте номер версии ниже —
 // старый кэш удалится, и у всех подтянутся новые файлы.
-const CACHE_NAME = 'prise-shell-v3';
+const CACHE_NAME = 'prise-shell-v4';
 const SHELL_FILES = [
   './calc.html',
   './index.html',
@@ -48,11 +48,16 @@ self.addEventListener('fetch', (event) => {
 
   // Страницы сайта: всегда спрашиваем сервер о свежей версии (в обход
   // 10-минутного кэша GitHub Pages), без сети — отдаём сохранённую копию.
+  // Важно: из запроса перехода (mode = navigate) нельзя создавать новый
+  // Request с другими настройками — браузер выбрасывает ошибку. Поэтому для
+  // страниц делаем обычный запрос по адресу с cache: 'no-cache'.
   const isPage = req.mode === 'navigate';
-  const networkReq = isPage ? new Request(req, { cache: 'no-cache' }) : req;
+  const doFetch = isPage
+    ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
+    : fetch(req);
 
   event.respondWith(
-    fetch(networkReq)
+    doFetch
       .then((response) => {
         // Сохраняем только успешные ответы — ошибки 404/500 в кэш не кладём.
         if (response.ok && (url.origin === self.location.origin || response.type === 'cors')) {
