@@ -262,7 +262,7 @@ body.calc-active.calc-has-items.has-bottom-nav .add-toast { bottom: calc(146px +
 .mp-mini { flex: 0 0 auto; width: 40px; min-height: 36px; border: 1px solid #c7d2fe; border-radius: 8px; background: #eef2ff; font-size: 16px; cursor: pointer; }
 .unit-row input[type="number"] { flex: 1; width: auto; min-width: 0; }
 .unit-row select { flex: 1.2; width: auto; min-width: 0; }
-.measure-note { margin: 2px 0 4px 10px; font-size: 11px; color: #6366f1; }
+.measure-note { margin: 0 0 2px 10px; font-size: 11px; color: #6366f1; line-height: 1.3; }
 .measure-note summary { cursor: pointer; list-style: none; font-weight: 600; }
 .measure-note summary::-webkit-details-marker { display: none; }
 .measure-note div { color: #475569; white-space: pre-line; margin-top: 2px; }
@@ -336,6 +336,45 @@ body.measure-open { overflow: hidden; }
 .mp-hist-actions button { flex: 1; min-height: 40px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; font-size: 14px; font-weight: 600; color: #334155; cursor: pointer; }
 .mp-hist-actions .danger { color: #e11d48; }
 body.measure-open .add-toast { z-index: 99; bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+
+/* ===================== ПОМЕЩЕНИЯ ===================== */
+.rooms-section { margin: 4px 0 18px; }
+.rooms-section h2 { margin-top: 6px; }
+.rooms-hint { font-size: 12px; color: #64748b; margin: -4px 0 10px; }
+.room-card { background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #6366f1; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.room-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.room-name { font-size: 16px; font-weight: 800; color: #0f172a; overflow-wrap: anywhere; }
+.room-sum { font-size: 16px; font-weight: 800; color: #0f172a; white-space: nowrap; }
+.room-works { margin-top: 8px; }
+.room-work { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid #f1f5f9; }
+.rw-main { flex: 1; min-width: 0; }
+.rw-name { font-size: 14px; font-weight: 600; color: #1e293b; overflow-wrap: anywhere; }
+.rw-meta { font-size: 12px; color: #64748b; margin-top: 1px; }
+.rw-sum { font-size: 14px; font-weight: 700; color: #0f172a; white-space: nowrap; }
+.room-empty { font-size: 13px; color: #94a3b8; padding: 8px 0 2px; }
+.room-actions { display: flex; gap: 6px; margin-top: 10px; }
+.wp-cat { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em; margin: 14px 2px 6px; }
+.wp-item { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 6px; }
+.wp-item.added { border-color: #86efac; }
+.wp-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 10px 12px; background: none; border: none; text-align: left; cursor: pointer; }
+.wp-row-name { flex: 1; font-size: 15px; font-weight: 600; color: #1e293b; }
+.wp-row-price { font-size: 13px; color: #059669; font-weight: 700; white-space: nowrap; }
+.wp-badge { font-size: 12px; color: #15803d; font-weight: 700; }
+.wp-opts { padding: 0 12px 12px; }
+.wp-opts-title { font-size: 12px; color: #64748b; margin-bottom: 6px; }
+.wp-surfaces { display: flex; flex-wrap: wrap; gap: 6px; }
+.wp-surface { min-height: 44px; padding: 6px 12px; border: 1px solid #c7d2fe; border-radius: 10px; background: #eef2ff; color: #3730a3; font-size: 14px; font-weight: 700; cursor: pointer; text-align: left; }
+.wp-surface small { display: block; font-weight: 600; color: #6366f1; font-size: 12px; }
+.wp-surface.suggested { background: #4f46e5; border-color: #4f46e5; color: #ffffff; }
+.wp-surface.suggested small { color: #c7d2fe; }
+.wp-manual { display: flex; gap: 6px; margin-top: 8px; }
+.wp-manual .mp-in { font-size: 16px; }
+.wp-manual select { min-height: 44px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 8px; font-size: 14px; background: #ffffff; }
+.wp-manual button { min-height: 44px; padding: 0 14px; border: none; border-radius: 10px; background: #0f172a; color: #ffffff; font-weight: 700; cursor: pointer; }
+.hc-room { margin: 4px 0; }
+.hc-room > summary { cursor: pointer; list-style: none; font-weight: 700; color: #334155; padding: 3px 0; }
+.hc-room > summary::-webkit-details-marker { display: none; }
+.hc-room > div { padding-left: 4px; }
 </style>
 </head>
 <body>
@@ -435,7 +474,7 @@ body.measure-open .add-toast { z-index: 99; bottom: calc(160px + env(safe-area-i
 <div class="mp-head"><div class="mp-head-inner">
 <div class="mp-head-row">
 <div class="mp-title">📏 Замер</div>
-<button type="button" class="mp-head-btn" onclick="startNewMeasure()">Новый</button>
+<button type="button" class="mp-head-btn" id="mpNewBtn" onclick="startNewMeasure()">Новый</button>
 <button type="button" class="mp-head-btn mp-close" onclick="closeMeasure()" aria-label="Закрыть">✕</button>
 </div>
 <div class="mp-meta">
@@ -454,8 +493,24 @@ body.measure-open .add-toast { z-index: 99; bottom: calc(160px + env(safe-area-i
 <div class="mp-foot" id="mpFoot"><div class="mp-foot-inner">
 <div id="mpResult"></div>
 <div class="mp-actions">
-<button type="button" class="mp-btn" onclick="saveMeasurementClick()">💾 Сохранить</button>
+<button type="button" class="mp-btn" id="mpSaveBtn" onclick="saveMeasurementClick()">💾 Сохранить</button>
 <button type="button" class="mp-btn mp-btn-primary" id="mpPrimaryBtn" onclick="measurePrimaryAction()">📋 Скопировать</button>
+</div>
+</div></div>
+</div>
+
+<div class="measure-panel" id="workPicker" role="dialog" aria-modal="true" aria-labelledby="wpTitle">
+<div class="mp-head"><div class="mp-head-inner">
+<div class="mp-head-row">
+<div class="mp-title" id="wpTitle">Работы</div>
+<button type="button" class="mp-head-btn mp-close" onclick="closeWorkPicker()" aria-label="Закрыть">✕</button>
+</div>
+<input type="search" id="wpSearch" class="search-box" style="margin-bottom:0;" placeholder="🔍 Поиск работы" oninput="workPickerOpenIdx = null; renderWorkPicker()">
+</div></div>
+<div class="mp-body" id="wpBody"></div>
+<div class="mp-foot"><div class="mp-foot-inner">
+<div class="mp-actions" style="margin-top:0;">
+<button type="button" class="mp-btn mp-btn-primary" onclick="closeWorkPicker()">✅ Готово</button>
 </div>
 </div></div>
 </div>
@@ -546,8 +601,12 @@ body.measure-open .add-toast { z-index: 99; bottom: calc(160px + env(safe-area-i
 </div>
 </details>
 
-<button type="button" class="measure-open-btn" onclick="openMeasure({ kind: 'none' })">📏 Замер помещения</button>
-<h2>🛠 Выберите услуги:</h2>
+<section class="rooms-section" id="roomsSection">
+<h2>🏠 Помещения</h2>
+<div id="roomsList"></div>
+<button type="button" class="measure-open-btn" onclick="addRoom()">+ Помещение</button>
+</section>
+<h2>🛠 Услуги без помещения</h2>
 <input type="text" id="searchCalcInput" class="search-box" placeholder="🔍 Поиск услуги для счета..." oninput="renderServices()">
 
 <div class="accordion-category">
@@ -1654,12 +1713,13 @@ objectId,
 client: (document.getElementById('clientName').value || '').trim(),
 address: (document.getElementById('objectAddress').value || '').trim(),
 note: (document.getElementById('invoiceNote').value || '').trim(),
-attachments: invoiceAttachments
+attachments: invoiceAttachments,
+rooms: invoiceRooms
 };
 }
 
 function isDraftEmpty(st) {
-return !st.cart.length && !st.client && !st.address && !st.note && !st.attachments.length;
+return !st.cart.length && !st.client && !st.address && !st.note && !st.attachments.length && !(st.rooms && st.rooms.length);
 }
 
 function readDraft() {
@@ -1720,6 +1780,7 @@ const whenText = when
 : '';
 const parts = [];
 if (obj) parts.push(obj.name); else if (d.client) parts.push(d.client);
+if (Array.isArray(d.rooms) && d.rooms.length) parts.push(`${d.rooms.length} ${pluralRu(d.rooms.length, 'помещение', 'помещения', 'помещений')}`);
 if (d.cart.length) parts.push(`${d.cart.length} ${pluralRu(d.cart.length, 'позиция', 'позиции', 'позиций')} · ${total.toLocaleString('ru-RU')} ₽`);
 if (whenText) parts.push(whenText);
 document.getElementById('draftOfferInfo').textContent = parts.join(' · ');
@@ -1750,6 +1811,7 @@ el.value = [d.client, d.address, d.note][i] || '';
 el.dataset.autofilled = '';
 });
 invoiceCart = d.cart;
+invoiceRooms = Array.isArray(d.rooms) ? d.rooms : [];
 invoiceAttachments = Array.isArray(d.attachments) ? d.attachments : [];
 renderReportAttachments();
 renderServices();
@@ -1825,6 +1887,7 @@ info.innerHTML = html;
 }
 
 function renderInvoice() {
+if (typeof renderRooms === 'function') renderRooms();
 const container = document.getElementById('invoiceItems');
 if (!container) return;
 container.innerHTML = '';
@@ -1866,6 +1929,9 @@ function updateInvoiceItemField(idx, field, value) {
 const item = invoiceCart[idx];
 if (!item) return;
 if (field === 'qty' && item.measure && Math.abs(Number(value) - Number(item.measure.value)) >= 0.0005) delete item.measure;
+// Количество поправили вручную — больше не пересчитываем его по замеру помещения
+if (field === 'qty' && item.surface && item.surface !== 'manual') item.surface = 'manual';
+setTimeout(() => { if (typeof renderRooms === 'function') renderRooms(); }, 0);
 scheduleDraftSave();
 if (field === 'qty' || field === 'price') {
 item[field] = Number(value) || 0;
@@ -2284,6 +2350,8 @@ rec.address = address;
 rec.note = note;
 rec.objectId = objectId;
 rec.items = [...invoiceCart];
+rec.rooms = JSON.parse(JSON.stringify(invoiceRooms));
+storeRoomMeasures(objectId);
 rec.total = total;
 rec.attachments = attachments;
 rec.date = new Date().toLocaleString('ru-RU');
@@ -2310,8 +2378,10 @@ total,
 objectId,
 docType: selectedDocType,
 items: [...invoiceCart],
+rooms: JSON.parse(JSON.stringify(invoiceRooms)),
 attachments
 };
+storeRoomMeasures(objectId);
 if (!cloudData.history) cloudData.history = [];
 cloudData.history.unshift(newRecord);
 const savedOk = await saveCloudData();
@@ -2331,10 +2401,27 @@ const items = rec.items || [];
 const itemLine = i =>
 `• ${escapeHtml(i.name)} (${i.qty} ${escapeHtml(i.unit)})${i.location ? ` <span style="color:#6366f1;">— 📍 ${escapeHtml(i.location)}</span>` : ''} — ${(i.qty * i.price).toLocaleString('ru-RU')} ₽${measureNoteHtml(i)}`;
 const VISIBLE_ITEMS = 3;
-let itemsHtml = items.slice(0, VISIBLE_ITEMS).map(itemLine).join('<br>');
-if (items.length > VISIBLE_ITEMS) {
+const asLines = arr => arr.map(l => `<div>${l}</div>`).join('');
+let itemsHtml = asLines(items.slice(0, VISIBLE_ITEMS).map(itemLine));
+const grouped = items.some(i => i.roomId);
+if (grouped) {
+// Счёт по помещениям: каждое помещение свёрнуто со своей суммой
+const groups = [];
+items.forEach(i => {
+const key = i.roomId ? i.location || 'Помещение' : '';
+let g = groups.find(x => x.key === key);
+if (!g) { g = { key, items: [] }; groups.push(g); }
+g.items.push(i);
+});
+const lineNoLoc = i => itemLine({ ...i, location: '' });
+itemsHtml = groups.map(g => {
+const sum = g.items.reduce((a, i) => a + i.qty * i.price, 0);
+const title = g.key ? `🏠 ${escapeHtml(g.key)}` : 'Прочие работы';
+return `<details class="hc-room"><summary>${title} · ${g.items.length} ${pluralRu(g.items.length, 'работа', 'работы', 'работ')} · ${sum.toLocaleString('ru-RU')} ₽</summary><div>${asLines(g.items.map(g.key ? lineNoLoc : itemLine))}</div></details>`;
+}).join('');
+} else if (items.length > VISIBLE_ITEMS) {
 const rest = items.length - VISIBLE_ITEMS;
-itemsHtml += `<details><summary>Ещё ${rest} ${pluralRu(rest, 'позиция', 'позиции', 'позиций')}</summary>${items.slice(VISIBLE_ITEMS).map(itemLine).join('<br>')}</details>`;
+itemsHtml += `<details><summary>Ещё ${rest} ${pluralRu(rest, 'позиция', 'позиции', 'позиций')}</summary>${asLines(items.slice(VISIBLE_ITEMS).map(itemLine))}</details>`;
 }
 const masterName = rec.author || rec.master || rec.user || 'Мастер';
 const recordId = rec.id || ('legacy_' + Math.random());
@@ -2405,7 +2492,10 @@ if (typeof fn === 'function') fn();
 document.addEventListener('keydown', (e) => {
 if (e.key !== 'Escape') return;
 const sheetOpen = document.getElementById('sheet').classList.contains('open');
-if (sheetOpen) closeSheet(); else if (typeof closeMeasure === 'function') closeMeasure();
+const pickerOpen = document.getElementById('workPicker').classList.contains('open');
+if (sheetOpen) closeSheet();
+else if (pickerOpen) closeWorkPicker();
+else if (typeof closeMeasure === 'function') closeMeasure();
 });
 
 function openRecordActions(recordId, containerId) {
@@ -2978,6 +3068,7 @@ const objSelect = document.getElementById('invoiceObjectSelect');
 if (objSelect) objSelect.value = '';
 setDocType('invoice');
 invoiceCart = [];
+invoiceRooms = [];
 invoiceAttachments = [];
 renderReportAttachments();
 renderServices();
@@ -3383,6 +3474,7 @@ editingRecordId = id;
 editingReturnContext = containerId === 'objectHistoryList' ? 'object' : 'history';
 objectHistorySubTab = rec.docType === 'estimate' ? 'estimate' : 'invoice';
 invoiceCart = (rec.items || []).map(i => ({ ...i }));
+invoiceRooms = JSON.parse(JSON.stringify(rec.rooms || []));
 invoiceAttachments = (rec.attachments || []).map(a => ({ ...a }));
 renderReportAttachments();
 
@@ -3431,6 +3523,7 @@ const returnToObject = editingReturnContext === 'object' && currentObjectId;
 editingRecordId = null;
 editingReturnContext = null;
 invoiceCart = [];
+invoiceRooms = [];
 invoiceAttachments = [];
 renderReportAttachments();
 document.getElementById('clientName').value = '';
@@ -3626,6 +3719,7 @@ return { value: 0, unit: '', label: '', text: '' };
 function measureDraftKey() { return 'measureDraft:' + (currentUser || ''); }
 function saveMeasureDraft() {
 measureDirty = true;
+if (measureTarget.kind === 'room') return;
 try { localStorage.setItem(measureDraftKey(), JSON.stringify({ measure, measureTab, measureDirty })); } catch (e) { /* пусто */ }
 }
 function loadMeasureDraft() {
@@ -3646,6 +3740,27 @@ return !(r.perimeter || r.openingsArea || r.ceiling || r.narrow || mNum(m.height
 /* ---------- открыть / закрыть ---------- */
 function openMeasure(target = { kind: 'none' }) {
 measureTarget = target || { kind: 'none' };
+const roomMode = measureTarget.kind === 'room';
+document.getElementById('mpNewBtn').style.display = roomMode ? 'none' : '';
+document.getElementById('mpSaveBtn').style.display = roomMode ? 'none' : '';
+// у помещения объект берётся из счёта — отдельный выбор не нужен
+document.getElementById('mpObject').style.display = roomMode ? 'none' : '';
+if (roomMode) {
+// Замер помещения правится отдельно от обычного черновика замера
+const room = measureTarget.roomId ? findRoom(measureTarget.roomId) : null;
+const calcSelect = document.getElementById('invoiceObjectSelect');
+const objId = calcSelect && calcSelect.value && calcSelect.value !== '__new__' ? calcSelect.value : '';
+measure = room ? JSON.parse(JSON.stringify(room.measure)) : newMeasure(objId);
+measureTab = 'walls';
+measureDirty = false;
+document.getElementById('measurePanel').classList.add('open');
+document.body.classList.add('measure-open');
+fillMeasureObjectSelect();
+document.getElementById('mpRoom').value = measure.room || '';
+renderMeasure();
+if (!room) setTimeout(() => document.getElementById('mpRoom').focus(), 50);
+return;
+}
 if (!measure && !loadMeasureDraft()) measure = newMeasure();
 const calcSelect = document.getElementById('invoiceObjectSelect');
 const calcObj = calcSelect && calcSelect.value && calcSelect.value !== '__new__' ? calcSelect.value : '';
@@ -3667,6 +3782,11 @@ renderMeasure();
 function closeMeasure() {
 document.getElementById('measurePanel').classList.remove('open');
 document.body.classList.remove('measure-open');
+if (measureTarget.kind === 'room') {
+// следующий обычный замер подхватит свой черновик
+measure = null;
+measureTarget = { kind: 'none' };
+}
 }
 
 function startNewMeasure() {
@@ -3828,6 +3948,10 @@ ${target ? `<div class="mp-target">→ в «${escapeHtml(target)}»</div>` : ''}
 const btn = document.getElementById('mpPrimaryBtn');
 btn.disabled = !(v.value > 0);
 btn.textContent = target ? '✅ Вставить' : '📋 Скопировать';
+if (measureTarget.kind === 'room') {
+btn.disabled = false;
+btn.textContent = measureTarget.roomId ? '✅ Готово' : '✅ Готово — выбрать работы';
+}
 }
 
 function setMeasureTab(tab) {
@@ -4058,6 +4182,7 @@ return '';
 }
 
 async function measurePrimaryAction() {
+if (measureTarget.kind === 'room') { finishRoomMeasure(); return; }
 const r = computeMeasure(measure);
 const v = measureValueForTab(r, measureTab);
 if (!(v.value > 0)) return;
@@ -4099,6 +4224,279 @@ function measureNoteHtml(item) {
 if (!item || !item.measure || !item.measure.text) return '';
 const m = item.measure;
 return `<details class="measure-note"><summary>📏 Как считали${m.room ? ': ' + escapeHtml(m.room) : ''}</summary><div>${escapeHtml(m.text)}</div></details>`;
+}
+</script>
+
+<script>
+/* ===================== ПОМЕЩЕНИЯ В СЧЁТЕ ===================== */
+// Сначала помещения (у каждого свой замер), потом в каждом — работы из
+// прайса. Работа привязана к поверхности помещения (стены, потолок,
+// откосы, узкие) и берёт количество из замера. Исправили замер —
+// количество всех работ помещения пересчиталось само.
+// В счёт по-прежнему уходит обычный список позиций: у каждой есть
+// «где на объекте», так что PDF, история и страница заказчика не меняются.
+
+let invoiceRooms = [];           // [{ id, measure }]
+let workPickerRoomId = null;
+let workPickerOpenIdx = null;
+
+const SURFACES = [
+{ key: 'walls', tab: 'walls', label: 'Стены' },
+{ key: 'ceiling', tab: 'ceiling', label: 'Потолок' },
+{ key: 'slopes', tab: 'slopes', label: 'Откосы' },
+{ key: 'narrow', tab: 'narrow', label: 'Узкие' },
+];
+
+function findRoom(id) { return invoiceRooms.find(r => r.id === id) || null; }
+function roomName(room) { return (room && room.measure && room.measure.room) || 'Помещение'; }
+
+function roomSurfaces(room) {
+const r = computeMeasure(room.measure);
+const out = {};
+SURFACES.forEach(s => { out[s.key] = { ...measureValueForTab(r, s.tab), label: s.label }; });
+return out;
+}
+
+function roundQty(v, unit) {
+const q = Math.round(v * 1000) / 1000;
+return unit === 'пог. м' ? Math.max(1, q) : q;
+}
+
+// Пересчитать работы помещения по его замеру
+function syncRoomItems(roomId) {
+const room = findRoom(roomId);
+if (!room) return;
+const surf = roomSurfaces(room);
+const name = roomName(room);
+invoiceCart.forEach(item => {
+if (item.roomId !== roomId) return;
+item.location = name;
+if (!item.surface || item.surface === 'manual') return;
+const s = surf[item.surface];
+if (!s || !(s.value > 0)) return;
+item.qty = roundQty(s.value, item.unit);
+item.measure = { room: name, text: s.text, value: Math.round(s.value * 1000) / 1000, unit: s.unit, measureId: room.measure.id };
+});
+}
+
+/* ---------- блок «Помещения» в калькуляторе ---------- */
+function renderRooms() {
+const list = document.getElementById('roomsList');
+if (!list) return;
+if (!invoiceRooms.length) {
+list.innerHTML = '<div class="rooms-hint">Добавьте помещение, сделайте замер и выберите работы — количество подставится само.</div>';
+return;
+}
+list.innerHTML = invoiceRooms.map(room => {
+const surf = roomSurfaces(room);
+const works = invoiceCart.map((item, idx) => ({ item, idx })).filter(({ item }) => item.roomId === room.id);
+const sum = works.reduce((a, { item }) => a + item.qty * item.price, 0);
+const pills = SURFACES.filter(s => surf[s.key].value > 0)
+.map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
+const worksHtml = works.length
+? works.map(({ item, idx }) => {
+const surfLabel = item.surface && item.surface !== 'manual' ? (SURFACES.find(s => s.key === item.surface) || {}).label : '';
+return `<div class="room-work">
+<div class="rw-main">
+<div class="rw-name">${escapeHtml(item.name)}</div>
+<div class="rw-meta">${surfLabel ? surfLabel.toLowerCase() + ' · ' : ''}${mFmt(item.qty)} ${escapeHtml(item.unit)} × ${Number(item.price).toLocaleString('ru-RU')} ₽</div>
+</div>
+<div class="rw-sum">${(item.qty * item.price).toLocaleString('ru-RU')} ₽</div>
+<button type="button" class="mp-del" onclick="removeFromInvoice(${idx})" aria-label="Убрать работу">✕</button>
+</div>`;
+}).join('')
+: '<div class="room-empty">Работ пока нет</div>';
+return `<div class="room-card">
+<div class="room-head">
+<div class="room-name">🏠 ${escapeHtml(roomName(room))}</div>
+<div class="room-sum">${sum.toLocaleString('ru-RU')} ₽</div>
+</div>
+${pills ? `<div class="obj-money">${pills}</div>` : '<div class="room-empty">Замер не заполнен</div>'}
+<div class="room-works">${worksHtml}</div>
+<div class="room-actions">
+<button type="button" class="hc-btn hc-btn-primary" onclick="openWorkPicker('${room.id}')">+ Работа</button>
+<button type="button" class="hc-btn" onclick="openMeasure({ kind: 'room', roomId: '${room.id}' })">📏 Замер</button>
+<button type="button" class="hc-btn hc-btn-more" onclick="openRoomActions('${room.id}')" aria-label="Другие действия">⋯</button>
+</div>
+</div>`;
+}).join('');
+}
+
+function addRoom() {
+openMeasure({ kind: 'room', roomId: null });
+}
+
+function openRoomActions(roomId) {
+const room = findRoom(roomId);
+if (!room) return;
+openSheet(roomName(room), [
+{ icon: '📋', label: 'Копировать как новое помещение', onClick: () => duplicateRoom(roomId) },
+null,
+{ icon: '🗑️', label: 'Удалить помещение', danger: true, onClick: () => deleteRoom(roomId) },
+]);
+}
+
+function duplicateRoom(roomId) {
+const room = findRoom(roomId);
+if (!room) return;
+const copy = JSON.parse(JSON.stringify(room.measure));
+copy.id = 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+copy.room = roomName(room) + ' (копия)';
+const newRoom = { id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: copy };
+invoiceRooms.push(newRoom);
+invoiceCart.filter(i => i.roomId === roomId).forEach(i => invoiceCart.push({ ...JSON.parse(JSON.stringify(i)), roomId: newRoom.id }));
+syncRoomItems(newRoom.id);
+renderInvoice();
+// сразу предлагаем переименовать и поправить размеры
+openMeasure({ kind: 'room', roomId: newRoom.id });
+}
+
+function deleteRoom(roomId) {
+const room = findRoom(roomId);
+if (!room) return;
+const n = invoiceCart.filter(i => i.roomId === roomId).length;
+if (!confirm(n ? `Удалить «${roomName(room)}» и его работы (${n})?` : `Удалить «${roomName(room)}»?`)) return;
+invoiceRooms = invoiceRooms.filter(r => r.id !== roomId);
+invoiceCart = invoiceCart.filter(i => i.roomId !== roomId);
+renderInvoice();
+}
+
+// Замер помещения: «Готово»
+function finishRoomMeasure() {
+const name = document.getElementById('mpRoom').value.trim();
+if (!name) {
+alert('Назовите помещение, например: Гостиная.');
+document.getElementById('mpRoom').focus();
+return;
+}
+measure.room = name;
+const snapshot = JSON.parse(JSON.stringify(measure));
+let room = measureTarget.roomId ? findRoom(measureTarget.roomId) : null;
+const isNew = !room;
+if (room) {
+room.measure = snapshot;
+} else {
+room = { id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: snapshot };
+invoiceRooms.push(room);
+}
+syncRoomItems(room.id);
+closeMeasure();
+renderInvoice();
+scheduleDraftSave();
+if (isNew) openWorkPicker(room.id);
+else showAddToast('📏 Замер обновлён, количество пересчитано');
+}
+
+/* ---------- выбор работ для помещения ---------- */
+function suggestSurface(srv, surf) {
+const n = String(srv.name || '').toLowerCase();
+const has = k => surf[k] && surf[k].value > 0;
+if (/откос/.test(n) && has('slopes')) return 'slopes';
+if (/потол/.test(n) && has('ceiling')) return 'ceiling';
+if (/стен|обо[ий]|плитк/.test(n) && has('walls')) return 'walls';
+if (srv.unit === 'пог. м') return has('slopes') ? 'slopes' : (has('narrow') ? 'narrow' : null);
+if (has('walls')) return 'walls';
+if (has('ceiling')) return 'ceiling';
+return null;
+}
+
+function openWorkPicker(roomId) {
+workPickerRoomId = roomId;
+workPickerOpenIdx = null;
+const room = findRoom(roomId);
+document.getElementById('wpTitle').textContent = 'Работы: ' + roomName(room);
+document.getElementById('wpSearch').value = '';
+document.getElementById('workPicker').classList.add('open');
+document.body.classList.add('measure-open');
+renderWorkPicker();
+}
+
+function closeWorkPicker() {
+document.getElementById('workPicker').classList.remove('open');
+document.body.classList.remove('measure-open');
+workPickerRoomId = null;
+renderInvoice();
+}
+
+function renderWorkPicker() {
+const room = findRoom(workPickerRoomId);
+const body = document.getElementById('wpBody');
+if (!room) { body.innerHTML = ''; return; }
+const surf = roomSurfaces(room);
+const q = document.getElementById('wpSearch').value.trim().toLowerCase();
+const services = cloudData.services || [];
+const added = new Set(invoiceCart.filter(i => i.roomId === room.id).map(i => i.name));
+let html = '', cat = null, catPrinted = false, any = false;
+services.forEach((srv, idx) => {
+if (srv.isCategory) { cat = srv.name; catPrinted = false; return; }
+if (q && !String(srv.name).toLowerCase().includes(q) && !(cat && cat.toLowerCase().includes(q))) return;
+any = true;
+if (cat && !catPrinted) { html += `<div class="wp-cat">${escapeHtml(cat)}</div>`; catPrinted = true; }
+const open = workPickerOpenIdx === idx;
+const sug = suggestSurface(srv, surf);
+html += `<div class="wp-item${added.has(srv.name) ? ' added' : ''}">
+<button type="button" class="wp-row" onclick="toggleWorkOptions(${idx})">
+<span class="wp-row-name">${escapeHtml(srv.name)}${added.has(srv.name) ? ' <span class="wp-badge">✓ добавлено</span>' : ''}</span>
+<span class="wp-row-price">${Number(srv.price).toLocaleString('ru-RU')} ₽${srv.unit ? '/' + escapeHtml(srv.unit) : ''}</span>
+</button>
+${open ? `<div class="wp-opts">
+<div class="wp-opts-title">Сколько — по замеру «${escapeHtml(roomName(room))}»:</div>
+<div class="wp-surfaces">
+${SURFACES.filter(s => surf[s.key].value > 0).map(s => `<button type="button" class="wp-surface${s.key === sug ? ' suggested' : ''}" onclick="addWorkToRoom(${idx}, '${s.key}')">${s.label}<small>${mFmt(surf[s.key].value)} ${surf[s.key].unit}</small></button>`).join('')}
+</div>
+<div class="wp-manual">
+<input class="mp-in" id="wpManualQty" type="text" inputmode="decimal" placeholder="своё кол-во">
+<select id="wpManualUnit">${DEFAULT_UNITS.map(u => `<option ${u === (srv.unit || 'м²') ? 'selected' : ''}>${escapeHtml(u)}</option>`).join('')}</select>
+<button type="button" onclick="addWorkToRoom(${idx}, 'manual')">Добавить</button>
+</div>
+</div>` : ''}
+</div>`;
+});
+body.innerHTML = `<div class="mp-body-inner">${any ? html : '<div class="mp-empty">Ничего не найдено</div>'}</div>`;
+}
+
+function toggleWorkOptions(idx) {
+workPickerOpenIdx = workPickerOpenIdx === idx ? null : idx;
+renderWorkPicker();
+}
+
+function addWorkToRoom(serviceIdx, surfaceKey) {
+const room = findRoom(workPickerRoomId);
+const srv = (cloudData.services || [])[serviceIdx];
+if (!room || !srv) return;
+let item;
+if (surfaceKey === 'manual') {
+const qty = evalMeasureExpr(document.getElementById('wpManualQty').value);
+const unit = document.getElementById('wpManualUnit').value;
+if (!(qty > 0)) { alert('Укажите количество.'); document.getElementById('wpManualQty').focus(); return; }
+item = { name: srv.name, price: Number(srv.price) || 0, qty: roundQty(qty, unit), unit, location: roomName(room), roomId: room.id, surface: 'manual' };
+} else {
+const s = roomSurfaces(room)[surfaceKey];
+if (!s || !(s.value > 0)) return;
+const unit = s.unit || srv.unit || 'м²';
+item = { name: srv.name, price: Number(srv.price) || 0, qty: 0, unit, location: roomName(room), roomId: room.id, surface: surfaceKey };
+}
+invoiceCart.push(item);
+syncRoomItems(room.id);
+workPickerOpenIdx = null;
+renderInvoice();
+renderWorkPicker();
+scheduleDraftSave();
+showAddToast(`✅ ${srv.name}: ${mFmt(item.qty)} ${item.unit}`);
+}
+
+/* ---------- история: замеры помещений сохраняются вместе со счётом ---------- */
+function storeRoomMeasures(objectId) {
+invoiceRooms.forEach(room => {
+const entry = JSON.parse(JSON.stringify(room.measure));
+entry.objectId = objectId || '';
+entry.savedAt = new Date().toISOString();
+entry.author = currentUser || '';
+removeMeasureEverywhere(entry.id);
+const obj = entry.objectId ? (cloudData.objects || []).find(o => o.id === entry.objectId) : null;
+if (obj) obj.measurements = [entry, ...(obj.measurements || [])].slice(0, 100);
+else setLocalMeasures([{ ...entry, objectId: '' }, ...getLocalMeasures()]);
+});
 }
 </script>
 
