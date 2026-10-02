@@ -218,6 +218,16 @@ h2 { font-size: 16px; }
 
 <script>
 const WORKER_URL = "https://price-api.nifork.workers.dev";
+// Версия данных с сервера — защищает от перезаписи чужих изменений.
+let cloudRev = null;
+
+// Если пока страница была открыта, кто-то другой сохранил изменения,
+// сервер отклоняет сохранение (409). Чтобы не затереть его работу,
+// перезагружаем страницу со свежими данными.
+function handleSaveConflict(result) {
+alert((result && result.error) || 'Пока вы работали, кто-то другой сохранил изменения. Страница обновится — повторите, пожалуйста, последнее действие.');
+location.reload();
+}
 const DEFAULT_UNITS = ['м²', 'пог. м', 'шт.', 'компл.', 'час', 'усл.'];
 let cloudData = { services: [], users: [], history: [], pirogHistory: [] };
 let isAdmin = false;
@@ -252,7 +262,7 @@ try {
 const res = await fetchWithRetry(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ self: { login: cloudData.self ? cloudData.self.login : undefined, pieNote: text } })
+body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { login: cloudData.self ? cloudData.self.login : undefined, pieNote: text } })
 }, 3);
 const result = await res.json();
 if (!res.ok) {
@@ -260,6 +270,7 @@ alert(result.error || 'Не удалось сохранить примечани
 return;
 }
 cloudData.self = result.self;
+if (typeof result.rev === 'number') cloudRev = result.rev;
 currentPieNote = result.self.pieNote || '';
 renderPieNote();
 alert('Примечание сохранено!');
@@ -337,6 +348,7 @@ loader.textContent = `⏳ Облако не отвечает, пробую ещ�
 if (res.ok) {
 const result = await res.json();
 cloudData = result.data;
+cloudRev = typeof result.rev === 'number' ? result.rev : null;
 isAdmin = result.role === 'admin';
 isCompanyMode = result.mode === 'company';
 cloudData.self = result.self || null;
@@ -398,13 +410,19 @@ try {
 const res = await fetchWithRetry(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ ...cloudData, self: undefined })
+body: JSON.stringify({ ...cloudData, self: undefined, baseRev: cloudRev ?? undefined })
 }, 3, (attempt, max) => {
 showSyncStatus(`☁️ Не получилось, пробую ещё раз (${attempt}/${max})…`);
 });
+if (res.status === 409) {
+hideSyncStatus(0);
+handleSaveConflict(await res.json().catch(() => null));
+return;
+}
 if (res.ok) {
 const result = await res.json();
 cloudData = result.data;
+if (typeof result.rev === 'number') cloudRev = result.rev;
 cloudData.self = savedSelf;
 showSyncStatus('✅ Сохранено');
 hideSyncStatus();
@@ -452,11 +470,17 @@ cloudData.pirogHistory = (cloudData.pirogHistory || []).filter(item => item.id !
 renderAdminHistory();
 checkUnreadHistory();
 try {
-await fetch(`${WORKER_URL}/appdata`, {
+const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ pirogHistory: cloudData.pirogHistory })
+body: JSON.stringify({ pirogHistory: cloudData.pirogHistory, baseRev: cloudRev ?? undefined })
 });
+const result = await res.json().catch(() => null);
+if (res.status === 409) { handleSaveConflict(result); return; }
+if (res.ok && result) {
+if (typeof result.rev === 'number') cloudRev = result.rev;
+if (result.data && Array.isArray(result.data.pirogHistory)) cloudData.pirogHistory = result.data.pirogHistory;
+}
 } catch (e) {
 console.error("Ошибка удаления записи из облака:", e);
 }
@@ -509,11 +533,17 @@ const badge = document.getElementById('historyBadge');
 if (badge) badge.style.display = 'none';
 if (changed) {
 try {
-await fetch(`${WORKER_URL}/appdata`, {
+const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ pirogHistory: cloudData.pirogHistory })
+body: JSON.stringify({ pirogHistory: cloudData.pirogHistory, baseRev: cloudRev ?? undefined })
 });
+const result = await res.json().catch(() => null);
+if (res.status === 409) { handleSaveConflict(result); return; }
+if (res.ok && result) {
+if (typeof result.rev === 'number') cloudRev = result.rev;
+if (result.data && Array.isArray(result.data.pirogHistory)) cloudData.pirogHistory = result.data.pirogHistory;
+}
 } catch (e) {
 console.error("Ошибка обновления статуса истории:", e);
 }

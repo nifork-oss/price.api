@@ -505,6 +505,9 @@ let authToken = null;
 let invoiceCart = [];
 let invoiceAttachments = [];
 let currentObjectId = null;
+// Версия данных с сервера — отправляется при сохранении, чтобы не затереть
+// изменения, которые кто-то сделал после того, как мы загрузили данные.
+let cloudRev = null;
 let editingRecordId = null;
 let editingReturnContext = null;
 let selectedRegisterRole = 'master';
@@ -549,6 +552,22 @@ await loadCloudData();
 });
 });
 
+// Перерисовывает открытые вкладки после повторной загрузки данных.
+function refreshViewsAfterReload() {
+try {
+if (!isCurrentClient()) {
+populateObjectSelect();
+renderHistory();
+}
+if (document.getElementById('objectsTab').style.display === 'block') {
+if (currentObjectId) renderObjectDetail(); else renderObjects();
+}
+if (document.getElementById('usersTab').style.display === 'block') renderUsersList();
+} catch (e) {
+console.error('Не удалось обновить экран:', e);
+}
+}
+
 async function loadCloudData() {
 if (!authToken) return;
 const loader = document.getElementById('loader');
@@ -566,6 +585,7 @@ headers: { "Authorization": "Bearer " + authToken }
 if (res.ok) {
 const result = await res.json();
 cloudData = result.data;
+cloudRev = typeof result.rev === 'number' ? result.rev : null;
 if (!Array.isArray(cloudData.objects)) cloudData.objects = [];
 cloudData.self = result.self || { login: currentUser, email: '', companyName: '' };
 if (result.role) {
@@ -610,12 +630,27 @@ try {
 const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ ...cloudData, self: undefined })
+body: JSON.stringify({ ...cloudData, self: undefined, baseRev: cloudRev ?? undefined })
 });
 let result = null;
 try { result = await res.json(); } catch (parseErr) { /* ответ мог быть пустым */ }
+if (res.status === 409) {
+// Кто-то другой успел сохранить изменения — наши данные устарели.
+// Не перезаписываем его работу: загружаем свежие данные и просим
+// повторить последнее действие.
+hideSyncStatus(0);
+const savedSelf = cloudData.self;
+await loadCloudData();
+if (!cloudData.self) cloudData.self = savedSelf;
+refreshViewsAfterReload();
+alert((result && result.error) || 'Данные изменились на другом устройстве. Загружены свежие данные — повторите последнее действие.');
+return;
+}
 if (res.ok) {
+const keepSelf = cloudData.self;
 cloudData = result ? result.data : cloudData;
+if (cloudData && !cloudData.self) cloudData.self = keepSelf;
+if (result && typeof result.rev === 'number') cloudRev = result.rev;
 showSyncStatus('✅ Сохранено');
 hideSyncStatus();
 return;
@@ -1844,7 +1879,7 @@ try {
 const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ self: { login: newL, email: newEmail, companyName: newCompanyName, invoiceNote: newInvoiceNote, password: newP || undefined } })
+body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { login: newL, email: newEmail, companyName: newCompanyName, invoiceNote: newInvoiceNote, password: newP || undefined } })
 });
 const result = await res.json();
 if (!res.ok) {
@@ -1852,6 +1887,7 @@ alert(result.error || 'Не удалось сохранить профиль');
 return;
 }
 cloudData.self = result.self;
+if (typeof result.rev === 'number') cloudRev = result.rev;
 if (result.token) authToken = result.token;
 currentUser = result.self.login;
 localStorage.setItem('authToken', authToken);
@@ -1887,7 +1923,7 @@ try {
 const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ self: { login: currentUser, publicPriceEnabled: enabled } })
+body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { login: currentUser, publicPriceEnabled: enabled } })
 });
 const result = await res.json();
 if (!res.ok) {
@@ -1897,6 +1933,7 @@ updatePublicPriceLinkBox();
 return;
 }
 cloudData.self = result.self;
+if (typeof result.rev === 'number') cloudRev = result.rev;
 } catch (e) {
 alert('Ошибка сети — не удалось сохранить настройку');
 document.getElementById('publicPriceToggle').checked = !enabled;
