@@ -211,8 +211,11 @@ body.sheet-open { overflow: hidden; }
 .calc-bar-total b { display: block; color: #34d399; font-size: 19px; font-weight: 800; white-space: nowrap; }
 .calc-bar-save { min-height: 46px; padding: 10px 16px; border: none; border-radius: 10px; background: #4f46e5; color: #ffffff; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .calc-bar-more { flex: 0 0 46px; min-height: 46px; border: 1px solid #334155; border-radius: 10px; background: transparent; color: #ffffff; font-size: 19px; cursor: pointer; }
-body.calc-active .calc-bar { display: block; }
-body.calc-active.has-bottom-nav { padding-bottom: calc(152px + env(safe-area-inset-bottom, 0px)); }
+/* Полоса с итогом появляется, только когда в счёте есть хотя бы одна позиция */
+body.calc-active.calc-has-items .calc-bar { display: block; animation: calc-bar-in 0.22s ease-out; }
+body.calc-active.calc-has-items.has-bottom-nav { padding-bottom: calc(152px + env(safe-area-inset-bottom, 0px)); }
+@keyframes calc-bar-in { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { body.calc-active.calc-has-items .calc-bar { animation: none; } }
 body.keyboard-open .calc-bar { display: none !important; }
 /* ---------- Объекты ---------- */
 .object-card { cursor: pointer; position: relative; }
@@ -243,7 +246,7 @@ body.keyboard-open .calc-bar { display: none !important; }
 /* Уведомления — над нижними панелями, но под шторкой действий */
 .add-toast { z-index: 80; }
 body.has-bottom-nav .add-toast { bottom: calc(82px + env(safe-area-inset-bottom, 0px)); }
-body.calc-active.has-bottom-nav .add-toast { bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
+body.calc-active.calc-has-items.has-bottom-nav .add-toast { bottom: calc(146px + env(safe-area-inset-bottom, 0px)); }
 @media (prefers-reduced-motion: reduce) { .calc-details-arrow { transition: none; } }
 
 /* ---------- Оповещение «вышла новая версия» ---------- */
@@ -1664,6 +1667,7 @@ el.textContent = parts.join('  ·  ');
 }
 
 function updateCalcBarTotal() {
+document.body.classList.toggle('calc-has-items', typeof invoiceCart !== 'undefined' && invoiceCart.length > 0);
 const src = document.getElementById('totalSum');
 const dst = document.getElementById('calcBarTotal');
 if (src && dst) dst.textContent = src.textContent + ' ₽';
@@ -3396,6 +3400,38 @@ if (document.visibilityState === 'visible') checkForUpdate();
 setInterval(() => {
 if (document.visibilityState === 'visible') checkForUpdate();
 }, 5 * 60 * 1000);
+})();
+</script>
+
+<script>
+// ---------- Числовые поля со значением по умолчанию ----------
+// В полях, где заранее стоит «1» (или «0»), при касании значение
+// исчезает — можно сразу печатать нужное число, не стирая единицу.
+// Если ничего не ввели и ушли из поля, прежнее значение возвращается.
+(function () {
+const DEFAULTS = ['1', '0'];
+document.addEventListener('focusin', (e) => {
+const el = e.target;
+if (!(el instanceof HTMLInputElement) || el.type !== 'number') return;
+if (!DEFAULTS.includes(el.value)) return;
+el.dataset.defaultValue = el.value;
+if (!el.dataset.origPlaceholder) el.dataset.origPlaceholder = el.placeholder || '';
+el.placeholder = el.value;
+el.value = '';
+});
+document.addEventListener('focusout', (e) => {
+const el = e.target;
+if (!(el instanceof HTMLInputElement) || el.type !== 'number') return;
+if (el.dataset.defaultValue === undefined) return;
+const def = el.dataset.defaultValue;
+delete el.dataset.defaultValue;
+el.placeholder = el.dataset.origPlaceholder || '';
+if (el.value === '') {
+el.value = def;
+// сообщаем странице, что значение вернулось (пересчёт сумм)
+el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+});
 })();
 </script>
 </body>

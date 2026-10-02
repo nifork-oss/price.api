@@ -1444,5 +1444,37 @@ if (document.visibilityState === 'visible') checkForUpdate();
 }, 5 * 60 * 1000);
 })();
 </script>
+
+<script>
+// ---------- Числовые поля со значением по умолчанию ----------
+// В полях, где заранее стоит «1» (или «0»), при касании значение
+// исчезает — можно сразу печатать нужное число, не стирая единицу.
+// Если ничего не ввели и ушли из поля, прежнее значение возвращается.
+(function () {
+const DEFAULTS = ['1', '0'];
+document.addEventListener('focusin', (e) => {
+const el = e.target;
+if (!(el instanceof HTMLInputElement) || el.type !== 'number') return;
+if (!DEFAULTS.includes(el.value)) return;
+el.dataset.defaultValue = el.value;
+if (!el.dataset.origPlaceholder) el.dataset.origPlaceholder = el.placeholder || '';
+el.placeholder = el.value;
+el.value = '';
+});
+document.addEventListener('focusout', (e) => {
+const el = e.target;
+if (!(el instanceof HTMLInputElement) || el.type !== 'number') return;
+if (el.dataset.defaultValue === undefined) return;
+const def = el.dataset.defaultValue;
+delete el.dataset.defaultValue;
+el.placeholder = el.dataset.origPlaceholder || '';
+if (el.value === '') {
+el.value = def;
+// сообщаем странице, что значение вернулось (пересчёт сумм)
+el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+});
+})();
+</script>
 </body>
 </html>
