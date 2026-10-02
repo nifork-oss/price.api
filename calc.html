@@ -6,7 +6,7 @@
 <title>Кабинет мастера и Калькулятор</title>
 <!-- PWA: делает сайт "устанавливаемым" на телефон как приложение -->
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#23408e">
+<meta name="theme-color" content="#14181f">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,12 +14,11 @@
 <meta name="apple-mobile-web-app-title" content="Кабинет мастера">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
 body { background-color: #f4f6f8; margin: 0; padding: 12px 8px; color: #1f2a37; }
@@ -37,7 +36,7 @@ h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .form-group input[type="checkbox"] { width: 18px; height: 18px; padding: 0; margin: 0; flex-shrink: 0; -webkit-appearance: checkbox; appearance: checkbox; }
 .form-group textarea { resize: vertical; min-height: 70px; }
 .accordion-category { margin-bottom: 10px; border: 1px solid #dfe3e8; border-radius: 12px; overflow: hidden; background: #ffffff; }
-.accordion-header { background: #f4f6f8; font-weight: 700; padding: 12px 14px; font-size: 13px; color: #33404f; border-left: 4px solid #3556a8; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.accordion-header { background: #f4f6f8; font-weight: 700; padding: 12px 14px; font-size: 13px; color: #33404f; border-left: 4px solid #3a4350; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
 .accordion-header:hover { background: #eef1f4; }
 .accordion-content { display: none; padding: 10px; background: #fff; border-top: 1px solid #dfe3e8; }
 .accordion-category.open .accordion-content { display: block; }
@@ -46,8 +45,8 @@ h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .search-box { width: 100%; padding: 12px 14px; margin-bottom: 16px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 15px; outline: none; background: #fff; }
 .service-card { background: #f4f6f8; border: 1px solid #dfe3e8; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
 .service-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; color: #1d2733; }
-.service-price { color: #23704a; font-weight: 700; white-space: nowrap; font-size: 13px; }
-.price-edit-input { width: 70px; padding: 4px 6px; border: 1px solid #cfd5dd; border-radius: 6px; font-size: 12px; text-align: right; color: #23704a; font-weight: 700; }
+.service-price { color: #1d7a4c; font-weight: 700; white-space: nowrap; font-size: 13px; }
+.price-edit-input { width: 70px; padding: 4px 6px; border: 1px solid #cfd5dd; border-radius: 6px; font-size: 12px; text-align: right; color: #1d7a4c; font-weight: 700; }
 .unit-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
 .unit-row input[type="number"] { width: 45%; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 8px; font-size: 14px; outline: none; }
 .unit-row select { width: 55%; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 8px; font-size: 14px; background: white; outline: none; }
@@ -63,10 +62,10 @@ h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .attachment-uploading { opacity: 0.6; }
 .attachment-link { text-decoration: none; }
 .attachment-chip-wrap { display: flex; align-items: center; gap: 4px; }
-.attachment-download-btn { background: #dfe6f4; color: #1c3473; border: none; border-radius: 6px; width: 26px; height: 26px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.attachment-download-btn { background: #f4f5f7; color: #14181f; border: none; border-radius: 6px; width: 26px; height: 26px; font-size: 12px; cursor: pointer; flex-shrink: 0; }
 .attachment-download-btn:disabled { opacity: 0.6; cursor: default; }
 .location-input { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 10px; border: 1px solid #cfd5dd; background: #fff; border-radius: 8px; font-size: 13px; color: #33404f; outline: none; }
-.location-input:focus { border-color: #3556a8; }
+.location-input:focus { border-color: #3a4350; }
 .location-input::placeholder { color: #8d97a5; }
 .add-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px); background: #1d2733; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 99999; opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease; max-width: 85%; text-align: center; }
 .add-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -79,18 +78,18 @@ h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .pay-field label { display: block; font-size: 11px; font-weight: 600; color: #485566; text-transform: uppercase; margin-bottom: 4px; }
 .pay-field input, .pay-field select, .pay-field textarea { width: 100%; padding: 9px 10px; border: 1px solid #dfe3e8; border-radius: 9px; font-size: 14px; box-sizing: border-box; font-family: inherit; }
 .pay-balance-line { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 8px 10px; border-radius: 9px; margin: 10px 0; }
-.pay-balance-owes { background: #fbeeea; color: #a5321f; }
-.pay-balance-over { background: #eef2f9; color: #23408e; }
-.pay-balance-paid { background: #eef6f1; color: #23704a; }
+.pay-balance-owes { background: #fbeeea; color: #c2361f; }
+.pay-balance-over { background: #fff4d1; color: #14181f; }
+.pay-balance-paid { background: #eef6f1; color: #1d7a4c; }
 .pay-history-item { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 6px 0; border-top: 1px dashed #dfe3e8; }
-.add-to-cart-btn.just-added { background: #23704a; }
+.add-to-cart-btn.just-added { background: #1d7a4c; }
 @keyframes addPulse { 0% { transform: scale(1); } 40% { transform: scale(0.96); } 100% { transform: scale(1); } }
 .add-to-cart-btn.just-added { animation: addPulse 0.3s ease; }
 .btn-delete-item { background: #f6dfd8; color: #b23a26; border: none; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; font-weight: bold; flex-shrink: 0; }
 .action-btns { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 .btn { padding: 12px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; width: 100%; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 .btn-success { background: #2f7d55; color: white; }
-.btn-primary { background: #23408e; color: white; }
+.btn-primary { background: #14181f; color: white; }
 .btn-danger { background: #b23a26; color: white; }
 .btn-warning { background: #b7791f; color: white; }
 .btn-sm { padding: 6px 10px; font-size: 12px; width: auto; border-radius: 6px; min-height: unset; }
@@ -103,15 +102,15 @@ h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .user-card { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 .badge { padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; display: inline-block; }
 .badge-admin { background: #f6ecd2; color: #9a5f12; }
-.badge-master { background: #eef2f9; color: #23408e; }
-.badge-client { background: #dcefe3; color: #23704a; }
+.badge-master { background: #fff4d1; color: #14181f; }
+.badge-client { background: #dcefe3; color: #1d7a4c; }
 .role-toggle-btn { flex: 1; padding: 12px 10px; border-radius: 10px; border: 1px solid #cfd5dd; background: #fff; color: #5d6878; font-weight: 600; font-size: 13px; cursor: pointer; }
-.role-toggle-btn.active { background: #23408e; color: #fff; border-color: #23408e; }
+.role-toggle-btn.active { background: #14181f; color: #fff; border-color: #14181f; }
 .role-toggle-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.loader { text-align: center; color: #23408e; font-weight: 600; padding: 16px; font-size: 13px; }
-.link-text { color: #23408e; font-size: 13px; cursor: pointer; text-decoration: underline; margin-top: 10px; display: inline-block; font-weight: 500; }
+.loader { text-align: center; color: #14181f; font-weight: 600; padding: 16px; font-size: 13px; }
+.link-text { color: #14181f; font-size: 13px; cursor: pointer; text-decoration: underline; margin-top: 10px; display: inline-block; font-weight: 500; }
 .object-card { cursor: pointer; }
-.object-card:hover { border-color: #3556a8; }
+.object-card:hover { border-color: #3a4350; }
 .object-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
 .object-stats { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .object-stat-box { background: #f4f6f8; border: 1px solid #dfe3e8; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #33404f; flex: 1; min-width: 100px; }
@@ -132,13 +131,13 @@ h2 { font-size: 16px; }
 .user-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 62vw; min-height: 40px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #1d2733; background: #f4f6f8; border: 1px solid #dfe3e8; border-radius: 999px; cursor: pointer; }
 .user-chip .user-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-chip .user-chip-caret { color: #5d6878; font-size: 10px; transition: transform 0.15s; }
-.user-chip[aria-expanded="true"] { border-color: #c9d3ea; background: #eef2f9; }
+.user-chip[aria-expanded="true"] { border-color: #d9dde2; background: #fff4d1; }
 .user-chip[aria-expanded="true"] .user-chip-caret { transform: rotate(180deg); }
 .user-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 220px; padding: 6px; background: #ffffff; border: 1px solid #dfe3e8; border-radius: 12px; box-shadow: 0 12px 32px rgba(29, 39, 51, 0.14); }
 .user-menu.open { display: block; }
 .menu-item { display: block; width: 100%; padding: 12px; background: none; border: none; border-radius: 8px; text-align: left; font-size: 15px; font-weight: 600; color: #33404f; cursor: pointer; }
 .menu-item:active, .menu-item:hover { background: #eef1f4; }
-.menu-item.active { background: #eef2f9; color: #1c3473; }
+.menu-item.active { background: #fff4d1; color: #14181f; }
 .menu-item-danger { color: #b23a26; }
 .menu-sep { height: 1px; margin: 4px 6px; background: #dfe3e8; }
 @media (prefers-reduced-motion: reduce) { .user-chip .user-chip-caret { transition: none; } }
@@ -148,8 +147,8 @@ h2 { font-size: 16px; }
 .bottom-nav-inner { display: flex; gap: 4px; max-width: 680px; margin: 0 auto; }
 .nav-tab { flex: 1; min-height: 54px; padding: 6px 4px; background: none; border: none; border-radius: 12px; text-align: center; font-size: 12px; font-weight: 600; color: #5d6878; cursor: pointer; }
 .nav-tab .nav-tab-icon { display: block; font-size: 21px; line-height: 1.2; margin-bottom: 2px; }
-.nav-tab.active { color: #1c3473; background: #eef2f9; }
-.nav-tab:focus-visible, .menu-item:focus-visible, .user-chip:focus-visible { outline: 2px solid #23408e; outline-offset: 2px; }
+.nav-tab.active { color: #14181f; background: #fff4d1; }
+.nav-tab:focus-visible, .menu-item:focus-visible, .user-chip:focus-visible { outline: 2px solid #14181f; outline-offset: 2px; }
 body.has-bottom-nav { padding-bottom: calc(86px + env(safe-area-inset-bottom, 0px)); }
 /* Пока открыта клавиатура, панель прячется, чтобы не закрывать поля ввода */
 body.keyboard-open .bottom-nav { display: none !important; }
@@ -184,11 +183,11 @@ body.sheet-open { overflow: hidden; }
 .hc-l-sum { font-size: 14px; font-weight: 600; color: #1d2733; white-space: nowrap; }
 .hc-line .rooms-breakdown { margin-top: 2px; }
 .hc-line .measure-note { margin-left: 0; }
-.hc-items summary { cursor: pointer; color: #23408e; font-weight: 600; list-style: none; padding: 2px 0; }
+.hc-items summary { cursor: pointer; color: #14181f; font-weight: 600; list-style: none; padding: 2px 0; }
 .hc-items summary::-webkit-details-marker { display: none; }
 .hc-actions { display: flex; gap: 6px; margin-top: 10px; }
 .hc-btn { flex: 1; min-height: 42px; padding: 8px 10px; border: 1px solid #dfe3e8; border-radius: 10px; background: #f4f6f8; color: #33404f; font-size: 14px; font-weight: 600; cursor: pointer; }
-.hc-btn-primary { background: #23408e; border-color: #23408e; color: #ffffff; }
+.hc-btn-primary { background: #14181f; border-color: #14181f; color: #ffffff; }
 .hc-btn-more { flex: 0 0 48px; font-size: 18px; line-height: 1; }
 .hc-badge { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; vertical-align: 1px; }
 
@@ -211,15 +210,15 @@ body.sheet-open { overflow: hidden; }
 .calc-details-arrow { color: #5d6878; font-size: 12px; transition: transform 0.15s; }
 .calc-details[open] .calc-details-arrow { transform: rotate(180deg); }
 .calc-details-body { padding: 0 14px 6px; }
-.file-pick-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px dashed #9fb0d8; border-radius: 10px; background: #eef2f9; color: #1c3473; font-size: 14px; font-weight: 600; cursor: pointer; }
+.file-pick-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 10px 14px; border: 1px dashed #b9bfc7; border-radius: 10px; background: #fff4d1; color: #14181f; font-size: 14px; font-weight: 600; cursor: pointer; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-.file-pick-btn:focus-within { outline: 2px solid #23408e; outline-offset: 2px; }
+.file-pick-btn:focus-within { outline: 2px solid #14181f; outline-offset: 2px; }
 
 .calc-bar { display: none; position: fixed; left: 0; right: 0; z-index: 49; bottom: calc(67px + env(safe-area-inset-bottom, 0px)); background: #1d2733; box-shadow: 0 -4px 16px rgba(29, 39, 51, 0.12); }
 .calc-bar-inner { display: flex; align-items: center; gap: 8px; max-width: 680px; margin: 0 auto; padding: 8px 10px; }
 .calc-bar-total { flex: 1; min-width: 0; color: #cfd5dd; font-size: 12px; line-height: 1.2; }
 .calc-bar-total b { display: block; color: #8fd3b0; font-size: 19px; font-weight: 700; white-space: nowrap; }
-.calc-bar-save { min-height: 46px; padding: 10px 16px; border: none; border-radius: 10px; background: #23408e; color: #ffffff; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.calc-bar-save { min-height: 46px; padding: 10px 16px; border: none; border-radius: 10px; background: #14181f; color: #ffffff; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .calc-bar-more { flex: 0 0 46px; min-height: 46px; border: 1px solid #33404f; border-radius: 10px; background: transparent; color: #ffffff; font-size: 19px; cursor: pointer; }
 /* Полоса с итогом появляется, только когда в счёте есть хотя бы одна позиция */
 body.calc-active.calc-has-items .calc-bar { display: block; animation: calc-bar-in 0.22s ease-out; }
@@ -236,21 +235,21 @@ body.keyboard-open .calc-bar { display: none !important; }
 .obj-line { color: #485566; font-size: 13px; margin-top: 2px; overflow-wrap: anywhere; }
 .obj-money { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .obj-pill { padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #eef1f4; color: #33404f; }
-.obj-pill-owes { background: #fbeeea; color: #a5321f; }
-.obj-pill-paid { background: #eef6f1; color: #1f6442; }
+.obj-pill-owes { background: #fbeeea; color: #c2361f; }
+.obj-pill-paid { background: #eef6f1; color: #1d7a4c; }
 .obj-actions { display: flex; gap: 8px; margin: 14px 0 4px; }
 .obj-actions .btn { flex: 1; }
 .obj-actions .hc-btn-more { flex: 0 0 48px; min-height: 44px; }
 
 /* ---------- Черновик счёта ---------- */
-.draft-offer { display: none; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #c9d3ea; border-radius: 12px; background: #eef2f9; }
+.draft-offer { display: none; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; padding: 12px 14px; border: 1px solid #d9dde2; border-radius: 12px; background: #fff4d1; }
 .draft-offer.show { display: flex; }
-.draft-offer-text { flex: 1 1 180px; font-size: 13px; color: #16285a; line-height: 1.35; }
+.draft-offer-text { flex: 1 1 180px; font-size: 13px; color: #14181f; line-height: 1.35; }
 .draft-offer-text b { display: block; font-size: 14px; }
 .draft-offer-btns { display: flex; gap: 6px; }
 .draft-offer-btns button { min-height: 40px; padding: 8px 12px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; }
-.draft-continue { border: none; background: #23408e; color: #ffffff; }
-.draft-discard { border: 1px solid #c9d3ea; background: #ffffff; color: #485566; }
+.draft-continue { border: none; background: #14181f; color: #ffffff; }
+.draft-discard { border: 1px solid #d9dde2; background: #ffffff; color: #485566; }
 
 .pay-balance-line { gap: 8px; flex-wrap: wrap; }
 /* Уведомления — над нижними панелями, но под шторкой действий */
@@ -265,15 +264,15 @@ body.has-bottom-nav .add-toast.show { transform: translateX(-50%) translateY(0);
 .update-banner.show { display: flex; }
 .update-banner-text { flex: 1; min-width: 0; line-height: 1.3; }
 .update-banner-text small { display: block; color: #8d97a5; font-weight: 500; font-size: 12px; margin-top: 2px; }
-.update-banner-btn { min-height: 40px; padding: 8px 14px; border: none; border-radius: 10px; background: #23408e; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.update-banner-btn { min-height: 40px; padding: 8px 14px; border: none; border-radius: 10px; background: #14181f; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .update-banner-close { width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent; color: #8d97a5; font-size: 18px; cursor: pointer; }
 
 /* ===================== ЗАМЕР ===================== */
-.measure-open-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; margin: 4px 0 14px; border: 1px dashed #9fb0d8; border-radius: 12px; background: #eef2f9; color: #1c3473; font-size: 15px; font-weight: 700; cursor: pointer; }
-.mp-mini { flex: 0 0 auto; width: 40px; min-height: 36px; border: 1px solid #c9d3ea; border-radius: 8px; background: #eef2f9; font-size: 16px; cursor: pointer; }
+.measure-open-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; margin: 4px 0 14px; border: 1px dashed #b9bfc7; border-radius: 12px; background: #fff4d1; color: #14181f; font-size: 15px; font-weight: 700; cursor: pointer; }
+.mp-mini { flex: 0 0 auto; width: 40px; min-height: 36px; border: 1px solid #d9dde2; border-radius: 8px; background: #fff4d1; font-size: 16px; cursor: pointer; }
 .unit-row input[type="number"] { flex: 1; width: auto; min-width: 0; }
 .unit-row select { flex: 1.2; width: auto; min-width: 0; }
-.measure-note { margin: 0 0 2px 10px; font-size: 11px; color: #3556a8; line-height: 1.3; }
+.measure-note { margin: 0 0 2px 10px; font-size: 11px; color: #3a4350; line-height: 1.3; }
 .measure-note summary { cursor: pointer; list-style: none; font-weight: 600; }
 .measure-note summary::-webkit-details-marker { display: none; }
 .measure-note div { color: #485566; white-space: pre-line; margin-top: 2px; }
@@ -291,7 +290,7 @@ body.measure-open { overflow: hidden; }
 .mp-meta input, .mp-meta select { flex: 1; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 14px; background: #ffffff; color: #1d2733; }
 .mp-tabs .chip { min-height: 34px; padding: 6px 11px; font-size: 13px; }
 .mp-in::placeholder { color: #cfd5dd; font-weight: 500; }
-.mp-target { font-size: 12px; color: #9fb0d8; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mp-target { font-size: 12px; color: #b9bfc7; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mp-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px; }
 .mp-sec { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 14px; padding: 12px; margin-bottom: 12px; }
 .mp-sec-title { font-size: 14px; font-weight: 700; color: #1d2733; margin-bottom: 8px; }
@@ -305,21 +304,21 @@ body.measure-open { overflow: hidden; }
 .mp-pick button b { font-size: 16px; }
 .mp-row-label { flex: 0 0 72px; font-size: 13px; color: #485566; font-weight: 600; }
 .mp-in { flex: 1; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 17px; font-weight: 600; color: #1d2733; background: #ffffff; text-align: center; }
-.mp-in:focus { border-color: #3556a8; outline: 2px solid #c9d3ea; }
+.mp-in:focus { border-color: #3a4350; outline: 2px solid #d9dde2; }
 .mp-in.mp-bad { border-color: #b23a26; }
 .mp-unit { flex: 0 0 auto; font-size: 13px; color: #5d6878; }
 .mp-x { flex: 0 0 auto; color: #8d97a5; font-weight: 700; }
-.mp-row-res { flex: 0 0 auto; min-width: 58px; text-align: right; font-size: 12px; color: #1c3473; font-weight: 700; }
+.mp-row-res { flex: 0 0 auto; min-width: 58px; text-align: right; font-size: 12px; color: #14181f; font-weight: 700; }
 .mp-del { flex: 0 0 36px; height: 36px; border: none; border-radius: 9px; background: #fbeeea; color: #b23a26; font-size: 15px; cursor: pointer; }
 .mp-add-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-.mp-add { flex: 1; min-height: 42px; padding: 8px 12px; border: 1px dashed #9fb0d8; border-radius: 10px; background: #eef2f9; color: #1c3473; font-size: 14px; font-weight: 700; cursor: pointer; }
+.mp-add { flex: 1; min-height: 42px; padding: 8px 12px; border: 1px dashed #b9bfc7; border-radius: 10px; background: #fff4d1; color: #14181f; font-size: 14px; font-weight: 700; cursor: pointer; }
 .mp-calc { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f4f6f8; font-size: 13px; color: #33404f; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-line; }
 .mp-calc:empty { display: none; }
 .mp-calc b { color: #1d2733; }
 .mp-open { border: 1px solid #dfe3e8; border-radius: 12px; padding: 8px; margin-bottom: 8px; background: #f8f9fb; }
 .mp-open-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .mp-type { min-height: 36px; padding: 6px 12px; border: 1px solid #cfd5dd; border-radius: 999px; background: #ffffff; font-size: 14px; font-weight: 700; color: #33404f; cursor: pointer; }
-.mp-open-area { flex: 1; text-align: right; font-size: 13px; font-weight: 700; color: #1c3473; }
+.mp-open-area { flex: 1; text-align: right; font-size: 13px; font-weight: 700; color: #14181f; }
 .mp-dims { display: grid; grid-template-columns: 1fr auto 1fr auto 0.7fr; gap: 6px; align-items: end; }
 .mp-dims label { display: block; font-size: 11px; color: #5d6878; font-weight: 600; }
 .mp-dims label .mp-in { width: 100%; margin-top: 2px; }
@@ -339,7 +338,7 @@ body.measure-open { overflow: hidden; }
 .mp-pick button.active { background: #8fd3b0; border-color: #8fd3b0; color: #1d2733; }
 .mp-actions { display: flex; gap: 8px; margin-top: 8px; }
 .mp-btn { min-height: 46px; padding: 8px 14px; border: 1px solid #33404f; border-radius: 10px; background: transparent; color: #ffffff; font-size: 15px; font-weight: 700; cursor: pointer; }
-.mp-btn-primary { flex: 1; background: #23408e; border-color: #23408e; }
+.mp-btn-primary { flex: 1; background: #14181f; border-color: #14181f; }
 .mp-btn:disabled { opacity: 0.45; cursor: default; }
 .mp-hist { border: 1px solid #dfe3e8; border-radius: 12px; background: #ffffff; margin-bottom: 8px; }
 .mp-hist > summary { list-style: none; padding: 10px 12px; cursor: pointer; }
@@ -347,7 +346,7 @@ body.measure-open { overflow: hidden; }
 .mp-hist-title { font-size: 14px; font-weight: 700; color: #1d2733; }
 .mp-hist-meta { font-size: 12px; color: #5d6878; margin-top: 2px; }
 .mp-hist-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.mp-pill { padding: 3px 8px; border-radius: 999px; background: #eef2f9; color: #1c3473; font-size: 12px; font-weight: 700; }
+.mp-pill { padding: 3px 8px; border-radius: 999px; background: #fff4d1; color: #14181f; font-size: 12px; font-weight: 700; }
 .mp-hist-body { padding: 0 12px 12px; font-size: 13px; color: #33404f; white-space: pre-line; line-height: 1.5; }
 .mp-hist-actions { display: flex; gap: 6px; margin-top: 8px; white-space: normal; }
 .mp-hist-actions button { flex: 1; min-height: 40px; border: 1px solid #dfe3e8; border-radius: 10px; background: #f4f6f8; font-size: 14px; font-weight: 600; color: #33404f; cursor: pointer; }
@@ -358,7 +357,7 @@ body.measure-open .add-toast { z-index: 99; top: auto; bottom: calc(160px + env(
 .rooms-section { margin: 4px 0 18px; }
 .rooms-section h2 { margin-top: 6px; }
 .rooms-hint { font-size: 12px; color: #5d6878; margin: -4px 0 10px; }
-.room-card { background: #ffffff; border: 1px solid #dfe3e8; border-left: 4px solid #3556a8; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.room-card { background: #ffffff; border: 1px solid #dfe3e8; border-left: 4px solid #3a4350; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
 .room-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .room-name { font-size: 16px; font-weight: 700; color: #1d2733; overflow-wrap: anywhere; }
 .room-sum { font-size: 16px; font-weight: 700; color: #1d2733; white-space: nowrap; }
@@ -375,15 +374,15 @@ body.measure-open .add-toast { z-index: 99; top: auto; bottom: calc(160px + env(
 .wp-item.added { border-color: #a9d9bd; }
 .wp-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 10px 12px; background: none; border: none; text-align: left; cursor: pointer; }
 .wp-row-name { flex: 1; font-size: 15px; font-weight: 600; color: #1f2a37; }
-.wp-row-price { font-size: 13px; color: #23704a; font-weight: 700; white-space: nowrap; }
-.wp-badge { font-size: 12px; color: #23704a; font-weight: 700; }
+.wp-row-price { font-size: 13px; color: #1d7a4c; font-weight: 700; white-space: nowrap; }
+.wp-badge { font-size: 12px; color: #1d7a4c; font-weight: 700; }
 .wp-opts { padding: 0 12px 12px; }
 .wp-opts-title { font-size: 12px; color: #5d6878; margin-bottom: 6px; }
 .wp-surfaces { display: flex; flex-wrap: wrap; gap: 6px; }
-.wp-surface { min-height: 44px; padding: 6px 12px; border: 1px solid #c9d3ea; border-radius: 10px; background: #eef2f9; color: #1c3473; font-size: 14px; font-weight: 700; cursor: pointer; text-align: left; }
-.wp-surface small { display: block; font-weight: 600; color: #3556a8; font-size: 12px; }
-.wp-surface.suggested { background: #23408e; border-color: #23408e; color: #ffffff; }
-.wp-surface.suggested small { color: #c9d3ea; }
+.wp-surface { min-height: 44px; padding: 6px 12px; border: 1px solid #d9dde2; border-radius: 10px; background: #fff4d1; color: #14181f; font-size: 14px; font-weight: 700; cursor: pointer; text-align: left; }
+.wp-surface small { display: block; font-weight: 600; color: #3a4350; font-size: 12px; }
+.wp-surface.suggested { background: #14181f; border-color: #14181f; color: #ffffff; }
+.wp-surface.suggested small { color: #d9dde2; }
 .wp-manual { display: flex; gap: 6px; margin-top: 8px; }
 .wp-manual .mp-in { font-size: 16px; }
 .wp-manual select { min-height: 44px; border: 1px solid #cfd5dd; border-radius: 10px; padding: 0 8px; font-size: 14px; background: #ffffff; }
@@ -394,18 +393,18 @@ body.measure-open .add-toast { z-index: 99; top: auto; bottom: calc(160px + env(
 .hc-room > div { padding-left: 4px; }
 .room-select-all { display: flex; gap: 6px; margin-bottom: 8px; }
 .room-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; margin-bottom: 6px; border: 1px solid #dfe3e8; border-radius: 12px; background: #ffffff; }
-.room-row.on { border-color: #6f86c4; background: #eef2f9; }
+.room-row.on { border-color: #8a929c; background: #fff4d1; }
 .room-check { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 48px; padding-left: 8px; cursor: pointer; }
-.room-check input { width: 22px; height: 22px; flex-shrink: 0; accent-color: #23408e; }
+.room-check input { width: 22px; height: 22px; flex-shrink: 0; accent-color: #14181f; }
 .room-check .room-name { display: block; font-size: 15px; }
 .room-dims { display: block; font-size: 12px; color: #5d6878; margin-top: 1px; }
-.room-selbar { display: none; position: sticky; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 5; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #16285a; color: #ffffff; box-shadow: 0 6px 18px rgba(22, 40, 90, 0.25); }
+.room-selbar { display: none; position: sticky; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 5; align-items: center; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: #14181f; color: #ffffff; box-shadow: 0 6px 18px rgba(22, 40, 90, 0.25); }
 body.calc-has-items .room-selbar { bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
 .room-selbar.show { display: flex; }
 .room-selbar-text { flex: 1; font-size: 14px; font-weight: 700; line-height: 1.3; }
-.room-selbar-text small { font-weight: 500; color: #c9d3ea; font-size: 12px; }
-.room-selbar-btn { min-height: 44px; padding: 8px 16px; border: none; border-radius: 10px; background: #ffffff; color: #16285a; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-.rooms-breakdown { font-size: 11px; color: #1c3473; margin-top: 2px; }
+.room-selbar-text small { font-weight: 500; color: #d9dde2; font-size: 12px; }
+.room-selbar-btn { min-height: 44px; padding: 8px 16px; border: none; border-radius: 10px; background: #ffffff; color: #14181f; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.rooms-breakdown { font-size: 11px; color: #14181f; margin-top: 2px; }
 
 /* ===== Оформление «Сметный документ» =====
    Белая «бумага», тонкие линейки, чернильно-синий акцент, шрифт Golos,
@@ -435,45 +434,45 @@ svg.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-wid
 .hc-date { color: #5d6878; }
 .hc-btn { border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .hc-btn:not(.hc-btn-primary):not(.hc-btn-more) { flex: 0 0 48px; }
-.hc-btn-primary { background: #23408e; border-color: #23408e; }
+.hc-btn-primary { background: #14181f; border-color: #14181f; }
 .obj-name, .room-name { font-weight: 600; }
 .obj-pill { border-radius: 6px; font-weight: 600; }
 .room-card { border-left: 1px solid #dfe3e8; border-radius: 10px; }
 .room-row { border-radius: 10px; }
-.room-row.on { background: #eef2f9; border-color: #6f86c4; }
-.room-selbar { background: #23408e; border-radius: 10px; box-shadow: none; }
-.room-selbar-btn { color: #23408e; border-radius: 8px; }
+.room-row.on { background: #fff4d1; border-color: #8a929c; }
+.room-selbar { background: #14181f; border-radius: 10px; box-shadow: none; }
+.room-selbar-btn { color: #14181f; border-radius: 8px; }
 .chip { border-radius: 8px; }
-.chip.active { background: #23408e; border-color: #23408e; }
+.chip.active { background: #14181f; border-color: #14181f; }
 .nav-tab { border-radius: 10px; }
 .nav-tab .nav-tab-icon svg.ic { width: 22px; height: 22px; }
-.nav-tab.active { background: #eef2f9; color: #23408e; }
+.nav-tab.active { background: #fff4d1; color: #14181f; }
 .user-chip { border-radius: 8px; }
 .user-chip svg.ic { width: 18px; height: 18px; }
-.mp-mini { display: inline-flex; align-items: center; justify-content: center; background: #ffffff; border-color: #cfd5dd; color: #23408e; border-radius: 8px; }
+.mp-mini { display: inline-flex; align-items: center; justify-content: center; background: #ffffff; border-color: #cfd5dd; color: #14181f; border-radius: 8px; }
 .mp-mini svg.ic { width: 18px; height: 18px; }
 .calc-bar { background: #1d2733; }
 .calc-bar-total b { color: #ffffff; font-weight: 600; }
-.calc-bar-save { background: #23408e; border-radius: 8px; font-weight: 600; }
+.calc-bar-save { background: #14181f; border-radius: 8px; font-weight: 600; }
 .calc-bar-more { border-radius: 8px; }
 .mp-foot { background: #1d2733; }
 .mp-result-main { color: #ffffff; font-weight: 600; }
 .mp-btn { border-radius: 8px; font-weight: 600; }
 .mp-sec, .mp-open, .wp-item { border-radius: 10px; }
-.mp-add, .measure-open-btn { border-radius: 8px; border-style: solid; background: #ffffff; border-color: #c9d3ea; color: #23408e; }
+.mp-add, .measure-open-btn { border-radius: 8px; border-style: solid; background: #ffffff; border-color: #d9dde2; color: #14181f; }
 .mp-title { font-weight: 600; }
 .sheet-item { font-weight: 500; }
 .sheet-item-icon { display: inline-flex; color: #5d6878; }
 .sheet-item-danger .sheet-item-icon { color: inherit; }
 .draft-offer { border-radius: 10px; }
 .update-banner { background: #1d2733; border-radius: 10px; }
-.update-banner-btn { background: #23408e; border-radius: 8px; }
+.update-banner-btn { background: #14181f; border-radius: 8px; }
 .calc-details { border-radius: 10px; background: #ffffff; }
 .file-pick-btn { border-style: solid; border-radius: 8px; background: #ffffff; }
 
 /* ===== Строгий вариант: белый лист, линейки, почти прямые углы =====
    Цвет — только у суммы долга и у выбранного. Заливка — одна, у главной кнопки. */
-:root { --s-ink: #161c24; --s-ink2: #5a6470; --s-ink3: #8a929c; --s-line: #d9dde2; --s-acc: #1f3a82; --s-due: #9c2f1d; --s-ok: #1f6442; }
+:root { --s-ink: #14181f; --s-ink2: #5a6470; --s-ink3: #8a929c; --s-line: #d9dde2; --s-acc: #14181f; --s-due: #c2361f; --s-ok: #1d7a4c; }
 body { background: #ffffff; color: var(--s-ink); }
 .container { border: none; border-radius: 0; padding-top: 14px; }
 h1 { font-size: 24px; letter-spacing: -0.015em; margin-top: 18px; }
@@ -598,42 +597,136 @@ h2 { font-size: 16px; }
 /* ===== Рулетка ===== */
 .rl-sec { padding-top: 6px; }
 .rl-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.rl-chip { min-height: 38px; padding: 6px 12px; border: 1px solid var(--s-line, #d9dde2); border-radius: 3px; background: #ffffff; color: #161c24; font-size: 14px; cursor: pointer; }
+.rl-chip { min-height: 38px; padding: 6px 12px; border: 1px solid var(--s-line, #d9dde2); border-radius: 3px; background: #ffffff; color: #14181f; font-size: 14px; cursor: pointer; }
 .rl-chip b { font-weight: 600; }
-.rl-chip.on { border-color: #1f3a82; color: #1f3a82; box-shadow: inset 0 0 0 1px #1f3a82; }
-.rl-add { color: #1f3a82; border-style: dashed; }
+.rl-chip.on { border-color: #14181f; color: #14181f; box-shadow: inset 0 0 0 1px #14181f; }
+.rl-add { color: #14181f; border-style: dashed; }
 .rl-check { font-size: 13px; font-weight: 600; margin-left: auto; text-align: right; }
-.rl-ok { color: #1f6442; }
+.rl-ok { color: #1d7a4c; }
 .rl-ok::before { content: "✓ "; }
-.rl-bad { color: #9c2f1d; }
+.rl-bad { color: #c2361f; }
 .rl-wait { color: #5a6470; font-weight: 500; }
-.rl-tool-close { background: #161c24; border-color: #161c24; color: #ffffff; font-weight: 600; }
+.rl-tool-close { background: #14181f; border-color: #14181f; color: #ffffff; font-weight: 600; }
 .rl-sketch { border: 1px solid #d9dde2; border-radius: 3px; background: #ffffff; touch-action: manipulation; }
 .rl-sketch svg { display: block; }
 .rl-walls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.rl-pad { display: none; flex: 0 0 auto; background: #eef0f3; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 2px solid #161c24; }
+.rl-pad { display: none; flex: 0 0 auto; background: #eef0f3; padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 2px solid #14181f; }
 .measure-panel.ruler-open .rl-pad { display: block; }
 .measure-panel.ruler-open .mp-foot { display: none; }
 .rl-pad-inner { max-width: 680px; margin: 0 auto; }
 .rl-pad-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .rl-pad-read { flex: 1; min-width: 0; }
 .rl-pad-label { font-size: 12.5px; color: #5a6470; }
-.rl-pad-value { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; color: #161c24; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rl-pad-value small { font-size: 16px; color: #1f3a82; font-weight: 600; }
+.rl-pad-value { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; color: #14181f; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rl-pad-value small { font-size: 16px; color: #14181f; font-weight: 600; }
 .rl-ph { color: #b3bac3; }
-.rl-done { min-height: 40px; padding: 6px 14px; border: 1px solid #161c24; border-radius: 3px; background: #ffffff; font-size: 14px; font-weight: 600; color: #161c24; cursor: pointer; }
+.rl-done { min-height: 40px; padding: 6px 14px; border: 1px solid #14181f; border-radius: 3px; background: #ffffff; font-size: 14px; font-weight: 600; color: #14181f; cursor: pointer; }
 .rl-tools { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin-bottom: 8px; }
 .rl-tools::-webkit-scrollbar { display: none; }
-.rl-tool { flex: 0 0 auto; min-height: 36px; padding: 6px 11px; border: 1px solid #c9ced5; border-radius: 3px; background: #ffffff; font-size: 13px; color: #161c24; cursor: pointer; white-space: nowrap; }
-.rl-tool.on { border-color: #161c24; box-shadow: inset 0 0 0 1px #161c24; font-weight: 600; }
-.rl-tool-del { color: #9c2f1d; }
+.rl-tool { flex: 0 0 auto; min-height: 36px; padding: 6px 11px; border: 1px solid #c9ced5; border-radius: 3px; background: #ffffff; font-size: 13px; color: #14181f; cursor: pointer; white-space: nowrap; }
+.rl-tool.on { border-color: #14181f; box-shadow: inset 0 0 0 1px #14181f; font-weight: 600; }
+.rl-tool-del { color: #c2361f; }
 .rl-keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-.rl-keys button { height: 48px; border: none; border-radius: 6px; background: #ffffff; font-size: 21px; font-weight: 500; color: #161c24; box-shadow: 0 1px 0 rgba(22, 28, 36, 0.12); cursor: pointer; font-family: inherit; }
+.rl-keys button { height: 48px; border: none; border-radius: 6px; background: #ffffff; font-size: 21px; font-weight: 500; color: #14181f; box-shadow: 0 1px 0 rgba(22, 28, 36, 0.12); cursor: pointer; font-family: inherit; }
 .rl-keys button:active { background: #dfe3e8; }
 .rl-keys .op { background: #dde1e6; color: #3d4652; font-size: 19px; }
-.rl-keys .next { grid-column: span 2; background: #161c24; color: #ffffff; font-size: 15px; font-weight: 600; }
+.rl-keys .next { grid-column: span 2; background: #14181f; color: #ffffff; font-size: 15px; font-weight: 600; }
 .rl-keys .next:active { background: #2c3440; }
 .rl-keys button { touch-action: manipulation; }
+
+/* ===== Чертёж с жёлтой рулеткой =====
+   Основа — строгий чертёж: миллиметровка, размерные линии, штамп.
+   Единственный яркий цвет — жёлтый корпус рулетки: главное действие,
+   оплаченная часть ленты, выбранное. Красный — только долг. */
+:root {
+  --s-ink: #14181f; --s-ink2: #586270; --s-ink3: #8a929c; --s-line: #dde1e6; --s-acc: #14181f;
+  --s-due: #c2361f; --s-ok: #1d7a4c;
+  --tape: #ffc83d; --tape-d: #e8a900; --tape-l: #fff4d1; --grid: #eff1f4;
+  --narrow: "PT Sans Narrow", "Golos Text", -apple-system, "Segoe UI", sans-serif;
+}
+body {
+  background-color: #ffffff;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 16px 16px;
+  color: var(--s-ink);
+}
+.container { background: transparent; }
+h1 { font-weight: 700; letter-spacing: -0.025em; }
+/* размерная линия под заголовком */
+.dimline { position: relative; height: 12px; margin: -6px 0 16px; }
+.dimline::before { content: ""; position: absolute; left: 0; right: 0; top: 5px; border-top: 1px solid var(--s-ink2); }
+.dimline::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 11px; border-left: 1px solid var(--s-ink2); border-right: 1px solid var(--s-ink2); }
+.dimline span { position: absolute; left: 50%; top: -3px; transform: translateX(-50%); z-index: 1; background: var(--tape); color: var(--s-ink); font: 700 12.5px/1.35 var(--narrow); padding: 0 8px; border-radius: 3px; white-space: nowrap; max-width: 80%; overflow: hidden; text-overflow: ellipsis; }
+.dimline span:empty { display: none; }
+/* главное действие — жёлтое */
+.btn-primary, .btn-success, .hc-btn-primary, .calc-bar-save, .mp-btn-primary, .draft-continue, .update-banner-btn, .room-selbar-btn, .rl-keys .next, .rl-tool-close {
+  background: var(--tape) !important; border-color: var(--tape) !important; color: var(--s-ink) !important;
+}
+.btn-primary:active, .hc-btn-primary:active, .calc-bar-save:active, .rl-keys .next:active { background: var(--tape-d) !important; }
+.btn, .hc-btn, .mp-btn, .calc-bar-save, .calc-bar-more, .room-selbar-btn, .draft-offer-btns button, .measure-open-btn, .mp-add, .file-pick-btn, .sheet-cancel { border-radius: 8px; }
+.mp-in, .search-box, .form-group input, .form-group select, .form-group textarea, .rl-chip, .rl-tool, .mp-mini, .mp-type, .chip { border-radius: 6px; }
+/* цифры — чертёжным шрифтом */
+.hc-amount, .hc-l-sum, .stamp b, .rl-pad-value, .mp-result-main, .calc-bar-total b, .room-dims, .obj-pill, .hc-date, .rooms-breakdown, .room-selbar-text small, .rl-sketch text, .tape-l { font-family: var(--narrow); }
+.hc-amount { font-size: 21px; font-weight: 700; }
+.hc-l-sum { font-size: 15.5px; font-weight: 700; }
+.calc-bar-total b { font-size: 22px; color: var(--tape) !important; font-weight: 700; }
+.mp-result-main { color: var(--tape) !important; font-size: 26px; font-weight: 700; }
+.rl-pad-value { font-size: 32px; font-weight: 700; }
+/* листы с угловыми метками */
+.history-card, .object-card, .profile-box, .user-card {
+  position: relative; background: #ffffff; border: none; border-radius: 4px;
+  padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 0 rgba(20, 24, 31, 0.04), 0 6px 18px rgba(20, 24, 31, 0.07);
+}
+.history-card::before, .object-card::before, .profile-box::before, .user-card::before,
+.history-card::after, .object-card::after, .profile-box::after, .user-card::after {
+  content: ""; position: absolute; width: 10px; height: 10px; border-color: var(--s-ink); border-style: solid; pointer-events: none;
+}
+.history-card::before, .object-card::before, .profile-box::before, .user-card::before { left: 0; top: 0; border-width: 1.5px 0 0 1.5px; }
+.history-card::after, .object-card::after, .profile-box::after, .user-card::after { right: 0; bottom: 0; border-width: 0 1.5px 1.5px 0; }
+/* штамп — сводка */
+.stamp { display: grid; grid-template-columns: repeat(var(--cols, 3), 1fr); border: 1.5px solid var(--s-ink); border-radius: 6px; overflow: hidden; background: #ffffff; margin-bottom: 16px; }
+.stamp > div { padding: 7px 9px; font-size: 12px; color: var(--s-ink2); line-height: 1.2; }
+.stamp > div + div { border-left: 1px solid var(--s-ink); }
+.stamp b { display: block; color: var(--s-ink); font-size: 19px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
+.stamp .due { background: #fff1ee; } .stamp .due b { color: var(--s-due); }
+/* лента рулетки */
+.tape { position: relative; height: 24px; border: 1.5px solid var(--s-ink); border-radius: 4px; background: #ffffff; overflow: hidden; margin: 10px 0 4px; }
+.tape i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--tape); }
+.tape::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: repeating-linear-gradient(90deg, rgba(20,24,31,.55) 0 1px, transparent 1px 10px), repeating-linear-gradient(90deg, rgba(20,24,31,.35) 0 1px, transparent 1px 5px);
+  background-size: 100% 8px, 100% 4px; background-repeat: no-repeat; }
+.tape-l { display: flex; justify-content: space-between; font-size: 13px; color: var(--s-ink2); }
+.tape-l .due { color: var(--s-due); font-weight: 700; } .tape-l .ok { color: var(--s-ok); font-weight: 700; }
+/* выбранное — светло-жёлтым */
+.room-row.on { background: var(--tape-l); border-color: var(--s-line); }
+.room-row.on .room-name { color: var(--s-ink); }
+.room-check input { accent-color: var(--s-ink); }
+.room-selbar { background: var(--s-ink); border-radius: 8px; }
+.room-selbar-text small { color: var(--tape); font-size: 13px; }
+.chip.active, .tab-btn.active { box-shadow: inset 0 -3px 0 var(--tape); }
+.menu-item.active { box-shadow: inset 3px 0 0 var(--tape); }
+.wp-item.added { border-color: var(--tape-d); background: var(--tape-l); }
+.wp-surface.suggested { background: var(--tape); border-color: var(--tape); color: var(--s-ink); }
+.wp-surface.suggested small { color: var(--s-ink2); }
+.mp-pick button.active { background: var(--tape); border-color: var(--tape); color: var(--s-ink); }
+.rl-chip.on { border-color: var(--s-ink); background: var(--tape-l); color: var(--s-ink); box-shadow: inset 0 0 0 1px var(--s-ink); }
+.rl-add { color: var(--s-ink); }
+.rl-pad { border-top: 3px solid var(--tape); }
+.rl-pad-value small { color: var(--s-ink2); }
+.mp-head { border-bottom: none; box-shadow: inset 0 -3px 0 var(--tape); }
+.mp-calc { border-left-color: var(--tape-d); border-left-width: 3px; }
+.draft-offer { border-color: var(--s-ink); background: var(--tape-l); }
+/* шапка и нижняя панель */
+.app-header { border-bottom: none; box-shadow: inset 0 -3px 0 var(--tape); }
+.bottom-nav { border-top: 1.5px solid var(--s-ink); }
+.bottom-nav::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; pointer-events: none; opacity: .3;
+  background-image: repeating-linear-gradient(90deg, var(--s-ink) 0 1px, transparent 1px 12px); }
+.nav-tab { position: relative; }
+.nav-tab.active { box-shadow: none; color: var(--s-ink); font-weight: 700; }
+.nav-tab.active::after { content: ""; display: block; width: 26px; height: 4px; border-radius: 2px; background: var(--tape); margin: 3px auto 0; }
+.update-banner { box-shadow: inset 0 -3px 0 var(--tape); }
+/* ссылки — подчёркнутые, без синего */
+.room-select-all .chip, .link-text, .measure-note summary { color: var(--s-ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--tape-d); }
 </style>
 </head>
 <body>
@@ -744,7 +837,7 @@ h2 { font-size: 16px; }
 </div>
 </div>
 
-<div id="companyModePromo" style="display:none; background:linear-gradient(90deg,#23408e,#23408e); color:#fff; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; font-weight:600;">
+<div id="companyModePromo" style="display:none; background:linear-gradient(90deg,#14181f,#14181f); color:#fff; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; font-weight:600;">
 🆕 Новинка! Попробуй создать прайс под свою компанию — в следующий раз выбери «Своя компания» на экране входа.
 </div>
 
@@ -819,6 +912,7 @@ h2 { font-size: 16px; }
 <!-- Вкладка Калькулятор -->
 <div id="calcTab">
 <h1>Расчёт счёта</h1>
+<div class="dimline" aria-hidden="true"><span id="dimCalc"></span></div>
 
 <div class="draft-offer" id="draftOffer" role="status">
 <div class="draft-offer-text"><b>Незаконченный счёт</b><span id="draftOfferInfo"></span></div>
@@ -828,12 +922,12 @@ h2 { font-size: 16px; }
 </div>
 </div>
 
-<a href="index.html" id="editPriceListLink" target="_blank" rel="noopener" style="display:none; align-items:center; gap:6px; background:#eef2f9; color:#1c3473; border:1px solid #c9d3ea; padding:8px 12px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none; margin-bottom:14px;">Редактировать свой прайс-лист</a>
+<a href="index.html" id="editPriceListLink" target="_blank" rel="noopener" style="display:none; align-items:center; gap:6px; background:#fff4d1; color:#14181f; border:1px solid #d9dde2; padding:8px 12px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none; margin-bottom:14px;">Редактировать свой прайс-лист</a>
 
 <div id="editModeBanner" style="display:none; align-items:center; justify-content:space-between; gap:8px; background:#f6ecd2; border:1px solid #c9962e; color:#734a12; padding:8px 12px; border-radius:8px; font-size:12px; margin-bottom:14px; flex-wrap:wrap;">
 <span id="editModeBannerText">Редактирование счёта из истории</span>
 <div style="display:flex; gap:6px; flex-wrap:wrap;">
-<button type="button" class="btn-delete-item" style="background:#dfe6f4; color:#1c3473; flex-shrink:0;" onclick="duplicateAsNewFromEdit()" title="Создать отдельный новый счёт с этими же позициями, не трогая текущий">Новый с этими позициями</button>
+<button type="button" class="btn-delete-item" style="background:#f4f5f7; color:#14181f; flex-shrink:0;" onclick="duplicateAsNewFromEdit()" title="Создать отдельный новый счёт с этими же позициями, не трогая текущий">Новый с этими позициями</button>
 <button type="button" class="btn-delete-item" style="background:#fff; color:#734a12; flex-shrink:0;" onclick="cancelEditRecord()">Отмена ✕</button>
 </div>
 </div>
@@ -943,6 +1037,7 @@ h2 { font-size: 16px; }
 
 <div id="objectsListView">
 <h1>Объекты</h1>
+<div class="dimline" aria-hidden="true"><span id="dimObjects"></span></div>
 
 <div class="accordion-category" id="newObjectCard">
 <div class="accordion-header" onclick="toggleAccordion(this)">
@@ -988,6 +1083,7 @@ h2 { font-size: 16px; }
 <!-- Вкладка История -->
 <div id="historyTab" style="display: none;">
 <h1>История счетов</h1>
+<div class="dimline" aria-hidden="true"><span id="dimHistory"></span></div>
 <div id="overallPayStats"></div>
 <div class="hist-tools">
 <input type="search" id="historySearch" class="search-box" placeholder="Поиск: заказчик, объект, адрес, работа" oninput="renderHistory()">
@@ -1005,6 +1101,7 @@ h2 { font-size: 16px; }
 <!-- Вкладка Профиль -->
 <div id="profileTab" style="display: none;">
 <h1>Личный кабинет</h1>
+<div class="dimline" aria-hidden="true"><span></span></div>
 <div class="profile-box">
 <h3 style="font-size: 14px; margin-bottom: 12px;">Данные профиля</h3>
 <div class="form-group">
@@ -1058,6 +1155,7 @@ h2 { font-size: 16px; }
 <!-- Вкладка Управления Пользователями (Admin) -->
 <div id="usersTab" style="display: none;">
 <h1>Пользователи</h1>
+<div class="dimline" aria-hidden="true"><span></span></div>
 <div class="accordion-category" id="newUserCard">
 <div class="accordion-header" onclick="toggleAccordion(this)">
 <div style="display:flex; align-items:center; gap:8px; flex:1;">
@@ -1098,14 +1196,15 @@ h2 { font-size: 16px; }
 <!-- Вкладка Статистика (Admin) -->
 <div id="statsTab" style="display: none;">
 <h1>Статистика</h1>
+<div class="dimline" aria-hidden="true"><span></span></div>
 <p style="font-size:13px; color:#5d6878; margin-top:-8px;">Только количество — содержимое личных кабинетов «своя компания» остаётся приватным.</p>
 <div id="statsListContainer">Загрузка...</div>
 <div style="margin-top:20px; padding-top:16px; border-top:1px solid #dfe3e8;">
 <h2 style="font-size:16px; margin:0 0 6px;">Резервная копия</h2>
 <p style="font-size:13px; color:#5d6878; margin:0 0 10px;">Все данные сайта одним файлом: прайс, объекты, счета, пользователи. В файле есть зашифрованные пароли — храните его в надёжном месте.</p>
 <div style="display:flex; flex-wrap:wrap; gap:8px;">
-<button type="button" id="backupBtn" onclick="downloadBackup()" style="background:#23408e; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">⬇️ Скачать резервную копию</button>
-<button type="button" id="restoreBtn" onclick="document.getElementById('restoreFileInput').click()" style="background:#fff; color:#a5321f; border:1px solid #efc6bb; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">Восстановить из файла</button>
+<button type="button" id="backupBtn" onclick="downloadBackup()" style="background:#14181f; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">⬇️ Скачать резервную копию</button>
+<button type="button" id="restoreBtn" onclick="document.getElementById('restoreFileInput').click()" style="background:#fff; color:#c2361f; border:1px solid #efc6bb; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">Восстановить из файла</button>
 </div>
 <input type="file" id="restoreFileInput" accept=".json,application/json" style="display:none;" onchange="restoreFromBackup(this)">
 <p style="font-size:12px; color:#8d97a5; margin:8px 0 0;">Восстановление заменит <b>все</b> текущие данные содержимым файла. Перед этим текущие данные автоматически скачаются отдельной копией.</p>
@@ -1173,7 +1272,7 @@ let objectHistorySubTab = 'invoice';
 function escapeHtml(str) {
 return String(str ?? '')
 .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;").replace(/'/g, "&#23408e;");
+.replace(/"/g, "&quot;").replace(/'/g, "&#14181f;");
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -1663,7 +1762,7 @@ card.innerHTML = `
 <span>${escapeHtml(srv.name)}</span>
 <span style="display:flex; align-items:center; gap:4px;" title="Можно изменить цену разово, только для этого счёта">
 <input type="number" id="input_price_${idx}" class="price-edit-input" value="${srv.price}" min="0" step="1">
-<span style="font-size:12px; color:#23704a; font-weight:700;">₽</span>
+<span style="font-size:12px; color:#1d7a4c; font-weight:700;">₽</span>
 </span>
 </div>
 <div class="unit-row">
@@ -2206,7 +2305,7 @@ ${unitOptions.map(u => `<option value="${u}" ${u === item.unit ? 'selected' : ''
 </div>
 ${roomsBreakdownText(item)
 ? `<div class="rooms-breakdown">${escapeHtml(roomsBreakdownText(item))}</div>`
-: (item.location ? `<div style="font-size:11px; color:#3556a8;">${escapeHtml(item.location)}</div>` : '')}
+: (item.location ? `<div style="font-size:11px; color:#3a4350;">${escapeHtml(item.location)}</div>` : '')}
 ${measureNoteHtml(item)}
 </div>
 `;
@@ -2343,7 +2442,7 @@ const sum = item.qty * item.price;
 total += sum;
 rows += `
 <tr>
-<td style="border: 1px solid #cfd5dd; padding: 8px;">${escapeHtml(item.name)}${roomsBreakdownText(item) ? `<br><span style="font-size:10px; color:#3556a8;">${escapeHtml(roomsBreakdownText(item))}</span>` : (item.location ? `<br><span style="font-size:10px; color:#3556a8;">${escapeHtml(item.location)}</span>` : '')}</td>
+<td style="border: 1px solid #cfd5dd; padding: 8px;">${escapeHtml(item.name)}${roomsBreakdownText(item) ? `<br><span style="font-size:10px; color:#3a4350;">${escapeHtml(roomsBreakdownText(item))}</span>` : (item.location ? `<br><span style="font-size:10px; color:#3a4350;">${escapeHtml(item.location)}</span>` : '')}</td>
 <td style="border: 1px solid #cfd5dd; padding: 8px; text-align: center;">${item.qty}</td>
 <td style="border: 1px solid #cfd5dd; padding: 8px; text-align: center;">${escapeHtml(item.unit)}</td>
 <td style="border: 1px solid #cfd5dd; padding: 8px; text-align: right;">${item.price.toLocaleString('ru-RU')} ₽</td>
@@ -2362,7 +2461,7 @@ printContainer.style.boxSizing = 'border-box';
 printContainer.style.zIndex = '999999';
 printContainer.style.fontFamily = 'Arial, sans-serif';
 printContainer.innerHTML = `
-<h2 style="color: #23408e; border-bottom: 2px solid #23408e; padding-bottom: 8px; margin-top:0; font-size: 22px;">${isEstimate ? 'ПРЕДВАРИТЕЛЬНЫЙ РАСЧЁТ' : 'СЧЕТ НА ОПЛАТУ УСЛУГ'}</h2>
+<h2 style="color: #14181f; border-bottom: 2px solid #14181f; padding-bottom: 8px; margin-top:0; font-size: 22px;">${isEstimate ? 'ПРЕДВАРИТЕЛЬНЫЙ РАСЧЁТ' : 'СЧЕТ НА ОПЛАТУ УСЛУГ'}</h2>
 ${(cloudData.self && cloudData.self.companyName) ? `<p style="margin: 0 0 10px; font-size: 15px; font-weight:700; color:#1d2733;">${escapeHtml(cloudData.self.companyName)}</p>` : ''}
 ${isEstimate ? '<p style="margin: 0 0 6px; font-size: 12px; color: #8a5a14; background:#fbf7ec; border:1px solid #ecd9a6; border-radius:6px; padding:6px 10px; display:inline-block;">Это предварительный расчёт, не счёт на оплату. Итоговая сумма может измениться.</p>' : ''}
 <p style="margin: 6px 0; font-size: 14px;"><b>Дата:</b> ${dateStr}</p>
@@ -2383,7 +2482,7 @@ ${note ? `<p style="margin: 6px 0; font-size: 14px;"><b>Пояснение:</b> 
 </table>
 <h3 style="text-align: right; margin-top: 20px; font-size: 18px; color: #000;">${isEstimate ? 'ИТОГО ПО РАСЧЁТУ' : 'ИТОГО К ОПЛАТЕ'}: ${total.toLocaleString('ru-RU')} ₽</h3>
 ${(cloudData.self && cloudData.self.invoiceNote) ? `
-<div style="margin-top: 25px; padding: 12px; background: #f4f6f8; border-left: 4px solid #23408e; border-radius: 4px; font-size: 11px; color: #485566; line-height: 1.5;">
+<div style="margin-top: 25px; padding: 12px; background: #f4f6f8; border-left: 4px solid #14181f; border-radius: 4px; font-size: 11px; color: #485566; line-height: 1.5;">
 <b>Примечание:</b><br>
 ${escapeHtml(cloudData.self.invoiceNote)}
 </div>
@@ -2468,9 +2567,9 @@ payModalRecordId = recordId;
 const info = getBalanceInfo(rec);
 document.getElementById('payModalSub').innerHTML =
 `Счёт: <b>${escapeHtml(rec.client)}</b> — ${rec.total.toLocaleString('ru-RU')} ₽. `+
-(info.status === 'owes' ? `Осталось оплатить: <b style="color:#a5321f;">${info.balance.toLocaleString('ru-RU')} ₽</b>`
-: info.status === 'over' ? `Уже переплачено на <b style="color:#23408e;">${info.balance.toLocaleString('ru-RU')} ₽</b>`
-: `<b style="color:#23704a;">Полностью оплачен</b>`);
+(info.status === 'owes' ? `Осталось оплатить: <b style="color:#c2361f;">${info.balance.toLocaleString('ru-RU')} ₽</b>`
+: info.status === 'over' ? `Уже переплачено на <b style="color:#14181f;">${info.balance.toLocaleString('ru-RU')} ₽</b>`
+: `<b style="color:#1d7a4c;">Полностью оплачен</b>`);
 document.getElementById('payAmount').value = info.status === 'owes' ? info.balance : '';
 document.getElementById('payMethod').value = 'Наличные';
 document.getElementById('payDate').value = new Date().toISOString().slice(0, 10);
@@ -2531,13 +2630,13 @@ printContainer.style.zIndex = '999999';
 printContainer.style.fontFamily = 'Arial, sans-serif';
 
 const statusLine = balanceInfo.status === 'owes'
-? `<p style="margin:6px 0; font-size:14px; color:#a5321f;"><b>Остаток к оплате:</b> ${balanceInfo.balance.toLocaleString('ru-RU')} ₽</p>`
+? `<p style="margin:6px 0; font-size:14px; color:#c2361f;"><b>Остаток к оплате:</b> ${balanceInfo.balance.toLocaleString('ru-RU')} ₽</p>`
 : balanceInfo.status === 'over'
-? `<p style="margin:6px 0; font-size:14px; color:#23408e;"><b>Переплата:</b> ${balanceInfo.balance.toLocaleString('ru-RU')} ₽</p>`
-: `<p style="margin:6px 0; font-size:14px; color:#23704a;"><b>Счёт оплачен полностью</b></p>`;
+? `<p style="margin:6px 0; font-size:14px; color:#14181f;"><b>Переплата:</b> ${balanceInfo.balance.toLocaleString('ru-RU')} ₽</p>`
+: `<p style="margin:6px 0; font-size:14px; color:#1d7a4c;"><b>Счёт оплачен полностью</b></p>`;
 
 printContainer.innerHTML = `
-<h2 style="color:#23704a; border-bottom:2px solid #23704a; padding-bottom:8px; margin-top:0; font-size:22px;">ЧЕК ОБ ОПЛАТЕ</h2>
+<h2 style="color:#1d7a4c; border-bottom:2px solid #1d7a4c; padding-bottom:8px; margin-top:0; font-size:22px;">ЧЕК ОБ ОПЛАТЕ</h2>
 ${(cloudData.self && cloudData.self.companyName) ? `<p style="margin: 0 0 10px; font-size: 15px; font-weight:700; color:#1d2733;">${escapeHtml(cloudData.self.companyName)}</p>` : ''}
 <p style="margin:6px 0; font-size:14px;"><b>Дата оплаты:</b> ${payment.date}</p>
 ${client ? `<p style="margin:6px 0; font-size:14px;"><b>Заказчик:</b> ${escapeHtml(client)}</p>` : ''}
@@ -2547,7 +2646,7 @@ ${address ? `<p style="margin:6px 0; font-size:14px;"><b>Адрес объект
 ${payment.note ? `<p style="margin:6px 0; font-size:14px;"><b>Примечание:</b> ${escapeHtml(payment.note)}</p>` : ''}
 <div style="margin-top:16px; padding:14px; background:#eef6f1; border:1px solid #cfe8da; border-radius:8px;">
 <div style="font-size:13px; color:#1f5c3d;">Оплачено этим платежом</div>
-<div style="font-size:24px; font-weight:700; color:#23704a;">${payment.amount.toLocaleString('ru-RU')} ₽</div>
+<div style="font-size:24px; font-weight:700; color:#1d7a4c;">${payment.amount.toLocaleString('ru-RU')} ₽</div>
 </div>
 <div style="margin-top:14px; padding:12px; background:#f4f6f8; border-radius:8px; font-size:13px; color:#485566;">
 <div>Оплачено всего по счёту: <b>${totalPaidSoFar.toLocaleString('ru-RU')} ₽</b> из ${invoiceTotal.toLocaleString('ru-RU')} ₽</div>
@@ -2733,7 +2832,7 @@ return `
 <div class="history-card" id="historyCard_${recordId}">
 <div class="hc-top">
 <div class="hc-title">
-<div class="hc-name">${escapeHtml(title)}${isEstimate ? '<span class="hc-badge" style="background:#f6efd6; color:#85600f;">Расчёт</span>' : ''}${rec.shareDisabled ? '<span class="hc-badge" style="background:#f6dfd8; color:#a5321f;">ссылка выкл.</span>' : ''}</div>
+<div class="hc-name">${escapeHtml(title)}${isEstimate ? '<span class="hc-badge" style="background:#f6efd6; color:#85600f;">Расчёт</span>' : ''}${rec.shareDisabled ? '<span class="hc-badge" style="background:#f6dfd8; color:#c2361f;">ссылка выкл.</span>' : ''}</div>
 <div class="hc-date">${escapeHtml(formatRecordDate(rec.date))}</div>
 </div>
 <div class="hc-amount">${Number(rec.total || 0).toLocaleString('ru-RU')} ₽</div>
@@ -2896,13 +2995,16 @@ const paymentsHtml = payments.length === 0 ? '' : payments.map(p => `
 <span>${p.date} — ${Number(p.amount).toLocaleString('ru-RU')} ₽ <span style="color:#8d97a5;">(${escapeHtml(p.method)})</span></span>
 <span style="display:flex; gap:6px;">
 <button type="button" onclick="resendPaymentReceipt('${recordId}', '${p.id}')" title="Отправить чек ещё раз" aria-label="Отправить чек ещё раз" style="border:none; background:none; cursor:pointer; color:#5d6878; padding:2px;"><svg class="ic" style="width:16px;height:16px;"><use href="#i-send"/></svg></button>
-${!isCurrentClient() ? `<button type="button" onclick="deletePayment('${recordId}', '${p.id}')" title="Удалить" style="border:none; background:none; cursor:pointer; font-size:13px; color:#a5321f;">✕</button>` : ''}
+${!isCurrentClient() ? `<button type="button" onclick="deletePayment('${recordId}', '${p.id}')" title="Удалить" style="border:none; background:none; cursor:pointer; font-size:13px; color:#c2361f;">✕</button>` : ''}
 </span>
 </div>
 `).join('');
-return `
-<div class="pay-balance-line ${balanceClass}">
-<span>${balanceLabel}</span>
+const paidPart = info.total > 0 ? Math.min(100, Math.max(0, (info.paid / info.total) * 100)) : 0;
+const tapeHtml = info.total > 0 ? `<div class="tape" role="img" aria-label="Оплачено ${Math.round(paidPart)}%"><i style="width:${paidPart}%"></i></div>
+<div class="tape-l"><span>оплачено ${info.paid.toLocaleString('ru-RU')} ₽</span>${info.status === 'owes' ? `<span class="due">остаток ${info.balance.toLocaleString('ru-RU')} ₽</span>` : info.status === 'over' ? `<span>переплата ${info.balance.toLocaleString('ru-RU')} ₽</span>` : '<span class="ok">оплачено полностью</span>'}</div>` : '';
+return `${tapeHtml}
+<div class="pay-balance-line ${balanceClass}"${tapeHtml ? ' style="justify-content:flex-end; padding-top:6px;"' : ''}>
+${tapeHtml ? '' : `<span>${balanceLabel}</span>`}
 ${!isCurrentClient() ? `<span style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
 ${info.status === 'owes' && rec.id ? `<button type="button" class="btn-delete-item" style="background:#fff; border:1px solid currentColor;" onclick="openReminderActions('${recordId}')">Напомнить</button>` : ''}
 <button type="button" class="btn-delete-item" style="background:#fff; border:1px solid currentColor;" onclick="openPaymentModal('${recordId}')">Оплата</button>
@@ -2923,6 +3025,7 @@ renderHistory();
 function renderHistory() {
 const list = document.getElementById('historyList');
 if (!list) return;
+setDimLabel('dimHistory', new Date().toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }).replace(' г.', ''));
 let records = cloudData.history || [];
 if (!isCurrentAdmin()) {
 records = records.filter(r => (r.author || r.master || r.user) === currentUser);
@@ -2978,14 +3081,13 @@ if (info.status === 'owes') owed += info.balance;
 if (info.status === 'over') overpaid += info.balance;
 });
 const rub = n => n.toLocaleString('ru-RU') + ' ₽';
-box.innerHTML = `
-<table class="sum-table">
-<tr><td>Выставлено</td><td>${rub(totalInvoiced)}</td></tr>
-<tr><td>Оплачено</td><td>${rub(totalPaid)}</td></tr>
-${owed > 0 ? `<tr class="sum-due"><td>Должны заказчики</td><td>${rub(owed)}</td></tr>` : ''}
-${overpaid > 0 ? `<tr><td>Переплата</td><td>${rub(overpaid)}</td></tr>` : ''}
-</table>
-`;
+const cells = [
+`<div>Выставлено<b>${rub(totalInvoiced)}</b></div>`,
+`<div>Оплачено<b>${rub(totalPaid)}</b></div>`,
+owed > 0 ? `<div class="due">Должны<b>${rub(owed)}</b></div>` : '',
+overpaid > 0 ? `<div>Переплата<b>${rub(overpaid)}</b></div>` : '',
+].filter(Boolean);
+box.innerHTML = `<div class="stamp" style="--cols:${cells.length}">${cells.join('')}</div>`;
 }
 
 async function deleteHistoryRecord(id) {
@@ -3524,6 +3626,7 @@ function renderObjects() {
 const container = document.getElementById('objectsListContainer');
 if (!container) return;
 const objects = getVisibleObjects();
+setDimLabel('dimObjects', objects.length ? `${objects.length} ${pluralRu(objects.length, 'объект', 'объекта', 'объектов')}` : '');
 const searchEl = document.getElementById('objectsSearch');
 if (searchEl) searchEl.style.display = objects.length > 3 ? 'block' : 'none';
 if (objects.length === 0) {
@@ -3650,9 +3753,9 @@ ${obj.materials ? escapeHtml(obj.materials).replace(/\n/g, '<br>') : '<span styl
 <div class="object-stats">
 <div class="object-stat-box">Всего счетов<b>${stats.count}</b></div>
 <div class="object-stat-box">Сумма по объекту<b>${stats.total.toLocaleString('ru-RU')} ₽</b></div>
-<div class="object-stat-box" style="background:#eef6f1;">Оплачено<b style="color:#23704a;">${stats.paid.toLocaleString('ru-RU')} ₽</b></div>
-${stats.owed > 0 ? `<div class="object-stat-box" style="background:#fbeeea;">Должен<b style="color:#a5321f;">${stats.owed.toLocaleString('ru-RU')} ₽</b></div>` : ''}
-${stats.overpaid > 0 ? `<div class="object-stat-box" style="background:#eef2f9;">Переплата<b style="color:#23408e;">${stats.overpaid.toLocaleString('ru-RU')} ₽</b></div>` : ''}
+<div class="object-stat-box" style="background:#eef6f1;">Оплачено<b style="color:#1d7a4c;">${stats.paid.toLocaleString('ru-RU')} ₽</b></div>
+${stats.owed > 0 ? `<div class="object-stat-box" style="background:#fbeeea;">Должен<b style="color:#c2361f;">${stats.owed.toLocaleString('ru-RU')} ₽</b></div>` : ''}
+${stats.overpaid > 0 ? `<div class="object-stat-box" style="background:#fff4d1;">Переплата<b style="color:#14181f;">${stats.overpaid.toLocaleString('ru-RU')} ₽</b></div>` : ''}
 </div>
 
 ${!isCurrentClient() ? `<button type="button" class="btn btn-primary" style="margin-top:14px;" onclick="goToCalcForObject('${obj.id}')">Выставить счёт по объекту</button>
@@ -4695,7 +4798,14 @@ invoiceCart.forEach(item => rebuildRoomItem(item, obj));
 }
 
 /* ---------- блок «Помещения» в калькуляторе ---------- */
+function setDimLabel(id, text) {
+const el = document.getElementById(id);
+if (el) el.textContent = text || '';
+}
+
 function renderRooms() {
+const _o = calcObject();
+setDimLabel('dimCalc', _o ? _o.name : '');
 const list = document.getElementById('roomsList');
 const addBtn = document.getElementById('addRoomBtn');
 if (!list) return;
@@ -5072,12 +5182,12 @@ for (let gy = 0; gy <= H; gy += 16) grid += `M0 ${gy}H${W}`;
 out += `<path d="${grid}" stroke="#eef1f4" stroke-width="1"/>`;
 // разрыв
 if (g.segs.length >= 2 && !g.closed && g.gap > 0.02) {
-out += `<path d="M${X(g.endX)} ${Y(g.endY)}L${X(0)} ${Y(0)}" stroke="#9c2f1d" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+out += `<path d="M${X(g.endX)} ${Y(g.endY)}L${X(0)} ${Y(0)}" stroke="#c2361f" stroke-width="1.5" stroke-dasharray="4 4"/>`;
 }
 const wh = Array.isArray(m.wallHeights) ? m.wallHeights : [];
 g.segs.forEach(s => {
 const on = s.i === sel;
-const col = on ? '#1f3a82' : '#161c24';
+const col = on ? '#e8a900' : '#14181f';
 out += `<path d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="${col}" stroke-width="${on ? 6 : 5}" stroke-linecap="square" ${s.empty ? 'stroke-dasharray="6 6" opacity=".45"' : ''}/>`;
 // размер — снаружи стены
 const mx = (X(s.x1) + X(s.x2)) / 2, my = (Y(s.y1) + Y(s.y2)) / 2;
@@ -5085,7 +5195,7 @@ const nx = s.dy, ny = -s.dx;
 const lx = mx + nx * 17, ly = my + ny * 17 + 4;
 const own = mNum(wh[s.i]);
 const label = s.empty ? `стена ${s.i + 1}` : mFmt(s.len) + (own ? ` ↕${mFmt(own)}` : '');
-out += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="13" font-weight="${on ? 700 : 500}" fill="${on ? '#1f3a82' : (s.empty ? '#8a929c' : '#161c24')}">${escapeHtml(label)}</text>`;
+out += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="13" font-weight="${on ? 700 : 500}" fill="${on ? '#14181f' : (s.empty ? '#8a929c' : '#14181f')}">${escapeHtml(label)}</text>`;
 });
 // проёмы на своих стенах
 (m.openings || []).forEach((o, oi) => {
@@ -5098,10 +5208,10 @@ const cx = (X(s.x1) + X(s.x2)) / 2, cy = (Y(s.y1) + Y(s.y2)) / 2;
 const ax = cx - s.dx * wpx / 2, ay = cy - s.dy * wpx / 2, bx = cx + s.dx * wpx / 2, by = cy + s.dy * wpx / 2;
 const door = o.type === 'door';
 out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#ffffff" stroke-width="7"/>`;
-out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="${door ? '#8a5a14' : '#1f3a82'}" stroke-width="2"/>`;
-out += `<path d="M${ax - s.dy * 6} ${ay + s.dx * 6}L${ax + s.dy * 6} ${ay - s.dx * 6}M${bx - s.dy * 6} ${by + s.dx * 6}L${bx + s.dy * 6} ${by - s.dx * 6}" stroke="#161c24" stroke-width="1.5"/>`;
+out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="${door ? '#8a5a14' : '#14181f'}" stroke-width="2"/>`;
+out += `<path d="M${ax - s.dy * 6} ${ay + s.dx * 6}L${ax + s.dy * 6} ${ay - s.dx * 6}M${bx - s.dy * 6} ${by + s.dx * 6}L${bx + s.dy * 6} ${by - s.dx * 6}" stroke="#14181f" stroke-width="1.5"/>`;
 const tx = cx - s.dy * 15, ty = cy + s.dx * 15 + 4;
-out += `<text x="${tx}" y="${ty}" text-anchor="middle" font-size="11" fill="${door ? '#8a5a14' : '#1f3a82'}">${door ? 'дверь' : 'окно'}${mNum(o.w) ? ' ' + mFmt(mNum(o.w)) : ''}</text>`;
+out += `<text x="${tx}" y="${ty}" text-anchor="middle" font-size="11" fill="${door ? '#8a5a14' : '#14181f'}">${door ? 'дверь' : 'окно'}${mNum(o.w) ? ' ' + mFmt(mNum(o.w)) : ''}</text>`;
 });
 // касание стены — выбрать её
 g.segs.forEach(s => {

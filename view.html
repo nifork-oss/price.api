@@ -6,20 +6,20 @@
 <title>Счёт — Кабинет мастера</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; }
 body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #eef1f4; margin: 0; padding: 16px; color: #1d2733; }
 .container { max-width: 640px; margin: 0 auto; }
 .loader { text-align: center; color: #5d6878; padding: 60px 0; font-size: 14px; }
-.error-box { background: #fff; border: 1px solid #efc6bb; border-radius: 14px; padding: 24px; text-align: center; color: #a5321f; font-size: 14px; margin-top: 40px; }
+.error-box { background: #fff; border: 1px solid #efc6bb; border-radius: 14px; padding: 24px; text-align: center; color: #c2361f; font-size: 14px; margin-top: 40px; }
 .card { background: #fff; border: 1px solid #dfe3e8; border-radius: 14px; padding: 20px; margin-bottom: 14px; }
 .doc-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
-.doc-title { font-size: 20px; font-weight: 800; color: #23408e; margin: 0; }
+.doc-title { font-size: 20px; font-weight: 800; color: #14181f; margin: 0; }
 .doc-badge { background: #f6efd6; color: #85600f; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
 .meta-row { font-size: 13px; color: #485566; margin: 4px 0; }
 .meta-row b { color: #1d2733; }
-.note-box { background: #f4f6f8; border-left: 4px solid #23408e; border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #33404f; margin-top: 10px; }
+.note-box { background: #f4f6f8; border-left: 4px solid #14181f; border-radius: 6px; padding: 10px 12px; font-size: 13px; color: #33404f; margin-top: 10px; }
 .items-list { margin-top: 4px; }
 .item-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #dfe3e8; font-size: 13px; }
 .item-row:last-child { border-bottom: none; }
@@ -30,17 +30,17 @@ body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
 .attachment-chip-wrap { display: flex; align-items: center; gap: 4px; }
 .attachment-thumb { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: #dfe3e8; }
 .attachment-link { text-decoration: none; }
-.attachment-download-btn { background: #dfe6f4; color: #1c3473; border: none; border-radius: 6px; width: 30px; height: 30px; font-size: 13px; cursor: pointer; flex-shrink: 0; }
+.attachment-download-btn { background: #f4f5f7; color: #14181f; border: none; border-radius: 6px; width: 30px; height: 30px; font-size: 13px; cursor: pointer; flex-shrink: 0; }
 .attachment-download-btn:disabled { opacity: 0.6; }
 .pay-box { margin-top: 12px; border-radius: 10px; padding: 12px 14px; font-size: 14px; }
 .pay-box-owes { background: #fbeeea; color: #8c2a1a; }
 .pay-box-paid { background: #eef6f1; color: #1f5c3d; }
-.pay-box-over { background: #eef2f9; color: #1c3473; }
+.pay-box-over { background: #fff4d1; color: #14181f; }
 .pay-box-main { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
 .pay-box-sub { font-size: 13px; margin-top: 4px; opacity: 0.85; }
 .pay-list { margin-top: 8px; padding-top: 8px; border-top: 1px dashed currentColor; font-size: 13px; }
 .pay-list-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
-.item-rooms { font-size: 12px; color: #1c3473; margin-top: 2px; }
+.item-rooms { font-size: 12px; color: #14181f; margin-top: 2px; }
 .footer-link { display: block; text-align: center; font-size: 12px; color: #8d97a5; margin-top: 18px; text-decoration: none; }
 
 /* ===== Оформление «Сметный документ» =====
@@ -74,13 +74,13 @@ body { background: #f4f6f8; }
 .item-row { padding: 11px 0; }
 .item-name { font-size: 14px; font-weight: 500; color: #1d2733; }
 .item-sum { font-weight: 600; }
-.item-rooms { color: #23408e; }
+.item-rooms { color: #14181f; }
 .total-box { background: #1d2733; border-radius: 8px; font-weight: 600; }
 .pay-box { border-radius: 8px; }
 .attachment-download-btn { border-radius: 8px; }
 
 /* ===== Строгий вариант: белый лист, линейки, почти прямые углы ===== */
-:root { --s-ink: #161c24; --s-ink2: #5a6470; --s-ink3: #8a929c; --s-line: #d9dde2; --s-acc: #1f3a82; --s-due: #9c2f1d; --s-ok: #1f6442; }
+:root { --s-ink: #14181f; --s-ink2: #5a6470; --s-ink3: #8a929c; --s-line: #d9dde2; --s-acc: #14181f; --s-due: #c2361f; --s-ok: #1d7a4c; }
 body { background: #ffffff; color: var(--s-ink); }
 h1 { letter-spacing: -0.015em; }
 
@@ -101,6 +101,120 @@ h1 { letter-spacing: -0.015em; }
 .attachment-download-btn { border-radius: 3px; background: #ffffff; border: 1px solid var(--s-line); }
 .attachment-thumb { border-radius: 2px; }
 body { padding-top: 24px; }
+
+/* ===== Чертёж с жёлтой рулеткой =====
+   Основа — строгий чертёж: миллиметровка, размерные линии, штамп.
+   Единственный яркий цвет — жёлтый корпус рулетки: главное действие,
+   оплаченная часть ленты, выбранное. Красный — только долг. */
+:root {
+  --s-ink: #14181f; --s-ink2: #586270; --s-ink3: #8a929c; --s-line: #dde1e6; --s-acc: #14181f;
+  --s-due: #c2361f; --s-ok: #1d7a4c;
+  --tape: #ffc83d; --tape-d: #e8a900; --tape-l: #fff4d1; --grid: #eff1f4;
+  --narrow: "PT Sans Narrow", "Golos Text", -apple-system, "Segoe UI", sans-serif;
+}
+body {
+  background-color: #ffffff;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 16px 16px;
+  color: var(--s-ink);
+}
+.container { background: transparent; }
+h1 { font-weight: 700; letter-spacing: -0.025em; }
+/* размерная линия под заголовком */
+.dimline { position: relative; height: 12px; margin: -6px 0 16px; }
+.dimline::before { content: ""; position: absolute; left: 0; right: 0; top: 5px; border-top: 1px solid var(--s-ink2); }
+.dimline::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 11px; border-left: 1px solid var(--s-ink2); border-right: 1px solid var(--s-ink2); }
+.dimline span { position: absolute; left: 50%; top: -3px; transform: translateX(-50%); z-index: 1; background: var(--tape); color: var(--s-ink); font: 700 12.5px/1.35 var(--narrow); padding: 0 8px; border-radius: 3px; white-space: nowrap; max-width: 80%; overflow: hidden; text-overflow: ellipsis; }
+.dimline span:empty { display: none; }
+/* главное действие — жёлтое */
+.btn-primary, .btn-success, .hc-btn-primary, .calc-bar-save, .mp-btn-primary, .draft-continue, .update-banner-btn, .room-selbar-btn, .rl-keys .next, .rl-tool-close {
+  background: var(--tape) !important; border-color: var(--tape) !important; color: var(--s-ink) !important;
+}
+.btn-primary:active, .hc-btn-primary:active, .calc-bar-save:active, .rl-keys .next:active { background: var(--tape-d) !important; }
+.btn, .hc-btn, .mp-btn, .calc-bar-save, .calc-bar-more, .room-selbar-btn, .draft-offer-btns button, .measure-open-btn, .mp-add, .file-pick-btn, .sheet-cancel { border-radius: 8px; }
+.mp-in, .search-box, .form-group input, .form-group select, .form-group textarea, .rl-chip, .rl-tool, .mp-mini, .mp-type, .chip { border-radius: 6px; }
+/* цифры — чертёжным шрифтом */
+.hc-amount, .hc-l-sum, .stamp b, .rl-pad-value, .mp-result-main, .calc-bar-total b, .room-dims, .obj-pill, .hc-date, .rooms-breakdown, .room-selbar-text small, .rl-sketch text, .tape-l { font-family: var(--narrow); }
+.hc-amount { font-size: 21px; font-weight: 700; }
+.hc-l-sum { font-size: 15.5px; font-weight: 700; }
+.calc-bar-total b { font-size: 22px; color: var(--tape) !important; font-weight: 700; }
+.mp-result-main { color: var(--tape) !important; font-size: 26px; font-weight: 700; }
+.rl-pad-value { font-size: 32px; font-weight: 700; }
+/* листы с угловыми метками */
+.history-card, .object-card, .profile-box, .user-card {
+  position: relative; background: #ffffff; border: none; border-radius: 4px;
+  padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 0 rgba(20, 24, 31, 0.04), 0 6px 18px rgba(20, 24, 31, 0.07);
+}
+.history-card::before, .object-card::before, .profile-box::before, .user-card::before,
+.history-card::after, .object-card::after, .profile-box::after, .user-card::after {
+  content: ""; position: absolute; width: 10px; height: 10px; border-color: var(--s-ink); border-style: solid; pointer-events: none;
+}
+.history-card::before, .object-card::before, .profile-box::before, .user-card::before { left: 0; top: 0; border-width: 1.5px 0 0 1.5px; }
+.history-card::after, .object-card::after, .profile-box::after, .user-card::after { right: 0; bottom: 0; border-width: 0 1.5px 1.5px 0; }
+/* штамп — сводка */
+.stamp { display: grid; grid-template-columns: repeat(var(--cols, 3), 1fr); border: 1.5px solid var(--s-ink); border-radius: 6px; overflow: hidden; background: #ffffff; margin-bottom: 16px; }
+.stamp > div { padding: 7px 9px; font-size: 12px; color: var(--s-ink2); line-height: 1.2; }
+.stamp > div + div { border-left: 1px solid var(--s-ink); }
+.stamp b { display: block; color: var(--s-ink); font-size: 19px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
+.stamp .due { background: #fff1ee; } .stamp .due b { color: var(--s-due); }
+/* лента рулетки */
+.tape { position: relative; height: 24px; border: 1.5px solid var(--s-ink); border-radius: 4px; background: #ffffff; overflow: hidden; margin: 10px 0 4px; }
+.tape i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--tape); }
+.tape::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: repeating-linear-gradient(90deg, rgba(20,24,31,.55) 0 1px, transparent 1px 10px), repeating-linear-gradient(90deg, rgba(20,24,31,.35) 0 1px, transparent 1px 5px);
+  background-size: 100% 8px, 100% 4px; background-repeat: no-repeat; }
+.tape-l { display: flex; justify-content: space-between; font-size: 13px; color: var(--s-ink2); }
+.tape-l .due { color: var(--s-due); font-weight: 700; } .tape-l .ok { color: var(--s-ok); font-weight: 700; }
+/* выбранное — светло-жёлтым */
+.room-row.on { background: var(--tape-l); border-color: var(--s-line); }
+.room-row.on .room-name { color: var(--s-ink); }
+.room-check input { accent-color: var(--s-ink); }
+.room-selbar { background: var(--s-ink); border-radius: 8px; }
+.room-selbar-text small { color: var(--tape); font-size: 13px; }
+.chip.active, .tab-btn.active { box-shadow: inset 0 -3px 0 var(--tape); }
+.menu-item.active { box-shadow: inset 3px 0 0 var(--tape); }
+.wp-item.added { border-color: var(--tape-d); background: var(--tape-l); }
+.wp-surface.suggested { background: var(--tape); border-color: var(--tape); color: var(--s-ink); }
+.wp-surface.suggested small { color: var(--s-ink2); }
+.mp-pick button.active { background: var(--tape); border-color: var(--tape); color: var(--s-ink); }
+.rl-chip.on { border-color: var(--s-ink); background: var(--tape-l); color: var(--s-ink); box-shadow: inset 0 0 0 1px var(--s-ink); }
+.rl-add { color: var(--s-ink); }
+.rl-pad { border-top: 3px solid var(--tape); }
+.rl-pad-value small { color: var(--s-ink2); }
+.mp-head { border-bottom: none; box-shadow: inset 0 -3px 0 var(--tape); }
+.mp-calc { border-left-color: var(--tape-d); border-left-width: 3px; }
+.draft-offer { border-color: var(--s-ink); background: var(--tape-l); }
+/* шапка и нижняя панель */
+.app-header { border-bottom: none; box-shadow: inset 0 -3px 0 var(--tape); }
+.bottom-nav { border-top: 1.5px solid var(--s-ink); }
+.bottom-nav::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; pointer-events: none; opacity: .3;
+  background-image: repeating-linear-gradient(90deg, var(--s-ink) 0 1px, transparent 1px 12px); }
+.nav-tab { position: relative; }
+.nav-tab.active { box-shadow: none; color: var(--s-ink); font-weight: 700; }
+.nav-tab.active::after { content: ""; display: block; width: 26px; height: 4px; border-radius: 2px; background: var(--tape); margin: 3px auto 0; }
+.update-banner { box-shadow: inset 0 -3px 0 var(--tape); }
+/* ссылки — подчёркнутые, без синего */
+.room-select-all .chip, .link-text, .measure-note summary { color: var(--s-ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--tape-d); }
+
+.container { max-width: 640px; }
+.card { background: #ffffff; border-radius: 4px; padding: 18px 16px; margin-bottom: 14px; box-shadow: 0 1px 0 rgba(20,24,31,.04), 0 6px 18px rgba(20,24,31,.07); position: relative; }
+.card + .card { border-top: none; }
+.card::before, .card::after { content: ""; position: absolute; width: 10px; height: 10px; border-color: var(--s-ink); border-style: solid; }
+.card::before { left: 0; top: 0; border-width: 1.5px 0 0 1.5px; }
+.card::after { right: 0; bottom: 0; border-width: 0 1.5px 1.5px 0; }
+.doc-header { border-bottom: none; padding-bottom: 6px; margin-bottom: 6px; }
+.doc-title { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; }
+.doc-badge { background: var(--tape); border: none; color: var(--s-ink); }
+.dimline { margin: 0 0 14px; }
+.item-sum, .item-meta { font-family: var(--narrow); }
+.item-sum { font-size: 16px; font-weight: 700; }
+.item-meta { font-size: 13px; }
+.stamp { margin: 16px 0 0; }
+.stamp b { font-size: 18px; }
+.stamp .okc b { color: var(--s-ok); }
+.pay-list { border-top: none; margin-top: 8px; color: var(--s-ink2); font-family: var(--narrow); font-size: 14px; }
+.note-box { border-left: 3px solid var(--tape-d); }
+.footer-link { color: var(--s-ink3); }
 </style>
 </head>
 <body>
@@ -116,7 +230,7 @@ const WORKER_URL = "https://price-api.nifork.workers.dev";
 function escapeHtml(str) {
 return String(str ?? '')
 .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;").replace(/'/g, "&#23408e;");
+.replace(/"/g, "&quot;").replace(/'/g, "&#14181f;");
 }
 
 function getIdFromUrl() {
@@ -208,6 +322,24 @@ ${rest !== 0 ? `<div class="pay-box-sub">Оплачено ${rub(paid)} из ${ru
 </div>`;
 }
 
+// Итоги — штампом, как на листе чертежа; оплата — лентой рулетки
+function renderTotalsHtml(rec, isEstimate) {
+const rub = n => Number(n).toLocaleString('ru-RU') + ' ₽';
+const total = Number(rec.total || 0);
+if (isEstimate) return `<div class="stamp" style="--cols:1"><div>Итого по расчёту<b>${rub(total)}</b></div></div>`;
+const payments = Array.isArray(rec.payments) ? rec.payments : [];
+const paid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+const rest = total - paid;
+const part = total > 0 ? Math.min(100, Math.max(0, paid / total * 100)) : 0;
+const restCell = rest > 0 ? `<div class="due">К оплате<b>${rub(rest)}</b></div>`
+: rest < 0 ? `<div>Переплата<b>${rub(-rest)}</b></div>`
+: `<div class="okc">Оплачено<b>полностью</b></div>`;
+const list = payments.map(p => `<div class="pay-list-row"><span>${escapeHtml(p.date || '')}</span><span>${rub(Number(p.amount) || 0)}</span></div>`).join('');
+return `<div class="stamp" style="--cols:3"><div>Итого<b>${rub(total)}</b></div><div>Оплачено<b>${rub(paid)}</b></div>${restCell}</div>
+<div class="tape" role="img" aria-label="Оплачено ${Math.round(part)}%"><i style="width:${part}%"></i></div>
+${list ? `<div class="pay-list">${list}</div>` : ''}`;
+}
+
 // Работа в нескольких помещениях: разбивка под строкой
 function roomsLine(i) {
 if (!Array.isArray(i.rooms) || i.rooms.length < 2) return '';
@@ -236,6 +368,7 @@ content.innerHTML = `
 <h1 class="doc-title">${isEstimate ? 'Предварительный расчёт' : 'Счёт'}</h1>
 ${isEstimate ? '<span class="doc-badge">Не счёт на оплату</span>' : ''}
 </div>
+<div class="dimline" aria-hidden="true"><span>${escapeHtml(String(rec.date || '').split(',')[0])}</span></div>
 <div class="meta-row"><b>Дата:</b> ${escapeHtml(rec.date || '')}</div>
 ${rec.objectName ? `<div class="meta-row"><b>Объект:</b> ${escapeHtml(rec.objectName)}</div>` : ''}
 ${rec.client ? `<div class="meta-row"><b>Заказчик:</b> ${escapeHtml(rec.client)}</div>` : ''}
@@ -245,11 +378,7 @@ ${rec.note ? `<div class="note-box">${escapeHtml(rec.note)}</div>` : ''}
 
 <div class="card">
 <div class="items-list">${rows || '<div style="text-align:center; color:#8d97a5; padding:16px 0;">Нет позиций</div>'}</div>
-<div class="total-box">
-<div>${isEstimate ? 'Итого по расчёту' : 'Итого'}</div>
-<div>${Number(rec.total || 0).toLocaleString('ru-RU')} ₽</div>
-</div>
-${renderPaymentsHtml(rec)}
+${renderTotalsHtml(rec, isEstimate)}
 </div>
 
 ${Array.isArray(rec.attachments) && rec.attachments.length > 0 ? `

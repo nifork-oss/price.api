@@ -6,12 +6,11 @@
 <title>Прайс-лист и Калькулятор квадрата</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
 body { background-color: #f4f6f8; margin: 0; padding: 12px 8px; color: #1f2a37; }
@@ -19,10 +18,10 @@ body { background-color: #f4f6f8; margin: 0; padding: 12px 8px; color: #1f2a37; 
 /* Стили шапки сайта */
 .site-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid #dfe3e8; gap: 12px; }
 .site-logo-area { display: flex; align-items: center; gap: 12px; }
-.site-logo-icon { width: 42px; height: 42px; background: linear-gradient(135deg, #23408e 0%, #3556a8 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; box-shadow: 0 4px 12px rgba(35, 64, 142, 0.2); }
+.site-logo-icon { width: 42px; height: 42px; background: linear-gradient(135deg, #14181f 0%, #3a4350 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 20px; box-shadow: 0 4px 12px rgba(35, 64, 142, 0.2); }
 .site-title-block h2 { font-size: 16px; margin: 0; color: #1d2733; font-weight: 700; letter-spacing: -0.01em; }
 .site-title-block p { font-size: 11px; margin: 2px 0 0 0; color: #5d6878; font-weight: 500; }
-.header-status { display: flex; align-items: center; gap: 6px; background: #eef6f1; border: 1px solid #dcefe3; padding: 6px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #23704a; white-space: nowrap; }
+.header-status { display: flex; align-items: center; gap: 6px; background: #eef6f1; border: 1px solid #dcefe3; padding: 6px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; color: #1d7a4c; white-space: nowrap; }
 .status-dot { width: 7px; height: 7px; background: #2f7d55; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 2px rgba(35, 112, 74, 0.2); }
 h1, h2, h3 { color: #1d2733; margin-top: 0; font-weight: 700; letter-spacing: -0.02em; }
 h1 { font-size: 18px; text-align: center; margin-bottom: 16px; }
@@ -34,7 +33,7 @@ h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .tab-btn.active { background: #ffffff; color: #1d2733; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 .search-box { width: 100%; padding: 12px 14px; margin-bottom: 16px; border: 1px solid #cfd5dd; border-radius: 10px; font-size: 15px; outline: none; background: #fff; }
 .accordion-category { margin-bottom: 10px; border: 1px solid #dfe3e8; border-radius: 12px; overflow: hidden; background: #ffffff; }
-.accordion-header { background: #f4f6f8; font-weight: 700; padding: 12px 14px; font-size: 13px; color: #33404f; border-left: 4px solid #3556a8; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.accordion-header { background: #f4f6f8; font-weight: 700; padding: 12px 14px; font-size: 13px; color: #33404f; border-left: 4px solid #3a4350; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
 .accordion-header:hover { background: #eef1f4; }
 .accordion-content { display: none; padding: 10px; background: #fff; border-top: 1px solid #dfe3e8; }
 .accordion-category.open .accordion-content { display: block; }
@@ -44,7 +43,7 @@ h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .service-card:last-child { margin-bottom: 0; }
 .service-info { flex: 1; }
 .service-title { font-weight: 600; font-size: 13px; color: #1d2733; margin-bottom: 2px; }
-.service-price { color: #23704a; font-weight: 700; font-size: 13px; white-space: nowrap; }
+.service-price { color: #1d7a4c; font-weight: 700; font-size: 13px; white-space: nowrap; }
 .calc-square-box { background: #f4f6f8; border: 1px solid #dfe3e8; border-radius: 12px; padding: 14px; margin-bottom: 16px; }
 .form-group { margin-bottom: 12px; }
 .form-group label { display: block; font-size: 11px; color: #5d6878; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -52,17 +51,17 @@ h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .calc-item-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding: 8px 0; border-bottom: 1px solid #dfe3e8; gap: 8px; }
 .total-box { margin-top: 14px; padding: 14px; background: #1d2733; border-radius: 12px; color: #ffffff; display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 600; }
 .total-box span { color: #8fd3b0; font-size: 18px; font-weight: 700; }
-.note-box { margin-top: 15px; padding: 12px; background: #eef1f4; border-left: 4px solid #23408e; border-radius: 4px; font-size: 12px; color: #485566; line-height: 1.5; }
+.note-box { margin-top: 15px; padding: 12px; background: #eef1f4; border-left: 4px solid #14181f; border-radius: 4px; font-size: 12px; color: #485566; line-height: 1.5; }
 .lock-btn { background: transparent; border: none; cursor: pointer; font-size: 16px; padding: 4px; transition: transform 0.1s; }
 .lock-btn:active { transform: scale(0.9); }
 .action-btns { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 .btn { padding: 12px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px; width: 100%; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .btn-success { background: #2f7d55; color: white; }
-.btn-primary { background: #23408e; color: white; }
+.btn-primary { background: #14181f; color: white; }
 .btn-danger { background: #b23a26; color: white; }
 .btn-sm { padding: 4px 8px; font-size: 11px; width: auto; min-height: unset; border-radius: 6px; }
 .admin-controls { display: none; background: #f6ecd2; border: 1px solid #ecd9a6; padding: 12px; border-radius: 12px; margin-bottom: 16px; }
-.loader { text-align: center; color: #23408e; font-weight: 600; padding: 16px; font-size: 13px; }
+.loader { text-align: center; color: #14181f; font-weight: 600; padding: 16px; font-size: 13px; }
 .admin-history-container { margin-top: 10px; border-top: 1px solid #ecd9a6; padding-top: 10px; }
 .history-toggle-btn { width: 100%; background: #b7791f; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
 .history-toggle-btn:hover { background: #9a5f12; }
@@ -76,7 +75,7 @@ h2 { font-size: 15px; margin-top: 20px; margin-bottom: 10px; }
 .smeta-item-card:last-child { margin-bottom: 0; }
 .add-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px); background: #1d2733; color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 99999; opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease; max-width: 85%; text-align: center; }
 .add-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.add-to-cart-btn.just-added { background: #23704a; }
+.add-to-cart-btn.just-added { background: #1d7a4c; }
 @keyframes addPulse { 0% { transform: scale(1); } 40% { transform: scale(0.96); } 100% { transform: scale(1); } }
 .add-to-cart-btn.just-added { animation: addPulse 0.3s ease; }
 .unit-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
@@ -121,7 +120,7 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #ecd9a6; }
 .update-banner.show { display: flex; }
 .update-banner-text { flex: 1; min-width: 0; line-height: 1.3; }
 .update-banner-text small { display: block; color: #8d97a5; font-weight: 500; font-size: 12px; margin-top: 2px; }
-.update-banner-btn { min-height: 40px; padding: 8px 14px; border: none; border-radius: 10px; background: #23408e; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.update-banner-btn { min-height: 40px; padding: 8px 14px; border: none; border-radius: 10px; background: #14181f; color: #ffffff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .update-banner-close { width: 36px; height: 36px; border: none; border-radius: 10px; background: transparent; color: #8d97a5; font-size: 18px; cursor: pointer; }
 
 /* ===== Оформление «Сметный документ» =====
@@ -147,26 +146,26 @@ svg.ic { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-wid
 
 /* --- прайс: детали --- */
 .site-header { border-bottom-color: #dfe3e8; }
-.site-logo-icon { background: #23408e; border-radius: 8px; box-shadow: none; font-size: 20px; font-weight: 700; }
+.site-logo-icon { background: #14181f; border-radius: 8px; box-shadow: none; font-size: 20px; font-weight: 700; }
 .site-title-block h2 { font-weight: 600; }
 .header-status { border-radius: 6px; }
 .status-dot { box-shadow: none; }
 .service-price { color: #1d2733; font-weight: 600; }
 .admin-controls { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 10px; }
-.btn-primary { background: #23408e; }
-.btn-ghost { background: #ffffff; color: #23408e; border: 1px solid #c9d3ea; }
+.btn-primary { background: #14181f; }
+.btn-ghost { background: #ffffff; color: #14181f; border: 1px solid #d9dde2; }
 .history-toggle-btn { background: #f4f6f8; color: #1d2733; border: 1px solid #dfe3e8; font-size: 13px; }
 .history-toggle-btn:hover { background: #eef1f4; }
-.badge-new { background: #a5321f; border-radius: 6px; }
+.badge-new { background: #c2361f; border-radius: 6px; }
 .row-more { border-radius: 8px; }
 .sheet-item { font-weight: 500; }
 .sheet-item-icon { display: inline-flex; color: #5d6878; }
 .sheet-item-danger .sheet-item-icon { color: inherit; }
 .update-banner { background: #1d2733; border-radius: 10px; }
-.update-banner-btn { background: #23408e; border-radius: 8px; }
+.update-banner-btn { background: #14181f; border-radius: 8px; }
 
 /* ===== Строгий вариант: белый лист, линейки, почти прямые углы ===== */
-:root { --s-ink: #161c24; --s-ink2: #5a6470; --s-ink3: #8a929c; --s-line: #d9dde2; --s-acc: #1f3a82; --s-due: #9c2f1d; --s-ok: #1f6442; }
+:root { --s-ink: #14181f; --s-ink2: #5a6470; --s-ink3: #8a929c; --s-line: #d9dde2; --s-acc: #14181f; --s-due: #c2361f; --s-ok: #1d7a4c; }
 body { background: #ffffff; color: var(--s-ink); }
 h1 { letter-spacing: -0.015em; }
 
@@ -196,6 +195,113 @@ h1 { letter-spacing: -0.015em; }
 .sheet-cancel { background: #ffffff; border: 1px solid var(--s-ink); color: var(--s-ink); }
 .update-banner { border-radius: 4px; background: var(--s-ink); }
 .update-banner-btn { border-radius: 3px; background: #ffffff; color: var(--s-ink); }
+
+/* ===== Чертёж с жёлтой рулеткой =====
+   Основа — строгий чертёж: миллиметровка, размерные линии, штамп.
+   Единственный яркий цвет — жёлтый корпус рулетки: главное действие,
+   оплаченная часть ленты, выбранное. Красный — только долг. */
+:root {
+  --s-ink: #14181f; --s-ink2: #586270; --s-ink3: #8a929c; --s-line: #dde1e6; --s-acc: #14181f;
+  --s-due: #c2361f; --s-ok: #1d7a4c;
+  --tape: #ffc83d; --tape-d: #e8a900; --tape-l: #fff4d1; --grid: #eff1f4;
+  --narrow: "PT Sans Narrow", "Golos Text", -apple-system, "Segoe UI", sans-serif;
+}
+body {
+  background-color: #ffffff;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 16px 16px;
+  color: var(--s-ink);
+}
+.container { background: transparent; }
+h1 { font-weight: 700; letter-spacing: -0.025em; }
+/* размерная линия под заголовком */
+.dimline { position: relative; height: 12px; margin: -6px 0 16px; }
+.dimline::before { content: ""; position: absolute; left: 0; right: 0; top: 5px; border-top: 1px solid var(--s-ink2); }
+.dimline::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 11px; border-left: 1px solid var(--s-ink2); border-right: 1px solid var(--s-ink2); }
+.dimline span { position: absolute; left: 50%; top: -3px; transform: translateX(-50%); z-index: 1; background: var(--tape); color: var(--s-ink); font: 700 12.5px/1.35 var(--narrow); padding: 0 8px; border-radius: 3px; white-space: nowrap; max-width: 80%; overflow: hidden; text-overflow: ellipsis; }
+.dimline span:empty { display: none; }
+/* главное действие — жёлтое */
+.btn-primary, .btn-success, .hc-btn-primary, .calc-bar-save, .mp-btn-primary, .draft-continue, .update-banner-btn, .room-selbar-btn, .rl-keys .next, .rl-tool-close {
+  background: var(--tape) !important; border-color: var(--tape) !important; color: var(--s-ink) !important;
+}
+.btn-primary:active, .hc-btn-primary:active, .calc-bar-save:active, .rl-keys .next:active { background: var(--tape-d) !important; }
+.btn, .hc-btn, .mp-btn, .calc-bar-save, .calc-bar-more, .room-selbar-btn, .draft-offer-btns button, .measure-open-btn, .mp-add, .file-pick-btn, .sheet-cancel { border-radius: 8px; }
+.mp-in, .search-box, .form-group input, .form-group select, .form-group textarea, .rl-chip, .rl-tool, .mp-mini, .mp-type, .chip { border-radius: 6px; }
+/* цифры — чертёжным шрифтом */
+.hc-amount, .hc-l-sum, .stamp b, .rl-pad-value, .mp-result-main, .calc-bar-total b, .room-dims, .obj-pill, .hc-date, .rooms-breakdown, .room-selbar-text small, .rl-sketch text, .tape-l { font-family: var(--narrow); }
+.hc-amount { font-size: 21px; font-weight: 700; }
+.hc-l-sum { font-size: 15.5px; font-weight: 700; }
+.calc-bar-total b { font-size: 22px; color: var(--tape) !important; font-weight: 700; }
+.mp-result-main { color: var(--tape) !important; font-size: 26px; font-weight: 700; }
+.rl-pad-value { font-size: 32px; font-weight: 700; }
+/* листы с угловыми метками */
+.history-card, .object-card, .profile-box, .user-card {
+  position: relative; background: #ffffff; border: none; border-radius: 4px;
+  padding: 14px; margin-bottom: 14px; box-shadow: 0 1px 0 rgba(20, 24, 31, 0.04), 0 6px 18px rgba(20, 24, 31, 0.07);
+}
+.history-card::before, .object-card::before, .profile-box::before, .user-card::before,
+.history-card::after, .object-card::after, .profile-box::after, .user-card::after {
+  content: ""; position: absolute; width: 10px; height: 10px; border-color: var(--s-ink); border-style: solid; pointer-events: none;
+}
+.history-card::before, .object-card::before, .profile-box::before, .user-card::before { left: 0; top: 0; border-width: 1.5px 0 0 1.5px; }
+.history-card::after, .object-card::after, .profile-box::after, .user-card::after { right: 0; bottom: 0; border-width: 0 1.5px 1.5px 0; }
+/* штамп — сводка */
+.stamp { display: grid; grid-template-columns: repeat(var(--cols, 3), 1fr); border: 1.5px solid var(--s-ink); border-radius: 6px; overflow: hidden; background: #ffffff; margin-bottom: 16px; }
+.stamp > div { padding: 7px 9px; font-size: 12px; color: var(--s-ink2); line-height: 1.2; }
+.stamp > div + div { border-left: 1px solid var(--s-ink); }
+.stamp b { display: block; color: var(--s-ink); font-size: 19px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
+.stamp .due { background: #fff1ee; } .stamp .due b { color: var(--s-due); }
+/* лента рулетки */
+.tape { position: relative; height: 24px; border: 1.5px solid var(--s-ink); border-radius: 4px; background: #ffffff; overflow: hidden; margin: 10px 0 4px; }
+.tape i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--tape); }
+.tape::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: repeating-linear-gradient(90deg, rgba(20,24,31,.55) 0 1px, transparent 1px 10px), repeating-linear-gradient(90deg, rgba(20,24,31,.35) 0 1px, transparent 1px 5px);
+  background-size: 100% 8px, 100% 4px; background-repeat: no-repeat; }
+.tape-l { display: flex; justify-content: space-between; font-size: 13px; color: var(--s-ink2); }
+.tape-l .due { color: var(--s-due); font-weight: 700; } .tape-l .ok { color: var(--s-ok); font-weight: 700; }
+/* выбранное — светло-жёлтым */
+.room-row.on { background: var(--tape-l); border-color: var(--s-line); }
+.room-row.on .room-name { color: var(--s-ink); }
+.room-check input { accent-color: var(--s-ink); }
+.room-selbar { background: var(--s-ink); border-radius: 8px; }
+.room-selbar-text small { color: var(--tape); font-size: 13px; }
+.chip.active, .tab-btn.active { box-shadow: inset 0 -3px 0 var(--tape); }
+.menu-item.active { box-shadow: inset 3px 0 0 var(--tape); }
+.wp-item.added { border-color: var(--tape-d); background: var(--tape-l); }
+.wp-surface.suggested { background: var(--tape); border-color: var(--tape); color: var(--s-ink); }
+.wp-surface.suggested small { color: var(--s-ink2); }
+.mp-pick button.active { background: var(--tape); border-color: var(--tape); color: var(--s-ink); }
+.rl-chip.on { border-color: var(--s-ink); background: var(--tape-l); color: var(--s-ink); box-shadow: inset 0 0 0 1px var(--s-ink); }
+.rl-add { color: var(--s-ink); }
+.rl-pad { border-top: 3px solid var(--tape); }
+.rl-pad-value small { color: var(--s-ink2); }
+.mp-head { border-bottom: none; box-shadow: inset 0 -3px 0 var(--tape); }
+.mp-calc { border-left-color: var(--tape-d); border-left-width: 3px; }
+.draft-offer { border-color: var(--s-ink); background: var(--tape-l); }
+/* шапка и нижняя панель */
+.app-header { border-bottom: none; box-shadow: inset 0 -3px 0 var(--tape); }
+.bottom-nav { border-top: 1.5px solid var(--s-ink); }
+.bottom-nav::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 6px; pointer-events: none; opacity: .3;
+  background-image: repeating-linear-gradient(90deg, var(--s-ink) 0 1px, transparent 1px 12px); }
+.nav-tab { position: relative; }
+.nav-tab.active { box-shadow: none; color: var(--s-ink); font-weight: 700; }
+.nav-tab.active::after { content: ""; display: block; width: 26px; height: 4px; border-radius: 2px; background: var(--tape); margin: 3px auto 0; }
+.update-banner { box-shadow: inset 0 -3px 0 var(--tape); }
+/* ссылки — подчёркнутые, без синего */
+.room-select-all .chip, .link-text, .measure-note summary { color: var(--s-ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--tape-d); }
+
+.site-header { border-bottom: none; box-shadow: inset 0 -3px 0 var(--tape); }
+.site-logo-icon { background: var(--s-ink); color: var(--tape); border-radius: 6px; font-family: var(--narrow); font-size: 22px; }
+.site-title-block h2 { font-weight: 700; letter-spacing: -0.015em; }
+.nav-btn { border-radius: 8px; }
+.service-price { font-family: var(--narrow); font-size: 16px; font-weight: 700; }
+.service-card, .accordion-category { background: #ffffff; }
+.accordion-category.open { box-shadow: 0 6px 18px rgba(20,24,31,.06); }
+.admin-controls { background: #ffffff; border-radius: 6px; padding: 12px; box-shadow: 0 6px 18px rgba(20,24,31,.06); border: none; }
+.btn-ghost { border-radius: 8px; }
+.history-toggle-btn { border-radius: 8px; }
+body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px var(--s-ink); }
+.header-status { color: var(--s-ok); }
 </style>
 </head>
 <body>
@@ -233,7 +339,7 @@ h1 { letter-spacing: -0.015em; }
 </div>
 </header>
 
-<div id="publicCompanyBanner" style="display:none; background:linear-gradient(90deg,#23408e,#23408e); color:#fff; border-radius:12px; padding:14px; margin-bottom:14px; text-align:center;"></div>
+<div id="publicCompanyBanner" style="display:none; background:linear-gradient(90deg,#14181f,#14181f); color:#fff; border-radius:12px; padding:14px; margin-bottom:14px; text-align:center;"></div>
 
 <div class="nav-header">
 <a href="calc.html" class="nav-btn">Личный кабинет для мастера и заказчика</a>
@@ -285,6 +391,7 @@ h1 { letter-spacing: -0.015em; }
 
 <div id="priceTab">
 <h1>Прайс-лист услуг</h1>
+<div class="dimline" aria-hidden="true"><span id="dimPrice"></span></div>
 <input type="text" id="searchInput" class="search-box" placeholder="Поиск услуги..." oninput="renderPriceList()">
 <div id="loader" class="loader">Загрузка прайса...</div>
 <div id="priceListContainer"></div>
@@ -409,7 +516,7 @@ banner.style.display = 'block';
 banner.innerHTML = `<div style="font-size:11px; opacity:0.85; margin-bottom:2px;">Прайс-лист компании</div><div style="font-size:18px; font-weight:700;">${escapeHtml(publicCompanyName)}</div>`;
 } else if (publicCompanyNotFound) {
 banner.style.display = 'block';
-banner.style.background = '#a5321f';
+banner.style.background = '#c2361f';
 banner.innerHTML = `<div style="font-size:14px; font-weight:600;">Эта витрина недоступна — ссылка устарела или отключена владельцем.</div>`;
 }
 }
@@ -417,7 +524,7 @@ banner.innerHTML = `<div style="font-size:14px; font-weight:600;">Эта вит�
 function escapeHtml(str) {
 return String(str ?? '')
 .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;").replace(/'/g, "&#23408e;");
+.replace(/"/g, "&quot;").replace(/'/g, "&#14181f;");
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -697,7 +804,7 @@ historyListEl.innerHTML += `
 <button type="button" class="btn btn-sm btn-danger" style="padding: 2px 6px; font-size: 10px;" onclick="deletePirogRecord('${recordId}')">Удалить</button>
 </div>
 <div style="font-size: 10px; color: #5c3c10; margin-bottom: 2px;">${rec.date}</div>
-<div style="color: #23704a; font-weight: 600; margin: 4px 0;">Смета: ${Number(rec.extraTotal || 0).toLocaleString('ru-RU')} ₽${rec.total ? ` + пирог за 1м²: ${Number(rec.total).toLocaleString('ru-RU')} ₽` : ''}</div>
+<div style="color: #1d7a4c; font-weight: 600; margin: 4px 0;">Смета: ${Number(rec.extraTotal || 0).toLocaleString('ru-RU')} ₽${rec.total ? ` + пирог за 1м²: ${Number(rec.total).toLocaleString('ru-RU')} ₽` : ''}</div>
 <div style="color: #485566; font-size: 10px; background: #f4f6f8; padding: 4px; border-radius: 4px;">${smetaItemsHtml || '<span style="color:#8d97a5;">нет позиций</span>'}</div>
 ${pieHtml}
 </div>
@@ -729,6 +836,14 @@ categoryBlock.classList.add('open');
 }
 
 function renderPriceList() {
+// подпись на размерной линии — сколько услуг в прайсе
+const dimEl = document.getElementById('dimPrice');
+if (dimEl) {
+const n = (cloudData.services || []).filter(x => !x.isCategory).length;
+const m10 = n % 10, m100 = n % 100;
+const w = (m10 === 1 && m100 !== 11) ? 'услуга' : (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) ? 'услуги' : 'услуг';
+dimEl.textContent = n ? `${n} ${w}` : '';
+}
 const container = document.getElementById('priceListContainer');
 if (!container) return;
 container.innerHTML = '';
@@ -878,8 +993,8 @@ lockButtonHtml = isLocked
 : `<button type="button" class="lock-btn" onclick="event.stopPropagation(); toggleLock(${idx})" title="Исключить из пирога" aria-label="Исключить из пирога"><svg class="ic"><use href="#i-unlock"/></svg></button>`;
 }
 const pieToggleHtml = !isLocked
-? `<label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#23408e; margin-top:6px; font-weight:600;">
-<input type="checkbox" class="calc-checkbox" value="${idx}" onchange="renderSquareCalc()" style="width:16px; height:16px; accent-color:#23408e;">
+? `<label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#14181f; margin-top:6px; font-weight:600;">
+<input type="checkbox" class="calc-checkbox" value="${idx}" onchange="renderSquareCalc()" style="width:16px; height:16px; accent-color:#14181f;">
 Учитывать в «Пироге» за 1 м²
 </label>`
 : `<div style="font-size:11px; color:#7a3d14; margin-top:6px;">Не входит в пирог — тарифицируется отдельно по объёму</div>`;
@@ -887,7 +1002,7 @@ contentEl.innerHTML += `
 <div class="smeta-item-card">
 <div class="service-title" style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
 <span style="display:flex; align-items:center; gap:6px;">${lockButtonHtml}${escapeHtml(srv.name)}</span>
-<span class="service-price" style="font-size:12px; color:#23704a; font-weight:700; white-space:nowrap;">${Number(srv.price).toLocaleString('ru-RU')} ₽</span>
+<span class="service-price" style="font-size:12px; color:#1d7a4c; font-weight:700; white-space:nowrap;">${Number(srv.price).toLocaleString('ru-RU')} ₽</span>
 </div>
 ${pieToggleHtml}
 <div class="unit-row">
@@ -1130,7 +1245,7 @@ printContainer.style.boxSizing = 'border-box';
 printContainer.style.zIndex = '999999';
 printContainer.style.fontFamily = 'Arial, sans-serif';
 printContainer.innerHTML = `
-<h2 style="color: #23408e; border-bottom: 2px solid #23408e; padding-bottom: 8px; margin-top:0; font-size: 22px;">СМЕТА</h2>
+<h2 style="color: #14181f; border-bottom: 2px solid #14181f; padding-bottom: 8px; margin-top:0; font-size: 22px;">СМЕТА</h2>
 <p style="margin: 6px 0; font-size: 14px;"><b>Дата:</b> ${dateStr}</p>
 <p style="margin: 6px 0; font-size: 14px;"><b>Объект:</b> ${escapeHtml(objectName)}</p>
 ${smetaRows ? `
@@ -1150,7 +1265,7 @@ ${smetaRows ? `
 <h3 style="text-align: right; margin-top: 20px; font-size: 20px; color: #000; border-top: 2px solid #1d2733; padding-top: 12px;">ИТОГО ПО СМЕТЕ: ${smetaTotal.toLocaleString('ru-RU')} ₽</h3>
 ${pieTotal > 0 ? `<p style="text-align: right; margin-top: 8px; font-size: 12px; color: #5d6878;">Справочно: стоимость 1 м² по отмеченным работам — ${pieTotal.toLocaleString('ru-RU')} ₽</p>` : ''}
 ${currentPieNote ? `
-<div style="margin-top: 25px; padding: 12px; background: #f4f6f8; border-left: 4px solid #23408e; border-radius: 4px; font-size: 11px; color: #485566; line-height: 1.5;">
+<div style="margin-top: 25px; padding: 12px; background: #f4f6f8; border-left: 4px solid #14181f; border-radius: 4px; font-size: 11px; color: #485566; line-height: 1.5;">
 <b>Примечание к расчёту:</b><br>
 ${escapeHtml(currentPieNote)}
 </div>
@@ -1270,13 +1385,13 @@ const entries = parsePriceImportText(text);
 pendingPriceImportEntries = entries;
 const preview = document.getElementById('priceImportPreview');
 if (entries.length === 0) {
-preview.innerHTML = '<div style="color:#a5321f; font-size:13px;">Ничего не распознано — проверьте формат.</div>';
+preview.innerHTML = '<div style="color:#c2361f; font-size:13px;">Ничего не распознано — проверьте формат.</div>';
 return;
 }
 const catCount = entries.filter(e => e.isCategory).length;
 const itemCount = entries.filter(e => !e.isCategory).length;
 const rows = entries.map(e => e.isCategory
-? `<div style="font-weight:700; margin-top:6px; color:#23408e;">## ${escapeHtml(e.name)}</div>`
+? `<div style="font-weight:700; margin-top:6px; color:#14181f;">## ${escapeHtml(e.name)}</div>`
 : `<div style="font-size:12px; padding-left:8px;">${escapeHtml(e.name)} — ${e.price} ₽ / ${escapeHtml(e.unit)}</div>`
 ).join('');
 preview.innerHTML = `
