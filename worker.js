@@ -1,31 +1,30 @@
 /**
- * Кабинет мастера — защищённый прокси-сервер (Cloudflare Worker)
+ * Кабинет мастера — сервер (Cloudflare Worker)
  * ----------------------------------------------------------------
- * Задача этого файла: спрятать секретный ключ JSONBin.io от браузера
- * и добавить настоящую проверку пароля на сервере (а не в коде страницы).
+ * ГДЕ ХРАНЯТСЯ ДАННЫЕ. В хранилище Durable Object "Store" (встроено в
+ * Cloudflare, настраивается строками в wrangler.toml — вручную в панели
+ * ничего создавать не нужно). Все запросы к данным выполняются строго по
+ * очереди, поэтому одновременные сохранения больше не затирают друг друга
+ * на сервере.
  *
- * ПЕРЕД ДЕПЛОЕМ настройте в Cloudflare Dashboard -> ваш Worker ->
- * Settings -> Variables and Secrets:
- *   JSONBIN_KEY     — ваш X-Master-Key от JSONBin.io
- *                     (тот самый, что раньше был виден в calc.html/index.html)
- *   SESSION_SECRET  — любая длинная случайная строка (например, 40+ символов),
- *                     придумайте сами — она подписывает токены входа.
+ * ПЕРЕЕЗД С JSONBin. При самом первом запросе после деплоя хранилище
+ * пустое — воркер один раз копирует туда всё из JSONBin. JSONBin при этом
+ * не меняется и остаётся резервной копией на момент переезда. Поэтому
+ * секрет JSONBIN_KEY пока не удаляйте.
  *
- * ФОТО/ФАЙЛЫ ОТЧЁТОВ хранятся в Cloudinary (бесплатный тариф, БЕЗ банковской
- * карты — не в JSONBin, там только текст). Разовая настройка перед деплоем:
- *   1. Зарегистрируйтесь на cloudinary.com (Free план, карта не нужна).
- *   2. В Dashboard Cloudinary на главной странице увидите Cloud name,
- *      API Key и API Secret — скопируйте их.
- *   3. Добавьте в Cloudflare ещё три секрета (Settings -> Variables and
- *      Secrets, тип "Secret"):
- *        CLOUDINARY_CLOUD_NAME
- *        CLOUDINARY_API_KEY
- *        CLOUDINARY_API_SECRET
- *   Если эти секреты не заданы, загрузка файлов будет возвращать понятную
- *      ошибку, а остальной сайт продолжит работать как обычно.
+ * Если привязки STORE в wrangler.toml нет — воркер работает по-старому,
+ * напрямую с JSONBin.
  *
- * BIN_ID и разрешённый источник (домен сайта) ниже захардкожены —
- * поменяйте, если у вас другой BIN_ID или другой домен/поддомен.
+ * СЕКРЕТЫ (Cloudflare Dashboard -> ваш Worker -> Settings -> Variables
+ * and Secrets, тип "Secret"):
+ *   JSONBIN_KEY     — X-Master-Key от JSONBin.io (нужен для переезда)
+ *   SESSION_SECRET  — длинная случайная строка, подписывает токены входа
+ *   CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET —
+ *                     хранилище фото/файлов отчётов (cloudinary.com).
+ *   Если Cloudinary не настроен, загрузка файлов вернёт понятную ошибку,
+ *   а остальной сайт продолжит работать.
+ *
+ * BIN_ID и разрешённые адреса сайта ниже захардкожены.
  */
 
 const BIN_ID = "6a98820eda38895dfe310361";
@@ -266,16 +265,10 @@ async function fetchJsonBinWithRetry(url, options, attempts = 3) {
   throw lastErr;
 }
 
-async function readBin(env) {
-  const res = await fetchJsonBinWithRetry(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-    headers: { "X-Master-Key": env.JSONBIN_KEY },
-  });
-  const data = await res.json();
-  const record = data && data.record;
-  // Если JSONBin вернул пустые или повреждённые данные (нет списка
-  // пользователей) — НЕ подставляем ничего по умолчанию, а отдаём ошибку.
-  // Раньше здесь создавался admin / 12345: при сбое любой мог бы войти
-  // как админ, а следующая запись затёрла бы настоящие данные пустыми.
+// Приводит запись к ожидаемому виду. Если списка пользователей нет —
+// данные считаются повреждёнными: отдаём ошибку и ничего не подставляем
+// (раньше здесь создавался admin / 12345).
+function normalizeRecord(record) {
   if (!record || typeof record !== "object" || !Array.isArray(record.users) || record.users.length === 0) {
     throw new Error("База данных временно недоступна, попробуйте ещё раз через минуту");
   }
@@ -287,12 +280,84 @@ async function readBin(env) {
   return record;
 }
 
-async function writeBin(env, data) {
+async function readJsonBin(env) {
+  const res = await fetchJsonBinWithRetry(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+    headers: { "X-Master-Key": env.JSONBIN_KEY },
+  });
+  const data = await res.json();
+  return normalizeRecord(data && data.record);
+}
+
+async function writeJsonBin(env, data) {
   await fetchJsonBinWithRetry(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", "X-Master-Key": env.JSONBIN_KEY },
     body: JSON.stringify(data),
   });
+}
+
+/* ---------- хранилище Durable Object ---------- */
+
+// Данные разложены по отдельным ключам, чтобы ни один не был слишком
+// большим: общие списки — каждый в своём ключе, а данные каждой "своей
+// компании" — в ключе "cd:<логин>".
+const STORE_KEYS = ["services", "users", "history", "objects", "pirogHistory"];
+const COMPANY_PREFIX = "cd:";
+
+async function readStore(env) {
+  const st = env.STORAGE;
+  const meta = await st.get("meta");
+  if (!meta) {
+    // Хранилище ещё пустое — первый запуск после переезда.
+    const record = await readJsonBin(env);
+    await writeStore(env, record, { source: "jsonbin", migratedAt: new Date().toISOString() });
+    return record;
+  }
+  const values = await st.get(STORE_KEYS);
+  const record = {};
+  for (const k of STORE_KEYS) record[k] = values.get(k);
+  record.companyData = {};
+  const companies = await st.list({ prefix: COMPANY_PREFIX });
+  for (const [key, value] of companies) record.companyData[key.slice(COMPANY_PREFIX.length)] = value;
+  return normalizeRecord(record);
+}
+
+async function writeStore(env, record, newMeta) {
+  // Последняя линия защиты: пустой список пользователей не записываем никогда.
+  if (!Array.isArray(record.users) || record.users.length === 0) {
+    throw new Error("Отказ в сохранении: в данных нет ни одного пользователя");
+  }
+  const st = env.STORAGE;
+  const entries = {};
+  for (const k of STORE_KEYS) entries[k] = Array.isArray(record[k]) ? record[k] : [];
+  const companyData = record.companyData || {};
+  for (const login of Object.keys(companyData)) entries[COMPANY_PREFIX + login] = companyData[login];
+  if (newMeta) entries.meta = newMeta;
+
+  // Компании, которых больше нет (например, после смены логина), удаляем.
+  const existing = await st.list({ prefix: COMPANY_PREFIX });
+  const stale = [...existing.keys()].filter((k) => !(k in entries));
+
+  // Пишем пачками (не больше 128 ключей за раз — ограничение Cloudflare).
+  const keys = Object.keys(entries);
+  const ops = [];
+  for (let i = 0; i < keys.length; i += 128) {
+    const chunk = {};
+    for (const k of keys.slice(i, i + 128)) chunk[k] = entries[k];
+    ops.push(st.put(chunk));
+  }
+  for (let i = 0; i < stale.length; i += 128) ops.push(st.delete(stale.slice(i, i + 128)));
+  await Promise.all(ops);
+}
+
+/* ---------- общий вход: хранилище, а без него — JSONBin ---------- */
+
+async function readBin(env) {
+  return env.STORAGE ? readStore(env) : readJsonBin(env);
+}
+
+async function writeBin(env, data) {
+  return env.STORAGE ? writeStore(env, data) : writeJsonBin(env, data);
 }
 
 function stripPasswords(record) {
@@ -708,6 +773,25 @@ const handler = {
         return json({ data: stripPasswords(record) });
       }
 
+      // Резервная копия всех данных — только для админа. Включает хэши
+      // паролей (без них из копии нельзя восстановить вход), поэтому
+      // файл стоит хранить так же бережно, как пароли.
+      if (path === "/backup" && request.method === "GET") {
+        if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
+        const record = await readBin(env);
+        const stamp = new Date().toISOString().slice(0, 10);
+        return new Response(
+          JSON.stringify({ exportedAt: new Date().toISOString(), record }, null, 2),
+          {
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              "Content-Disposition": `attachment; filename="backup-${stamp}.json"`,
+              ...corsHeaders(),
+            },
+          }
+        );
+      }
+
       // Статистика по кабинетам "своя компания" — только счётчики, без самих
       // данных: админ видит, сколько у кого объектов/счетов/расчётов/чеков,
       // но не что именно внутри — личные кабинеты остаются приватными.
@@ -732,13 +816,51 @@ const handler = {
   },
 };
 
-/* ============== выбор разрешённого источника (CORS) ============== */
+/* ============== хранилище: Durable Object ============== */
 
-// Отвечаем тем источником, с которого пришёл запрос, если он есть в списке
-// ALLOWED_ORIGINS. Остальные обработчики выше не меняются.
+// Один экземпляр на весь сайт. Все запросы к данным проходят через него
+// строго по очереди: следующий начинается только после того, как
+// закончился предыдущий, — поэтому чтение и запись разных запросов
+// больше не перемешиваются.
+export class Store {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this.queue = Promise.resolve();
+  }
+
+  async fetch(request) {
+    const env = Object.create(this.env);
+    env.STORAGE = this.state.storage;
+    const run = () => handler.fetch(request, env);
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => {});
+    return result;
+  }
+}
+
+/* ============== точка входа ============== */
+
+// Запросы, которым хранилище не нужно (предзапросы CORS, загрузка и
+// удаление файлов в Cloudinary), обрабатываются сразу, чтобы долгая
+// загрузка фото не задерживала очередь остальных запросов.
+function needsStorage(request) {
+  if (request.method === "OPTIONS") return false;
+  const path = new URL(request.url).pathname;
+  return path !== "/upload" && path !== "/file";
+}
+
 export default {
   async fetch(request, env) {
-    const response = await handler.fetch(request, env);
+    let response;
+    if (env.STORE && needsStorage(request)) {
+      const stub = env.STORE.get(env.STORE.idFromName("main"));
+      response = await stub.fetch(request);
+    } else {
+      response = await handler.fetch(request, env);
+    }
+    // Отвечаем тем адресом сайта, с которого пришёл запрос, если он есть
+    // в списке ALLOWED_ORIGINS.
     const origin = request.headers.get("Origin") || "";
     const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
     const headers = new Headers(response.headers);
