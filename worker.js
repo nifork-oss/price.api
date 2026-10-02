@@ -277,6 +277,7 @@ function normalizeRecord(record) {
   if (!Array.isArray(record.objects)) record.objects = [];
   if (!Array.isArray(record.pirogHistory)) record.pirogHistory = [];
   if (!record.companyData || typeof record.companyData !== "object" || Array.isArray(record.companyData)) record.companyData = {};
+  if (!record.revs || typeof record.revs !== "object" || Array.isArray(record.revs)) record.revs = {};
   return record;
 }
 
@@ -316,6 +317,7 @@ async function readStore(env) {
   const values = await st.get(STORE_KEYS);
   const record = {};
   for (const k of STORE_KEYS) record[k] = values.get(k);
+  record.revs = await st.get("revs");
   record.companyData = {};
   const companies = await st.list({ prefix: COMPANY_PREFIX });
   for (const [key, value] of companies) record.companyData[key.slice(COMPANY_PREFIX.length)] = value;
@@ -330,6 +332,7 @@ async function writeStore(env, record, newMeta) {
   const st = env.STORAGE;
   const entries = {};
   for (const k of STORE_KEYS) entries[k] = Array.isArray(record[k]) ? record[k] : [];
+  entries.revs = record.revs && typeof record.revs === "object" ? record.revs : {};
   const companyData = record.companyData || {};
   for (const login of Object.keys(companyData)) entries[COMPANY_PREFIX + login] = companyData[login];
   if (newMeta) entries.meta = newMeta;
@@ -362,6 +365,11 @@ async function writeBin(env, data) {
 
 function stripPasswords(record) {
   const clone = JSON.parse(JSON.stringify(record));
+  // Личные кабинеты "своя компания" и служебные счётчики версий наружу
+  // не отдаются: раньше companyData уходил целиком любому мастеру в
+  // обычном режиме, и он мог увидеть чужие приватные кабинеты.
+  delete clone.companyData;
+  delete clone.revs;
   clone.users = (clone.users || []).map((u) => ({
     login: u.login,
     email: u.email || "",
@@ -369,6 +377,55 @@ function stripPasswords(record) {
     companyName: u.companyName || "",
   }));
   return clone;
+}
+
+/* ============== версии данных (защита от перезаписи) ============== */
+
+// У общих данных и у каждой "своей компании" — свой номер версии (rev),
+// который растёт при каждом изменении. Сайт получает его вместе с данными
+// и присылает обратно при сохранении (baseRev). Для каждого поля
+// (history, objects, ...) помним, на какой версии его последний раз
+// сохранял кто-то из людей. Если поле, которое сохраняют сейчас, успели
+// изменить после baseRev — значит, у человека на экране устаревшие
+// данные, и сохранение отклоняется (409), чтобы не затереть чужую работу.
+//
+// То, что сервер добавляет сам (новые пользователи при регистрации,
+// публичные расчёты "пирог"), конфликтом не считается: такие записи
+// помечаются версией (_rev) и просто не теряются при сохранении.
+
+function spaceKey(auth) {
+  return auth.role !== "client" && auth.mode === "company" ? COMPANY_PREFIX + auth.login : "main";
+}
+
+function getSpaceRev(record, key) {
+  const r = record.revs[key];
+  return r && typeof r === "object" ? r : { rev: 0, fields: {} };
+}
+
+// Увеличивает версию. fields — поля, которые сохранил человек (для
+// проверки конфликтов); у серверных добавлений fields пустой.
+function bumpRev(record, key, fields = []) {
+  const r = getSpaceRev(record, key);
+  const next = { rev: (r.rev || 0) + 1, fields: { ...(r.fields || {}) } };
+  for (const f of fields) next.fields[f] = next.rev;
+  record.revs[key] = next;
+  return next.rev;
+}
+
+// Есть ли среди сохраняемых полей те, что изменили после baseRev.
+function hasConflict(record, key, baseRev, fields) {
+  const r = getSpaceRev(record, key);
+  return fields.some((f) => (r.fields && r.fields[f] ? r.fields[f] : 0) > baseRev);
+}
+
+function conflictResponse() {
+  return json(
+    {
+      error: "Пока вы работали, кто-то другой сохранил изменения. Загружаю свежие данные — повторите, пожалуйста, последнее действие.",
+      conflict: true,
+    },
+    409
+  );
 }
 
 /* ============== обработчик запросов ============== */
@@ -464,6 +521,7 @@ const handler = {
           extraTotal: Number(body.extraTotal) || 0,
           extraItems: Array.isArray(body.extraItems) ? body.extraItems.slice(0, 100) : [],
           viewed: false,
+          _rev: bumpRev(record, "main"),
         };
         record.pirogHistory.unshift(newRecord);
         if (record.pirogHistory.length > 50) record.pirogHistory.pop();
@@ -498,7 +556,7 @@ const handler = {
         const pass = await hashPassword(password);
         const mode = role !== "client" && body.mode === "company" ? "company" : "employee";
         const hasTriedCompanyMode = mode === "company";
-        record.users.push({ login, email, pass, role, hasTriedCompanyMode });
+        record.users.push({ login, email, pass, role, hasTriedCompanyMode, _rev: bumpRev(record, "main") });
         await writeBin(env, record);
         const token = await signToken({ login, role, mode, exp: Date.now() + TOKEN_LIFETIME_MS }, env);
         return json({ token, login, role, mode, hasTriedCompanyMode });
@@ -629,7 +687,7 @@ const handler = {
             history: cd.history || [],
             pirogHistory: [],
           };
-          return json({ data, role: auth.role, login: auth.login, mode: "company", hasTriedCompanyMode, self });
+          return json({ data, role: auth.role, login: auth.login, mode: "company", hasTriedCompanyMode, self, rev: getSpaceRev(record, spaceKey(auth)).rev });
         }
         if (auth.role === "client") {
           // Заказчику отдаём только то, что видит он сам: объекты, куда его
@@ -649,7 +707,7 @@ const handler = {
           };
           return json({ data, role: auth.role, login: auth.login, self });
         }
-        return json({ data: stripPasswords(record), role: auth.role, login: auth.login, mode: "employee", hasTriedCompanyMode, self });
+        return json({ data: stripPasswords(record), role: auth.role, login: auth.login, mode: "employee", hasTriedCompanyMode, self, rev: getSpaceRev(record, "main").rev });
       }
 
       // Сохранение данных приложения — заказчику доступ только на чтение
@@ -659,6 +717,10 @@ const handler = {
         }
         const incoming = await request.json();
         const record = await readBin(env);
+        const key = spaceKey(auth);
+        // Старые версии страниц baseRev не присылают — для них проверка
+        // не делается, всё работает как раньше.
+        const baseRev = Number.isInteger(incoming.baseRev) ? incoming.baseRev : null;
 
         // Обновление СВОЕГО профиля (логин/почта/пароль/название компании) —
         // работает одинаково в обоих режимах, пишет напрямую в общий список
@@ -685,11 +747,28 @@ const handler = {
             record.companyData[newLogin] = record.companyData[oldLogin];
             delete record.companyData[oldLogin];
           }
+          if (newLogin !== oldLogin && record.revs[COMPANY_PREFIX + oldLogin]) {
+            record.revs[COMPANY_PREFIX + newLogin] = record.revs[COMPANY_PREFIX + oldLogin];
+            delete record.revs[COMPANY_PREFIX + oldLogin];
+          }
+          // Профиль меняет список пользователей — это изменение общих данных.
+          // Новую версию сообщаем странице, только если до этого у неё были
+          // самые свежие данные; иначе она узнает о чужих изменениях при
+          // следующем сохранении.
+          const mainBefore = getSpaceRev(record, "main").rev;
+          const mainAfter = bumpRev(record, "main", ["users"]);
+          let newRev;
+          if (key === "main") {
+            if (baseRev === mainBefore) newRev = mainAfter;
+          } else {
+            newRev = getSpaceRev(record, COMPANY_PREFIX + newLogin).rev;
+          }
           await writeBin(env, record);
           const newToken = await signToken({ login: newLogin, role: auth.role, mode: auth.mode, exp: Date.now() + TOKEN_LIFETIME_MS }, env);
           return json({
             self: { login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "" },
             token: newToken,
+            rev: newRev,
           });
         }
 
@@ -699,17 +778,28 @@ const handler = {
         if (auth.mode === "company") {
           if (!record.companyData[auth.login]) record.companyData[auth.login] = { services: [], objects: [], history: [] };
           const cd = record.companyData[auth.login];
-          if (Array.isArray(incoming.services)) cd.services = incoming.services;
-          if (Array.isArray(incoming.objects)) cd.objects = incoming.objects;
-          if (Array.isArray(incoming.history)) cd.history = incoming.history;
+          const fields = ["services", "objects", "history"].filter((f) => Array.isArray(incoming[f]));
+          if (baseRev !== null && hasConflict(record, key, baseRev, fields)) return conflictResponse();
+          for (const f of fields) cd[f] = incoming[f];
+          const rev = bumpRev(record, key, fields);
           await writeBin(env, record);
           return json({
             data: { services: cd.services, users: [], objects: cd.objects, history: cd.history, pirogHistory: [] },
             mode: "company",
+            rev,
           });
         }
 
         const isAdmin = auth.role === "admin";
+
+        // Поля, которые в этом запросе реально будут записаны.
+        const fields = [];
+        if (isAdmin && Array.isArray(incoming.services)) fields.push("services");
+        if (isAdmin && Array.isArray(incoming.users)) fields.push("users");
+        if (Array.isArray(incoming.history)) fields.push("history");
+        if (Array.isArray(incoming.objects)) fields.push("objects");
+        if (isAdmin && Array.isArray(incoming.pirogHistory)) fields.push("pirogHistory");
+        if (baseRev !== null && hasConflict(record, "main", baseRev, fields)) return conflictResponse();
 
         if (Array.isArray(incoming.services)) {
           // Клиент всегда отправляет весь cloudData целиком, включая services,
@@ -752,7 +842,24 @@ const handler = {
               });
             }
           }
-          record.users = newUsersList;
+          if (isAdmin) {
+            // Пользователи, зарегистрировавшиеся уже после того, как админ
+            // открыл страницу, — в его списке их ещё нет, но удалять их нельзя.
+            if (baseRev !== null) {
+              const kept = new Set(newUsersList.map((u) => u.login));
+              for (const u of record.users) {
+                if ((u._rev || 0) > baseRev && !kept.has(u.login)) newUsersList.push(u);
+              }
+            }
+            record.users = newUsersList;
+          } else {
+            // Не-админ может изменить только себя. Остальные пользователи
+            // остаются как есть на сервере — раньше список собирался из
+            // присланного, и мастер с устаревшей страницей стирал тех, кто
+            // зарегистрировался после её открытия.
+            const selfEntry = newUsersList.find((u) => u.login === auth.login);
+            if (selfEntry) record.users = record.users.map((u) => (u.login === auth.login ? selfEntry : u));
+          }
         }
 
         if (Array.isArray(incoming.history)) record.history = incoming.history;
@@ -765,12 +872,18 @@ const handler = {
           // просто пытаясь сохранить свой счёт или объект. Теперь для не-админа
           // изменение этого поля молча игнорируется, а остальное сохраняется.
           if (isAdmin) {
-            record.pirogHistory = incoming.pirogHistory;
+            // Расчёты, пришедшие уже после открытия страницы, сохраняем.
+            const incomingIds = new Set(incoming.pirogHistory.map((p) => p && p.id));
+            const fresh = baseRev !== null
+              ? record.pirogHistory.filter((p) => (p._rev || 0) > baseRev && !incomingIds.has(p.id))
+              : [];
+            record.pirogHistory = [...fresh, ...incoming.pirogHistory];
           }
         }
 
+        const rev = bumpRev(record, "main", fields);
         await writeBin(env, record);
-        return json({ data: stripPasswords(record) });
+        return json({ data: stripPasswords(record), rev });
       }
 
       // Резервная копия всех данных — только для админа. Включает хэши
