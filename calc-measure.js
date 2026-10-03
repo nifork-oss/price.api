@@ -1582,15 +1582,191 @@ saveMeasureDraft();
 renderMeasure();
 }
 
+// Подсказки для глаз: план и развёртка, на которых отмеченные углы подсвечены,
+// а касание угла, проёма или стыка его переключает
+let cnElevWall = 0;
+const CN_IN = '#1d6fd6', CN_OUT = '#e07b00';
+function cornersPlanSvg(m, r) {
+let g;
+try { g = rulerGeometry(m); } catch (e) { return ''; }
+if (!g || !g.segs.length || !g.segs.some(q => q.len > 0)) return '';
+const items = new Map((r.cornerItems || []).map(it => [it.key, it]));
+const W = 340, H = 250, P = 40;
+const xs = [0, ...g.segs.map(q => q.x2)], ys = [0, ...g.segs.map(q => q.y2)];
+const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+const k = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
+const ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
+const X = v => ox + v * k, Y = v => oy + v * k;
+const o = g.orient || 1, n = g.segs.length;
+let s = '', top = '', hits = '';
+const pts = [[0, 0], ...g.segs.map(q => [q.x2, q.y2])];
+if (g.closed) s += `<path d="M${pts.map(p => `${X(p[0])} ${Y(p[1])}`).join('L')}Z" fill="#f6f7f9"/>`;
+// стыки с потолком и полом — линии вдоль стен внутри комнаты
+const jc = items.get('jc'), jf = items.get('jf');
+g.segs.forEach(q => {
+if (!(q.len > 0)) return;
+const nx = -q.dy * o, ny = q.dx * o;
+const line = (off, col, dash) => `<path d="M${X(q.x1) + nx * off} ${Y(q.y1) + ny * off}L${X(q.x2) + nx * off} ${Y(q.y2) + ny * off}" stroke="${col}" stroke-width="2" ${dash ? `stroke-dasharray="${dash}"` : ''}/>`;
+if (jc && jc.on) s += line(5, CN_IN, '');
+if (jf && jf.on) s += line(9, CN_IN, '4 3');
+});
+// стены
+g.segs.forEach(q => {
+s += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="${q.i === cnElevWall ? '#14181f' : '#3d4652'}" stroke-width="${q.i === cnElevWall ? 5 : 3.5}" stroke-linecap="square" ${q.empty ? 'stroke-dasharray="5 5" opacity=".35"' : ''}/>`;
+if (!(q.len > 0)) return;
+const mx = (X(q.x1) + X(q.x2)) / 2 + q.dy * o * 15, my = (Y(q.y1) + Y(q.y2)) / 2 - q.dx * o * 15;
+const on = q.i === cnElevWall;
+top += `<circle cx="${mx}" cy="${my}" r="8.5" fill="${on ? '#14181f' : '#ffffff'}" stroke="#14181f" stroke-width="1"/><text x="${mx}" y="${my + 3.5}" text-anchor="middle" font-size="10" font-weight="700" fill="${on ? '#ffffff' : '#14181f'}">${q.i + 1}</text>`;
+hits += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="transparent" stroke-width="18" style="cursor:pointer" onclick="cnShowWall(${q.i})"><title>Стена ${q.i + 1} — развёртка ниже</title></path>`;
+});
+// проёмы: подсвечен — отмечены наружные углы откосов
+(m.openings || []).forEach((op, oi) => {
+if (typeof op.wall !== 'number' || !g.segs[op.wall] || !(openingWidth(op) > 0)) return;
+const q = g.segs[op.wall];
+const L = q.len > 0 ? q.len : Math.hypot(q.x2 - q.x1, q.y2 - q.y1);
+const [a0, a1] = openingSpan(op, L);
+const it = items.get('so' + oi);
+const on = it && it.on;
+const ax = X(q.x1 + q.dx * a0), ay = Y(q.y1 + q.dy * a0), bx = X(q.x1 + q.dx * a1), by = Y(q.y1 + q.dy * a1);
+s += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#ffffff" stroke-width="6"/>`;
+s += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="${on ? CN_OUT : '#9aa3ad'}" stroke-width="${on ? 4 : 2}" ${op.type === 'door' ? 'stroke-dasharray="3 2"' : ''}/>`;
+const nx = -q.dy * o, ny = q.dx * o;
+const tx = (ax + bx) / 2 + nx * 12, ty = (ay + by) / 2 + ny * 12;
+top += `<text x="${tx}" y="${ty + 3.5}" text-anchor="middle" font-size="10" font-weight="700" fill="${on ? CN_OUT : '#5a6470'}" paint-order="stroke" stroke="#ffffff" stroke-width="3">${opCode(op, oi)}</text>`;
+if (it) hits += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="transparent" stroke-width="20" style="cursor:pointer" onclick="toggleCorner('so${oi}')"><title>${opCode(op, oi)}: наружные углы откосов</title></path>`;
+});
+// рёбра ниш и коробов
+(r.ceilEls || []).forEach(e => {
+const it = items.get('eo' + e.idx);
+e.strips.forEach(p => {
+const [a, b] = p.inner;
+s += `<path d="M${X(a[0])} ${Y(a[1])}L${X(b[0])} ${Y(b[1])}" stroke="${it && it.on ? CN_OUT : '#c4cad1'}" stroke-width="${it && it.on ? 2.5 : 1.2}" stroke-dasharray="5 3"/>`;
+if (it) hits += `<path d="M${X(a[0])} ${Y(a[1])}L${X(b[0])} ${Y(b[1])}" stroke="transparent" stroke-width="14" style="cursor:pointer" onclick="toggleCorner('eo${e.idx}')"><title>${e.code}: наружное ребро</title></path>`;
+});
+});
+// углы комнаты: кружок — внутренний, ромб — наружный; закрашен — отмечен
+g.segs.forEach((q, i) => {
+const it = items.get('wc' + i);
+if (!it) return;
+const j = i + 1 < n ? i + 1 : 0, q2 = g.segs[j];
+const n1 = [-q.dy * o, q.dx * o], n2 = [-q2.dy * o, q2.dx * o];
+let bx = n1[0] + n2[0], by = n1[1] + n2[1];
+const bl = Math.hypot(bx, by) || 1;
+bx /= bl; by /= bl;
+const sgn = it.kind === 'out' ? -1 : 1;             // у наружного угла метка снаружи комнаты
+const cx = X(q.x2) + bx * 15 * sgn, cy = Y(q.y2) + by * 15 * sgn;
+const col = it.kind === 'out' ? CN_OUT : CN_IN;
+const mark = it.kind === 'out'
+? `<rect x="${cx - 7}" y="${cy - 7}" width="14" height="14" transform="rotate(45 ${cx} ${cy})" fill="${it.on ? col : '#ffffff'}" stroke="${col}" stroke-width="1.6"/>`
+: `<circle cx="${cx}" cy="${cy}" r="8" fill="${it.on ? col : '#ffffff'}" stroke="${col}" stroke-width="1.6"/>`;
+top += mark + `<text x="${cx}" y="${cy + 3.5}" text-anchor="middle" font-size="8.5" font-weight="700" fill="${it.on ? '#ffffff' : col}">${it.on ? '✓' : ''}</text>`;
+hits += `<circle cx="${cx}" cy="${cy}" r="15" fill="transparent" style="cursor:pointer" onclick="toggleCorner('wc${i}')"><title>Угол ${it.label} (${it.kind === 'out' ? 'наружный' : 'внутренний'})</title></circle>`;
+});
+return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Углы на плане" font-family="inherit">${s}${top}${hits}</svg>`;
+}
+
+function cornersElevSvg(m, r, wi) {
+let g;
+try { g = rulerGeometry(m); } catch (e) { g = null; }
+const L = mNum((m.walls || [])[wi]), Hh = wallHeightOf(m, wi);
+if (!(L > 0) || !(Hh > 0)) return `<div class="mp-hint" style="padding:18px 8px;text-align:center;">${!(L > 0) ? 'Введите длину стены на вкладке «Стены»' : 'Введите высоту стен на вкладке «Стены»'}</div>`;
+const items = new Map((r.cornerItems || []).map(it => [it.key, it]));
+const n = (m.walls || []).length;
+const W = 340, H = 250, left = 40, right = 40, topM = 30, bottom = 40;
+const k = Math.min((W - left - right) / L, (H - topM - bottom) / Hh);
+const x0 = left + ((W - left - right) - L * k) / 2, yF = topM + Hh * k;
+const flip = g && (g.orient || 1) < 0;
+const XA = a => flip ? x0 + (L - a) * k : x0 + a * k;
+const Yh = h => yF - h * k;
+let s = `<rect x="${x0}" y="${Yh(Hh)}" width="${L * k}" height="${Hh * k}" fill="#ffffff" stroke="#3d4652" stroke-width="1.4"/>`;
+let hits = '';
+// стыки: вверху с потолком, внизу с полом (без дверей)
+const jc = items.get('jc'), jf = items.get('jf');
+if (jc) {
+s += `<path d="M${x0} ${Yh(Hh)}H${x0 + L * k}" stroke="${jc.on ? CN_IN : '#c4cad1'}" stroke-width="${jc.on ? 4 : 2}"/>`;
+hits += `<rect x="${x0}" y="${Yh(Hh) - 9}" width="${L * k}" height="18" fill="transparent" style="cursor:pointer" onclick="toggleCorner('jc')"><title>Стык стена — потолок</title></rect>`;
+}
+if (jf) {
+const doors = (m.openings || []).filter(o => o.wall === wi && (o.type === 'door' || o.type === 'balcony') && openingWidth(o) > 0)
+.map(o => { const [a0, a1] = openingSpan(o, L); return o.type === 'balcony' ? balconyParts(o, a0, a1).door : [a0, a1]; }).sort((a, b) => a[0] - b[0]);
+let x = 0;
+const seg = (a, b) => { if (b - a > 0.005) s += `<path d="M${XA(a)} ${yF}H${XA(b)}" stroke="${jf.on ? CN_IN : '#c4cad1'}" stroke-width="${jf.on ? 4 : 2}"/>`; };
+doors.forEach(([a0, a1]) => { seg(x, a0); x = Math.max(x, a1); });
+seg(x, L);
+hits += `<rect x="${x0}" y="${yF - 9}" width="${L * k}" height="18" fill="transparent" style="cursor:pointer" onclick="toggleCorner('jf')"><title>Стык стена — пол</title></rect>`;
+}
+// края стены — углы комнаты
+const cornerAt = (a, key) => {
+const it = items.get(key);
+if (!it) return;
+const col = it.kind === 'out' ? CN_OUT : CN_IN;
+const x = XA(a);
+s += `<path d="M${x} ${Yh(Hh)}V${yF}" stroke="${it.on ? col : '#c4cad1'}" stroke-width="${it.on ? 5 : 2}"/>`;
+const lx = x + (x < x0 + L * k / 2 ? -16 : 16);
+s += `<text x="${lx}" y="${(Yh(Hh) + yF) / 2}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${it.on ? col : '#8a929c'}" transform="rotate(-90 ${lx} ${(Yh(Hh) + yF) / 2})">${it.kind === 'out' ? 'наруж.' : 'внутр.'} ${it.label}</text>`;
+hits += `<rect x="${x - 14}" y="${Yh(Hh)}" width="28" height="${Hh * k}" fill="transparent" style="cursor:pointer" onclick="toggleCorner('${key}')"><title>Угол ${it.label}</title></rect>`;
+};
+const prevI = wi > 0 ? wi - 1 : (g && g.closed ? n - 1 : -1);
+if (prevI >= 0) cornerAt(0, 'wc' + prevI);
+cornerAt(L, 'wc' + wi);
+// проёмы: снаружи — углы откосов (откос — стена), внутри — примыкание к раме
+(m.openings || []).forEach((op, oi) => {
+if (op.wall !== wi || !(openingWidth(op) > 0)) return;
+const [a0, a1] = openingSpan(op, L);
+const v = openingVert(op, Hh);
+const y0 = op.type === 'balcony' ? 0 : v.y0;
+const xL = Math.min(XA(a0), XA(a1)), xR = Math.max(XA(a0), XA(a1));
+const so = items.get('so' + oi), si = items.get('si' + oi);
+s += `<rect x="${xL}" y="${Yh(v.y1)}" width="${xR - xL}" height="${(v.y1 - y0) * k}" fill="${op.type === 'door' ? '#fff7dc' : '#eef4ff'}" stroke="none"/>`;
+// наружный контур: стороны и верх (у окна низ — подоконник)
+s += `<path d="M${xL} ${Yh(y0)}V${Yh(v.y1)}H${xR}V${Yh(y0)}" fill="none" stroke="${so && so.on ? CN_OUT : '#9aa3ad'}" stroke-width="${so && so.on ? 4 : 1.6}"/>`;
+const ins = Math.min(5, (xR - xL) / 6);
+if (si) s += `<path d="M${xL + ins} ${Yh(y0)}V${Yh(v.y1) + ins}H${xR - ins}V${Yh(y0)}" fill="none" stroke="${si.on ? CN_IN : '#d5dae0'}" stroke-width="${si.on ? 3 : 1}" stroke-dasharray="${si.on ? '' : '3 3'}"/>`;
+s += `<text x="${(xL + xR) / 2}" y="${Yh((y0 + v.y1) / 2) + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#14181f">${opCode(op, oi)}</text>`;
+if (so) hits += `<path d="M${xL} ${Yh(y0)}V${Yh(v.y1)}H${xR}V${Yh(y0)}" fill="none" stroke="transparent" stroke-width="12" style="cursor:pointer" onclick="toggleCorner('so${oi}')"><title>${opCode(op, oi)}: наружные углы откосов</title></path>`;
+if (si) hits += `<rect x="${xL + 8}" y="${Yh(v.y1) + 8}" width="${Math.max(0, xR - xL - 16)}" height="${Math.max(0, (v.y1 - y0) * k - 8)}" fill="transparent" style="cursor:pointer" onclick="toggleCorner('si${oi}')"><title>${opCode(op, oi)}: примыкание к раме</title></rect>`;
+});
+// углы А и Б и длина
+[[0, 'А'], [L, 'Б']].forEach(([a, letter]) => {
+s += `<circle cx="${XA(a)}" cy="${Yh(Hh) - 13}" r="8" fill="#ffffff" stroke="#14181f" stroke-width="1"/><text x="${XA(a)}" y="${Yh(Hh) - 9.5}" text-anchor="middle" font-size="10" font-weight="700" fill="#14181f">${letter}</text>`;
+});
+s += `<text x="${x0 + L * k / 2}" y="${yF + 18}" text-anchor="middle" font-size="12" font-weight="700" fill="#14181f">стена ${wi + 1} · ${mFmt(L)} × ${mFmt(Hh)} м</text>`;
+return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Углы на развёртке стены ${wi + 1}" font-family="inherit">${s}${hits}</svg>`;
+}
+function cnShowWall(wi) {
+cnElevWall = wi;
+renderMeasure();
+const el = document.getElementById('mpCnElev');
+if (el) el.scrollIntoView({ block: 'center' });
+}
+function cnStep(d) {
+const n = (measure.walls || []).length;
+if (!n) return;
+cnElevWall = (cnElevWall + d + n) % n;
+renderMeasure();
+}
+
 function cornersTabHtml(m) {
 const r = computeMeasure(m);
 const items = r.cornerItems || [];
+const nW = (m.walls || []).length;
+if (cnElevWall >= nW) cnElevWall = 0;
+const planSvg = cornersPlanSvg(m, r);
+const views = planSvg ? `<section class="mp-sec">
+<div class="mp-sec-title">На чертеже</div>
+<div class="mp-ce-plan">${planSvg}</div>
+<div class="mp-hint"><span style="color:${CN_IN};font-weight:700;">●</span> внутренний угол · <span style="color:${CN_OUT};font-weight:700;">◆</span> наружный · закрашен — считается. Касание угла, проёма или ребра — включить или выключить; касание стены — её развёртка ниже.</div>
+<div class="rl-elev-nav"><button type="button" onclick="cnStep(-1)" aria-label="Предыдущая стена">‹</button><span>Стена ${cnElevWall + 1} из ${nW}</span><button type="button" onclick="cnStep(1)" aria-label="Следующая стена">›</button></div>
+<div class="mp-ce-plan" id="mpCnElev">${cornersElevSvg(m, r, cnElevWall)}</div>
+<div class="mp-hint">На развёртке: края стены — углы комнаты, контур проёма — углы откосов (внутри пунктиром — примыкание к раме), сверху и снизу — стыки с потолком и полом. Касание — включить или выключить.</div>
+</section>` : '';
 const sumOf = it => it.pieces.reduce((a, v) => a + minLen(v), 0);
 const chip = it => `<button type="button" class="mp-ce-wall${it.on ? ' on' : ''}" onclick="toggleCorner('${it.key}')" aria-pressed="${it.on}" ${it.noLen ? 'title="нет высоты стен"' : ''}>${escapeHtml(it.label)}<small>${it.pieces.length ? mFmt(sumOf(it)) : '—'}</small></button>`;
 const row = (label, list) => list.length ? `<div class="mp-ce-walls mp-cn-row"><span class="mp-ce-walls-label">${label}</span>${list.map(chip).join('')}</div>` : '';
 const of = (group, kind) => items.filter(it => it.group === group && it.kind === kind);
 const sec = (title, hint, body, empty) => `<section class="mp-sec"><div class="mp-sec-title">${title}</div>${hint ? `<div class="mp-hint">${hint}</div>` : ''}${body || `<div class="mp-hint">${empty}</div>`}</section>`;
 return `<div class="mp-hint" style="margin-bottom:8px;">Отметьте углы, которые обрабатываются, — длины берутся с других вкладок. Наружные и внутренние считаются отдельно; кусок короче метра — за 1 пог. м.</div>
+${views}
 ${sec('Углы стен', 'По высоте стен; номера — стены, между которыми угол.',
 row('Внутренние:', of('walls', 'in')) + row('Наружные:', of('walls', 'out')),
 'Нужен чертёж комнаты на вкладке «Стены».')}
