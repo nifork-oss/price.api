@@ -211,8 +211,27 @@ function ceilStripEdge(p, X, Y) {
 return 'M' + ceilStripEdgePts(p).map(([x, y]) => `${X(x)} ${Y(y)}`).join('L');
 }
 
+// Стороны ниши и короба под обработку (шпаклёвка, покраска…) и что включено по умолчанию.
+// Торцы — у короба, который обрывается посреди стены.
+const CEIL_FACES = {
+niche: [{ key: 'top', label: 'Потолок ниши', on: true }, { key: 'face', label: 'Стенка ниши', on: true }, { key: 'wall', label: 'Стена в нише', on: false }],
+box: [{ key: 'bottom', label: 'Низ', on: true }, { key: 'side', label: 'Борт', on: true }, { key: 'ends', label: 'Торцы', on: true }]
+};
+const ceilFaceOn = (el, f) => el.sides && typeof el.sides[f.key] === 'boolean' ? el.sides[f.key] : f.on;
+
+// Подсчёт стороны: если хотя бы одна её сторона меньше метра — погонные метры
+// по длинной стороне, кусок короче метра — за 1 пог. м; иначе — квадратные метры.
+function ceilFacePiece(a, b, area) {
+if (!(a > 0) || !(b > 0)) return null;
+if (a < 1 || b < 1) {
+const L = Math.max(a, b);
+return { lin: minLen(L), min: L < 1, txt: fmtMin(L) };
+}
+return { area: area || a * b, txt: `${mFmt(a)}×${mFmt(b)}` };
+}
+
 function ceilElsCompute(m) {
-const out = { list: [], niche: 0, box: 0, boxArea: 0, strips: 0, light: 0 };
+const out = { list: [], niche: 0, box: 0, strips: 0, light: 0, finLin: 0, finArea: 0, finMin: false };
 const els = Array.isArray(m.ceilEls) ? m.ceilEls : [];
 if (!els.length) return out;
 let g = null;
@@ -249,15 +268,32 @@ e.light = !!el.light;
 e.lightLen = e.light ? (e.type === 'box' ? innerLen : len) : 0;
 out.light += e.lightLen;
 const lightTxt = e.light ? `, подсветка ${mFmt(e.lightLen)} пог. м` : '';
+// обработка: только отмеченные стороны, каждая — по правилу «уже метра — пог. м»
+const cuts = strips.reduce((a, p) => a + (p.cutA ? 1 : 0) + (p.cutB ? 1 : 0), 0);
+const dims = e.type === 'box'
+? { bottom: [[len, w, area]], side: [[innerLen, h]], ends: Array.from({ length: cuts }, () => [w, h]) }
+: { top: [[len, w, area]], face: [[innerLen, h]], wall: [[len, h]] };
+e.fin = []; e.finLin = 0; e.finArea = 0;
+CEIL_FACES[e.type].forEach(f => {
+if (!ceilFaceOn(el, f)) return;
+const pieces = (dims[f.key] || []).map(([a, b, ar]) => ceilFacePiece(a, b, ar)).filter(Boolean);
+if (!pieces.length) return;
+const lin = pieces.reduce((a, p) => a + (p.lin || 0), 0), ar = pieces.reduce((a, p) => a + (p.area || 0), 0);
+if (pieces.some(p => p.min)) out.finMin = true;
+e.finLin += lin; e.finArea += ar;
+const n = pieces.length;
+e.fin.push(`${f.label.toLowerCase()} ${n > 1 ? `${n} × ${pieces[0].txt}` : pieces[0].txt}${ar ? ' м²' : ''}`);
+});
+out.finLin += e.finLin; out.finArea += e.finArea;
+const finTxt = e.fin.length
+? `; обработка: ${e.fin.join(' + ')} = ${[e.finLin ? `${mFmt(e.finLin)} пог. м` : '', e.finArea ? `${mFmt(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}`
+: '';
 if (e.type === 'box') {
-e.side = innerLen * h;                     // борт короба — по внутренней кромке
-e.total = area + e.side;
 out.box += len;
-out.boxArea += e.total;
-e.line = `${code} короб${where ? ' ' + where : ''} ${size}: длина ${mFmt(len)} пог. м, низ ${mFmt(area)}${h ? ` + борт ${mFmt(innerLen)}×${mFmt(h)} = ${mFmt(e.total)}` : ''} м²${lightTxt}`;
+e.line = `${code} короб${where ? ' ' + where : ''} ${size}: длина ${mFmt(len)} пог. м${finTxt}${lightTxt}`;
 } else {
 out.niche += len;
-e.line = `${code} закарнизная ниша${where ? ' ' + where : ''} ${size}: ${mFmt(len)} пог. м${lightTxt}`;
+e.line = `${code} закарнизная ниша${where ? ' ' + where : ''} ${size}: ${mFmt(len)} пог. м${finTxt}${lightTxt}`;
 }
 out.strips += area;
 out.list.push(e);
@@ -386,7 +422,9 @@ const ce = ceilElsCompute(m);
 r.ceilEls = ce.list;
 r.ceilNiche = ce.niche;
 r.ceilBox = ce.box;
-r.ceilBoxArea = ce.boxArea;
+r.ceilFin = ce.finLin;
+r.ceilFinArea = ce.finArea;
+r.ceilFinMin = ce.finMin;
 r.ceilStrips = ce.strips;
 r.ceilLight = ce.light;
 if (ce.list.length) {
@@ -425,7 +463,8 @@ if (tab === 'ceilingNet') return { value: r.ceilingNet, unit: 'м²', label: 'П
 if (tab === 'ceilNiche') return { value: r.ceilNiche, unit: 'пог. м', label: 'Закарнизные ниши', text: (r.ceilEls || []).filter(e => e.type === 'niche').map(e => e.line).join('\n') };
 if (tab === 'ceilBox') return { value: r.ceilBox, unit: 'пог. м', label: 'Короба, длина', text: (r.ceilEls || []).filter(e => e.type === 'box').map(e => e.line).join('\n') };
 if (tab === 'ceilLight') return { value: r.ceilLight, unit: 'пог. м', label: 'Подсветка', text: (r.ceilEls || []).filter(e => e.light).map(e => e.line).join('\n') };
-if (tab === 'ceilBoxArea') return { value: r.ceilBoxArea, unit: 'м²', label: 'Короба, площадь', text: (r.ceilEls || []).filter(e => e.type === 'box').map(e => e.line).join('\n') };
+if (tab === 'ceilFin') return { value: r.ceilFin, unit: 'пог. м', label: 'Ниши и короба: обработка', text: (r.ceilEls || []).filter(e => e.finLin > 0).map(e => e.line).join('\n') + (r.ceilFinMin ? MIN_NOTE : '') };
+if (tab === 'ceilFinArea') return { value: r.ceilFinArea, unit: 'м²', label: 'Ниши и короба: обработка, м²', text: (r.ceilEls || []).filter(e => e.finArea > 0).map(e => e.line).join('\n') };
 if (tab === 'slopes') return { value: r.slopesLen, unit: 'пог. м', label: 'Откосы', text: r.lines.slopesLen || '' };
 if (tab === 'narrow') return { value: r.narrow, unit: 'пог. м', label: 'Узкие поверхности', text: [r.lines.narrowWalls, r.lines.narrow, r.lines.narrowTotal].filter(Boolean).join('\n') };
 return { value: 0, unit: '', label: '', text: '' };
@@ -691,7 +730,8 @@ set('mpCalcParts', [r.lines.parts, r.lines.wallsMinusParts].filter(Boolean).map(
 set('mpCalcCeilEls', [r.lines.ceilEls, r.lines.ceilingNet].filter(Boolean).map(escapeHtml).join('<br>').replace(/\n/g, '<br>'));
 (measure.ceilEls || []).forEach((el, i) => {
 const e = (r.ceilEls || []).find(x => x.idx === i);
-set('mpCeilElRes' + i, e ? (e.type === 'box' ? `${mFmt(e.len)} пог. м · ${mFmt(e.total)} м²` : `${mFmt(e.len)} пог. м`) : '');
+set('mpCeilElRes' + i, e ? `${mFmt(e.len)} пог. м` : '');
+set('mpCeilElFin' + i, e && e.fin.length ? `Обработка: ${escapeHtml(e.fin.join(' + '))} = <b>${[e.finLin ? `${mFmt(e.finLin)} пог. м` : '', e.finArea ? `${mFmt(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}</b>` : (e ? 'Обработка не считается — стороны не отмечены' : ''));
 const op = ceilElOp(measure, el);
 if (op) {
 const ext = Math.max(0, evalMeasureExpr(el.ext) || 0);
@@ -737,7 +777,7 @@ const opt = (key, label, val) => `<button type="button" class="${measureWallsPic
 pick = `<div class="mp-pick">${opt('walls', 'Стены', r.openingsArea > 0 ? r.wallsNet : r.wallsGross)}${opt('parts', 'Участки', r.parts)}${opt('wallsMinus', 'Стены − участки', r.wallsMinusParts)}</div>`;
 } else if (measureTab === 'ceiling' && ceilHasEls && measureTarget.kind !== 'room') {
 const opt = (key, label, val, unit) => `<button type="button" class="${measureCeilPick === key ? 'active' : ''}" onclick="setCeilPick('${key}')">${label}<br><b>${mFmt(val)}</b> ${unit}</button>`;
-pick = `<div class="mp-pick">${opt('ceiling', 'Потолок', r.ceiling, 'м²')}${r.ceilingNet > 0 ? opt('ceilingNet', 'Без ниш/коробов', r.ceilingNet, 'м²') : ''}${r.ceilNiche > 0 ? opt('ceilNiche', 'Ниши', r.ceilNiche, 'пог. м') : ''}${r.ceilBox > 0 ? opt('ceilBox', 'Короба', r.ceilBox, 'пог. м') + opt('ceilBoxArea', 'Короба', r.ceilBoxArea, 'м²') : ''}${r.ceilLight > 0 ? opt('ceilLight', 'Подсветка', r.ceilLight, 'пог. м') : ''}</div>`;
+pick = `<div class="mp-pick">${opt('ceiling', 'Потолок', r.ceiling, 'м²')}${r.ceilingNet > 0 ? opt('ceilingNet', 'Без ниш/коробов', r.ceilingNet, 'м²') : ''}${r.ceilNiche > 0 ? opt('ceilNiche', 'Ниши', r.ceilNiche, 'пог. м') : ''}${r.ceilBox > 0 ? opt('ceilBox', 'Короба', r.ceilBox, 'пог. м') : ''}${r.ceilFin > 0 ? opt('ceilFin', 'Обработка', r.ceilFin, 'пог. м') : ''}${r.ceilFinArea > 0 ? opt('ceilFinArea', 'Обработка', r.ceilFinArea, 'м²') : ''}${r.ceilLight > 0 ? opt('ceilLight', 'Подсветка', r.ceilLight, 'пог. м') : ''}</div>`;
 } else if (measureTab === 'walls') {
 sub = r.openingsArea > 0 ? `Стены ${mFmt(r.wallsGross)} − проёмы ${mFmt(r.openingsArea)} м²` : (r.perimeter ? `Периметр ${mFmt(r.perimeter)} м` : 'Введите высоту и длину стен');
 if (r.parts > 0) sub += ` · участки ${mFmt(r.parts)} м²`;
@@ -936,6 +976,10 @@ ${op ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;">
 ${!op && !sel.size ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;">
 <label>Длина, м${mIn(`ceilEls.${i}.len`, el.len, '3,2+4,1')}</label><span></span><span class="mp-hint" style="margin:0;align-self:center;">${hasWalls ? 'или отметьте стены' : 'без чертежа — длиной'}</span>
 </div>` : ''}
+<div class="mp-ce-walls mp-ce-faces"><span class="mp-ce-walls-label">Обрабатываем:</span>
+${CEIL_FACES[isBox ? 'box' : 'niche'].filter(f => f.key !== 'ends' || ceilElPartial(el)).map(f => `<button type="button" class="mp-ce-wall${ceilFaceOn(el, f) ? ' on' : ''}" onclick="toggleCeilElFace(${i}, '${f.key}')" aria-pressed="${ceilFaceOn(el, f)}">${f.label}</button>`).join('')}
+</div>
+<div class="mp-hint" style="margin:4px 0 0;" id="mpCeilElFin${i}"></div>
 <label class="mp-check mp-ce-light"><input type="checkbox" ${el.light ? 'checked' : ''} onchange="setCeilElLight(${i}, this.checked)"><span>С подсветкой${isBox ? ' (по внутренней кромке)' : ''}</span></label>
 </div>`;
 }).join('')}
@@ -1057,6 +1101,17 @@ saveMeasureDraft();
 renderMeasure();
 showAddToast(added === 1 ? 'Ниша над окном добавлена — укажите вынос' : `Добавлено ниш над окнами: ${added} — укажите вынос`);
 focusMeasurePath(`ceilEls.${ceilElActive}.${prev && prev.w ? 'ext' : 'w'}`);
+}
+
+function toggleCeilElFace(i, key) {
+const el = measure.ceilEls[i];
+if (!el) return;
+const f = CEIL_FACES[el.type === 'box' ? 'box' : 'niche'].find(x => x.key === key);
+if (!f) return;
+el.sides = { ...(el.sides || {}), [key]: !ceilFaceOn(el, f) };
+ceilElActive = i;
+saveMeasureDraft();
+renderMeasure();
 }
 
 function setCeilElLight(i, on) {
@@ -1316,6 +1371,7 @@ if (r.parts > 0) p.push(`Участки ${mFmt(r.parts)} м²`);
 if (r.ceiling > 0) p.push(`Потолок ${mFmt(r.ceiling)} м²`);
 if (r.ceilNiche > 0) p.push(`Ниши ${mFmt(r.ceilNiche)} пог. м`);
 if (r.ceilBox > 0) p.push(`Короба ${mFmt(r.ceilBox)} пог. м`);
+if (r.ceilFin > 0) p.push(`Обработка ниш/коробов ${mFmt(r.ceilFin)} пог. м`);
 if (r.ceilLight > 0) p.push(`Подсветка ${mFmt(r.ceilLight)} пог. м`);
 if (r.slopesLen > 0) p.push(`Откосы ${mFmt(r.slopesLen)} пог. м`);
 if (r.narrow > 0) p.push(`Узкие ${mFmt(r.narrow)} пог. м`);
