@@ -1582,6 +1582,16 @@ if (!it) return;
 if (!measure.corners || typeof measure.corners !== 'object') measure.corners = {};
 measure.corners[key] = !it.on;
 saveMeasureDraft();
+// Вкладку не перестраиваем: приближение чертежей и прокрутка остаются на месте,
+// обновляются только подсветка на чертежах, кнопка этого угла и итоги
+if (measureTab === 'corners' && document.getElementById('mpCalcCorners')) {
+document.querySelectorAll(`#mpBody [data-ck="${key}"]`).forEach(b => {
+b.classList.toggle('on', !it.on);
+b.setAttribute('aria-pressed', String(!it.on));
+});
+updateMeasureOutputs();
+return;
+}
 renderMeasure();
 }
 
@@ -1853,7 +1863,7 @@ const views = planSvg ? `<section class="mp-sec">
 <div class="mp-hint">На развёртке: края стены — углы комнаты, контур проёма — углы откосов (внутри пунктиром — примыкание к раме), сверху и снизу — стыки с потолком и полом. Касание — включить или выключить.</div>
 </section>` : '';
 const sumOf = it => it.pieces.reduce((a, v) => a + minLen(v), 0);
-const chip = it => `<button type="button" class="mp-ce-wall${it.on ? ' on' : ''}" onclick="toggleCorner('${it.key}')" aria-pressed="${it.on}" ${it.noLen ? 'title="нет высоты стен"' : ''}>${escapeHtml(it.label)}<small>${it.pieces.length ? mFmt(sumOf(it)) : '—'}</small></button>`;
+const chip = it => `<button type="button" class="mp-ce-wall${it.on ? ' on' : ''}" data-ck="${it.key}" onclick="toggleCorner('${it.key}')" aria-pressed="${it.on}" ${it.noLen ? 'title="нет высоты стен"' : ''}>${escapeHtml(it.label)}<small>${it.pieces.length ? mFmt(sumOf(it)) : '—'}</small></button>`;
 const row = (label, list) => list.length ? `<div class="mp-ce-walls mp-cn-row"><span class="mp-ce-walls-label">${label}</span>${list.map(chip).join('')}</div>` : '';
 const of = (group, kind) => items.filter(it => it.group === group && it.kind === kind);
 const sec = (title, hint, body, empty) => `<section class="mp-sec"><div class="mp-sec-title">${title}</div>${hint ? `<div class="mp-hint">${hint}</div>` : ''}${body || `<div class="mp-hint">${empty}</div>`}</section>`;
