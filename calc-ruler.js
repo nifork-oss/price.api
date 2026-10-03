@@ -286,7 +286,7 @@ const g = rulerGeometry(m);
 const W = 320, H = 230, P = 38;
 const xs = [0, ...g.segs.map(s => s.x2)], ys = [0, ...g.segs.map(s => s.y2)];
 let ghost = null;
-if (shape === 'free' && g.filled === g.segs.length && !g.checkClosed) {
+if (shape === 'free' && g.filled === g.segs.length && !g.checkClosed && !rlEditBase) {
 const gl = Math.max(g.avg * 0.45, 0.6);
 ghost = { x1: g.lastX, y1: g.lastY, x2: g.lastX + g.nextDir[0] * gl, y2: g.lastY + g.nextDir[1] * gl };
 xs.push(ghost.x2); ys.push(ghost.y2);
@@ -299,7 +299,7 @@ const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), ma
 let k = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
 let ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
 // пока подстраиваем подложку, масштаб чертежа замираем — иначе она «плывёт» под пальцем
-if (rlUnderlayAdjust && rlLastFit) ({ k, ox, oy } = rlLastFit);
+if ((rlUnderlayAdjust || rlEditBase) && rlLastFit) ({ k, ox, oy } = rlLastFit);
 rlLastFit = { k, ox, oy };
 // Приближение растягивает только саму комнату: цифры, номера и толщина
 // линий остаются обычного размера, поэтому в тесных местах подписи расходятся
@@ -321,6 +321,10 @@ const gx0 = ((-vx * z) % step + step) % step, gy0 = ((-vy * z) % step + step) % 
 for (let gx = gx0; gx <= W; gx += step) grid += `M${gx} 0V${H}`;
 for (let gy = gy0; gy <= H; gy += step) grid += `M0 ${gy}H${W}`;
 out += `<path d="${grid}" stroke="#eff1f4" stroke-width="1"/>`;
+// прежний контур (до правки) — бледным пунктиром, чтобы было видно, что сдвинулось
+if (rlEditBase && rlEditBase.json !== JSON.stringify([m.walls, m.turns, m.angles])) {
+out += `<path d="M${rlEditBase.pts.map(([px, py]) => `${X(px)} ${Y(py)}`).join('L')}Z" fill="none" stroke="#8a929c" stroke-width="2" stroke-dasharray="5 4" opacity=".7"/>`;
+}
 // подложка — фото плана под чертежом
 if (ul && !ul.hidden) {
 const uh = ul.w * ul.ar, ucx = ul.x + ul.w / 2, ucy = ul.y + uh / 2;
@@ -363,7 +367,7 @@ out += `<text x="${bx}" y="${by + 4}" text-anchor="middle" font-size="11" font-w
 if (shape === 'free' && Array.isArray(m.angles)) {
 g.segs.forEach(s => {
 const a = mNum(m.angles[s.i]);
-if (!(a > 0) || Math.abs(a - 90) < 0.05 || s.i === g.segs.length - 1 && !g.closed) return;
+if (!(a > 0) || Math.abs(a - 90) < 0.05 || Math.abs(a - 180) < 0.05 || s.i === g.segs.length - 1 && !g.closed) return;
 const cx = X(s.x2), cy = Y(s.y2);
 out += `<text x="${cx - s.dy * 14 * o2 - s.dx * 12}" y="${cy + s.dx * 14 * o2 - s.dy * 12 + 4}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#c2361f">${mFmt(a)}°</text>`;
 });
@@ -722,7 +726,18 @@ rulerPick = null;
 renderMeasure();
 }
 
+// Правка уже сошедшейся комнаты: запоминаем её контур, чтобы показать
+// его пунктиром и не перестраивать масштаб чертежа на каждое изменение
+let rlEditBase = null;
+function rulerStartEditSession() {
+if (rlEditBase) return;
+const g = rulerGeometry(measure);
+if (!g.closed) return;
+rlEditBase = { pts: [[0, 0], ...g.segs.map(q => [q.x2, q.y2])], json: JSON.stringify([measure.walls, measure.turns, measure.angles]) };
+}
+
 function rulerEdit(kind, idx, field) {
+rulerStartEditSession();
 // ждали касания стены, чтобы поставить окно или дверь
 if (rulerPick && kind === 'wall' && idx < measure.walls.length && rulerPick.move !== undefined) {
 const oi = rulerPick.move;
@@ -805,6 +820,10 @@ let tools = '';
 if (t.kind === 'wall' || t.kind === 'wallH') {
 const gg = rulerGeometry(measure);
 const emptyLast = t.kind === 'wall' && !mNum(measure.walls[t.idx]) && t.idx === measure.walls.length - 1;
+const fix = !emptyLast && shape !== 'rect' ? rulerFixOption(t.idx) : null;
+if (fix) {
+tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerApplyFix(${t.idx})">${escapeHtml(fix.label)}</button>`;
+}
 if (shape !== 'rect' && emptyLast && gg.closeLen > 0) {
 tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCloseRoom(${gg.closeLen})">Замкнуть: ${mFmt(gg.closeLen)} м</button>`;
 } else if (shape === 'free' && emptyLast && gg.closeAny) {
@@ -1067,6 +1086,7 @@ btn.setAttribute('aria-label', collapsed ? 'Показать клавиатур�
 
 function rulerClose() {
 rulerToggleKeys(false);
+rlEditBase = null; // правка закончена — чертёж снова подстраивается под экран
 rulerTarget = null;
 const w = measure.walls;
 if (rlShape(measure) === 'free' && w.length > 1 && !String(w[w.length - 1]).trim()) {
@@ -1106,19 +1126,117 @@ saveMeasureDraft();
 rulerEdit('op', measure.openings.length - 1, 'w');
 }
 
+// Комната разошлась после правки — какую стену (или две) удлинить/укоротить,
+// чтобы контур снова сошёлся. Правленую стену не трогаем, если есть другие.
+function rulerFixOption(editedIdx) {
+const m = measure;
+if (!m.walls.every(w => mNum(w) > 0) || m.walls.length < 3) return null;
+const g = rulerGeometry(m);
+if (g.closed) return null;
+const G = [-g.endX, -g.endY];
+if (Math.hypot(G[0], G[1]) < 0.005) return null;
+const segs = g.segs.map(q => ({ i: q.i, d: [q.dx, q.dy], L: q.len }));
+const others = segs.filter(q => q.i !== editedIdx);
+const fmt = v => mFmt(Math.round(v * 1000) / 1000);
+// одна стена, параллельная разрыву
+let best = null;
+for (const q of others) {
+const cross = G[0] * q.d[1] - G[1] * q.d[0];
+if (Math.abs(cross) > 0.005) continue;
+const tt = G[0] * q.d[0] + G[1] * q.d[1];
+const nl = q.L + tt;
+if (nl < 0.05) continue;
+if (!best || Math.abs(tt) < Math.abs(best.changes[0].t)) best = { changes: [{ i: q.i, t: tt, from: q.L, to: nl }] };
+}
+// иначе — две непараллельные стены
+if (!best) {
+for (let a = 0; a < others.length; a++) for (let b = a + 1; b < others.length; b++) {
+const p = others[a], q = others[b];
+const det = p.d[0] * q.d[1] - p.d[1] * q.d[0];
+if (Math.abs(det) < 0.2) continue;
+const t1 = (G[0] * q.d[1] - G[1] * q.d[0]) / det, t2 = (p.d[0] * G[1] - p.d[1] * G[0]) / det;
+if (p.L + t1 < 0.05 || q.L + t2 < 0.05) continue;
+const cost = Math.abs(t1) + Math.abs(t2);
+if (!best || cost < best.cost) best = { cost, changes: [{ i: p.i, t: t1, from: p.L, to: p.L + t1 }, { i: q.i, t: t2, from: q.L, to: q.L + t2 }] };
+}
+}
+if (!best) return null;
+best.label = best.changes.length === 1
+? `Подогнать стену ${best.changes[0].i + 1}: ${fmt(best.changes[0].from)} → ${fmt(best.changes[0].to)}`
+: `Подогнать стены ${best.changes.map(c => `${c.i + 1}: ${fmt(c.from)} → ${fmt(c.to)}`).join(', ')}`;
+return best;
+}
+
+function rulerApplyFix(editedIdx) {
+const fix = rulerFixOption(editedIdx);
+if (!fix) return;
+rulerSnapshot();
+fix.changes.forEach(c => { measure.walls[c.i] = String(Math.round(c.to * 1000) / 1000).replace('.', ','); });
+saveMeasureDraft();
+rulerClose();
+showAddToast(rulerGeometry(measure).closed ? 'Комната снова сошлась' : 'Стены подогнаны');
+}
+
+// После стены a поворота нет — следующая идёт по той же прямой
+function rulerIsStraight(a) {
+const ang = Array.isArray(measure.angles) ? mNum(measure.angles[a]) : 0;
+return Math.abs(ang - 180) < 0.05;
+}
+
+// Склеить стену a и следующую за ней (они на одной прямой) в одну.
+// Окна и двери остаются на своих местах: отступы пересчитываются от начала новой стены.
+function rulerMergeWalls(a) {
+const m = measure, b = a + 1;
+const La = mNum(m.walls[a]), Lb = mNum(m.walls[b]);
+(m.openings || []).forEach(o => {
+if (o.wall === a && o.from === 'end' && String(o.off || '').trim() !== '') {
+const [a0] = openingSpan(o, La);
+o.off = String(Math.round(a0 * 1000) / 1000).replace('.', ','); o.from = 'start';
+} else if (o.wall === b) {
+const [a0] = openingSpan(o, Lb);
+o.off = String(Math.round((La + a0) * 1000) / 1000).replace('.', ','); o.from = 'start'; o.wall = a;
+} else if (typeof o.wall === 'number' && o.wall > b) o.wall -= 1;
+});
+m.walls[a] = String(Math.round((La + Lb) * 1000) / 1000).replace('.', ',');
+if (Array.isArray(m.turns)) { m.turns[a] = m.turns[b]; m.turns.splice(b, 1); }
+if (Array.isArray(m.angles)) { m.angles[a] = m.angles[b] || ''; m.angles.splice(b, 1); }
+if (Array.isArray(m.wallHeights)) m.wallHeights.splice(b, 1);
+m.walls.splice(b, 1);
+}
+
 function rulerRemoveWall() {
 const t = rulerTarget; if (!t) return;
 rulerSnapshot();
 const i = t.idx;
+// Поворот до убираемой стены и поворот после неё складываем в один —
+// тогда все следующие стены сохраняют своё направление, а не разворачиваются
+const shapeNow = rlShape(measure);
+const turnsNow = shapeNow === 'L' ? RL_L_TURNS.slice() : shapeNow === 'rect' ? ['R', 'R', 'R', 'R'] : (Array.isArray(measure.turns) ? measure.turns.slice() : []);
+if (i > 0 && measure.walls.length > 2) {
+let sum = rlTurnDeg(measure, i - 1, turnsNow, 'free') + rlTurnDeg(measure, i, turnsNow, 'free');
+while (sum > 180) sum -= 360;
+while (sum <= -180) sum += 360;
+if (!Array.isArray(measure.angles)) measure.angles = [];
+measure.turns = turnsNow;
+measure.turns[i - 1] = sum >= 0 ? 'R' : 'L';
+const interior = 180 - Math.abs(sum);
+measure.angles[i - 1] = Math.abs(interior - 90) < 0.05 ? '' : String(Math.round(interior * 10) / 10).replace('.', ',');
+}
+// убрав стену у прямоугольной или Г-образной, комната становится «своей формы»
+if (shapeNow !== 'free') measure.shape = 'free';
 measure.walls.splice(i, 1);
 if (Array.isArray(measure.wallHeights)) measure.wallHeights.splice(i, 1);
 if (Array.isArray(measure.turns)) measure.turns.splice(i, 1);
+if (Array.isArray(measure.angles)) measure.angles.splice(i, 1);
 (measure.openings || []).forEach(o => {
 if (o.wall === i) delete o.wall;
 else if (typeof o.wall === 'number' && o.wall > i) o.wall -= 1;
 });
+// соседи убранной стены оказались на одной прямой — склеиваем в одну стену
+let merged = 0;
+if (i > 0 && i < measure.walls.length && rulerIsStraight(i - 1)) { rulerMergeWalls(i - 1); merged++; }
 rulerClose();
-showAddToast('Стена убрана — можно отменить ↶');
+showAddToast(merged ? 'Стена убрана, соседние стены на одной прямой склеены — можно отменить ↶' : 'Стена убрана — можно отменить ↶');
 }
 
 document.addEventListener('keydown', (e) => {

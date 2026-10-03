@@ -275,7 +275,7 @@ renderMeasure();
 }
 
 function closeMeasure() {
-if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; rulerPick = null; rlZoom = 1; rlPan = { x: 0, y: 0 }; rlUnderlayAdjust = false; rlLastFit = null; }
+if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; rulerPick = null; if (typeof rlEditBase !== "undefined") rlEditBase = null; rlZoom = 1; rlPan = { x: 0, y: 0 }; rlUnderlayAdjust = false; rlLastFit = null; }
 document.getElementById('measurePanel').classList.remove('ruler-open');
 document.getElementById('measurePanel').classList.remove('open');
 document.body.classList.remove('measure-open');
