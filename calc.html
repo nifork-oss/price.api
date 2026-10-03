@@ -792,6 +792,25 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 
 .mp-ceil-auto { font-size: 13.5px; line-height: 1.45; color: var(--s-ink); background: var(--tape-l); border-left: 3px solid var(--tape-d); padding: 8px 10px; margin-bottom: 10px; border-radius: 4px; }
 .mp-ceil-auto:empty { display: none; }
+
+/* свёрнутая клавиатура — узкая полоска */
+.rl-hide { flex: 0 0 auto; min-width: 58px; height: 44px; padding: 0 8px; border: 1px solid #c9ced5; border-radius: 8px; background: #ffffff; color: var(--s-ink); font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: inherit; }
+.rl-hide small { font-size: 10.5px; font-weight: 600; color: var(--s-ink2); margin-top: 1px; }
+.measure-panel.ruler-collapsed .rl-keys, .measure-panel.ruler-collapsed .rl-tools { display: none !important; }
+.measure-panel.ruler-collapsed .rl-pad-top { margin-bottom: 0; }
+.measure-panel.ruler-collapsed .rl-pad-value { font-size: 22px; }
+.measure-panel.ruler-collapsed .rl-hide { background: var(--tape); border-color: var(--tape); }
+.measure-panel.ruler-collapsed .rl-hide small { color: var(--s-ink); }
+
+/* план / развёртки */
+.rl-view { display: flex; border: 1.5px solid var(--s-ink); border-radius: 8px; overflow: hidden; margin: 2px 0 8px; }
+.rl-view button { flex: 1; min-height: 38px; border: none; background: #ffffff; font: 600 14px inherit; font-family: inherit; color: var(--s-ink2); cursor: pointer; }
+.rl-view button + button { border-left: 1.5px solid var(--s-ink); }
+.rl-view button.on { background: var(--s-ink); color: #ffffff; }
+.rl-elev-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.rl-elev-nav span { font-weight: 700; font-size: 15px; }
+.rl-elev-nav button { width: 48px; height: 40px; border: 1.5px solid var(--s-ink); border-radius: 8px; background: #ffffff; font-size: 22px; font-weight: 700; line-height: 1; cursor: pointer; color: var(--s-ink); }
+.rl-elev-sum { font-size: 14px; margin-top: 8px; color: var(--s-ink); }
 </style>
 </head>
 <body>
@@ -937,6 +956,7 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 <div class="rl-pad-top">
 <button type="button" class="rl-undo" id="rlUndoBtn" onclick="rulerUndoLast()" aria-label="Отменить последнее изменение" title="Отменить">↶</button>
 <div class="rl-pad-read"><div class="rl-pad-label" id="rlPadLabel"></div><div class="rl-pad-value" id="rlPadValue"></div></div>
+<button type="button" class="rl-hide" id="rlHideBtn" onclick="rulerToggleKeys()" aria-label="Скрыть клавиатуру">⌄<small>Скрыть</small></button>
 <button type="button" class="rl-done" onclick="rulerClose()">Готово</button>
 </div>
 <div class="rl-tools" id="rlPadTools"></div>
@@ -5385,12 +5405,165 @@ return `<span class="rl-bad">Не сходится на ${mFmt(g.checkGap)} м</
 }
 
 /* ---------- чертёж ---------- */
+/* ---------- развёртка стены ---------- */
+// Стена «лицом»: длина × высота, окна и двери на своих местах, цепочка
+// размеров снизу. Всё касается пальцем и правится той же клавиатурой.
+let rlView = 'plan';      // 'plan' | 'elev'
+let rlElevWall = 0;
+
+function rulerSetView(v) {
+rlView = v;
+const t = rulerTarget;
+if (v === 'elev' && t) {
+if (t.kind === 'wall' || t.kind === 'wallH' || t.kind === 'angle') rlElevWall = t.idx;
+else if (t.kind === 'op' && measure.openings[t.idx] && typeof measure.openings[t.idx].wall === 'number') rlElevWall = measure.openings[t.idx].wall;
+}
+rlElevWall = Math.min(Math.max(0, rlElevWall), Math.max(0, measure.walls.length - 1));
+renderMeasure();
+}
+
+function rulerElevStep(d) {
+const n = measure.walls.length;
+rlElevWall = (rlElevWall + d + n) % n;
+renderMeasure();
+}
+
+// Высота стены: своя, если задана, иначе общая
+function wallHeightOf(m, i) {
+const own = mNum((m.wallHeights || [])[i]);
+return own || mNum(m.height);
+}
+
+// Где проём по высоте (метры от пола): [низ, верх]
+function openingVert(o, wallH) {
+const h = mNum(o.h);
+if (o.type === 'door') return { y0: 0, y1: h, guess: false };
+if (o.type === 'balcony') {
+const dh = mNum(o.dh);
+return { y0: Math.max(0, dh - h), y1: dh, guess: false, door: [0, dh] };
+}
+const sill = (o.sill !== undefined && String(o.sill).trim() !== '') ? evalMeasureExpr(o.sill) : NaN;
+if (isFinite(sill) && sill >= 0) return { y0: sill, y1: sill + h, guess: false };
+// подоконник не задан — условно 0,8 м, рисуем пунктиром
+const y0 = Math.max(0, Math.min(0.8, wallH - h));
+return { y0, y1: y0 + h, guess: true };
+}
+
+function renderElevation(box) {
+const m = measure;
+const g = rulerGeometry(m);
+const i = Math.min(rlElevWall, g.segs.length - 1);
+const s = g.segs[i];
+const L = s && s.len > 0 ? s.len : 0;
+const Hh = wallHeightOf(m, i);
+const W = 320, H = 230;
+const left = 44, right = 18, top = 26, bottom = 62;
+const t = rulerTarget;
+let out = '';
+let grid = '';
+for (let gx = 0; gx <= W; gx += 16) grid += `M${gx} 0V${H}`;
+for (let gy = 0; gy <= H; gy += 16) grid += `M0 ${gy}H${W}`;
+out += `<path d="${grid}" stroke="#eff1f4" stroke-width="1"/>`;
+if (!(L > 0) || !(Hh > 0)) {
+out += `<text x="${W / 2}" y="${H / 2 - 8}" text-anchor="middle" font-size="13" fill="#586270">${!(L > 0) ? 'Введите длину стены' : 'Введите высоту стен'}</text>`;
+out += `<text x="${W / 2}" y="${H / 2 + 12}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#14181f" style="cursor:pointer" onclick="rulerEdit('${!(L > 0) ? 'wall' : 'height'}', ${i})">Коснитесь, чтобы ввести</text>`;
+box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Развёртка стены">${out}</svg>`;
+return;
+}
+const k = Math.min((W - left - right) / L, (H - top - bottom) / Hh);
+const x0 = left + ((W - left - right) - L * k) / 2, yF = top + Hh * k; // пол
+// смотрим на стену изнутри комнаты: угол А слева при обходе по часовой
+const flip = (g.orient || 1) < 0;
+const XA = a => flip ? x0 + (L - a) * k : x0 + a * k;
+const Yh = hgt => yF - hgt * k;
+const selWall = t && (t.kind === 'wall' || t.kind === 'wallH') && t.idx === i;
+// стена
+out += `<rect x="${x0}" y="${Yh(Hh)}" width="${L * k}" height="${Hh * k}" fill="#ffffff" stroke="${selWall ? '#e8a900' : '#14181f'}" stroke-width="${selWall ? 3 : 1.6}"/>`;
+out += `<path d="M${x0 - 8} ${yF}H${x0 + L * k + 8}" stroke="#14181f" stroke-width="4"/>`;
+// углы А и Б
+const cornerA = XA(0), cornerB = XA(L);
+[[cornerA, 'А'], [cornerB, 'Б']].forEach(([cx, letter]) => {
+out += `<circle cx="${cx}" cy="${Yh(Hh) - 12}" r="9" fill="#ffffff" stroke="#14181f" stroke-width="1.2"/><text x="${cx}" y="${Yh(Hh) - 8}" text-anchor="middle" font-size="11" font-weight="700" fill="#14181f">${letter}</text>`;
+});
+// проёмы
+const ops = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => o.wall === i && openingWidth(o) > 0);
+const edges = [0, L];
+ops.forEach(({ o, oi }) => {
+const [a0, a1] = openingSpan(o, L);
+edges.push(a0, a1);
+const v = openingVert(o, Hh);
+const sel = t && t.kind === 'op' && t.idx === oi;
+const xL = Math.min(XA(a0), XA(a1)), xR = Math.max(XA(a0), XA(a1));
+const col = sel ? '#e8a900' : '#14181f';
+if (o.type === 'balcony') {
+const bp = balconyParts(o, a0, a1);
+const dL = Math.min(XA(bp.door[0]), XA(bp.door[1])), dR = Math.max(XA(bp.door[0]), XA(bp.door[1]));
+const wL = Math.min(XA(bp.win[0]), XA(bp.win[1])), wR = Math.max(XA(bp.win[0]), XA(bp.win[1]));
+out += `<rect x="${dL}" y="${Yh(v.door[1])}" width="${dR - dL}" height="${v.door[1] * k}" fill="#fff7dc" stroke="${col}" stroke-width="1.6"/>`;
+out += `<rect x="${wL}" y="${Yh(v.y1)}" width="${wR - wL}" height="${(v.y1 - v.y0) * k}" fill="#eef4ff" stroke="${col}" stroke-width="1.6"/>`;
+out += `<path d="M${(wL + wR) / 2} ${Yh(v.y1)}V${Yh(v.y0)}" stroke="${col}" stroke-width=".8"/>`;
+} else {
+const isDoor = o.type === 'door';
+out += `<rect x="${xL}" y="${Yh(v.y1)}" width="${xR - xL}" height="${(v.y1 - v.y0) * k}" fill="${isDoor ? '#fff7dc' : '#eef4ff'}" stroke="${col}" stroke-width="1.6" ${v.guess ? 'stroke-dasharray="4 3"' : ''}/>`;
+if (!isDoor) out += `<path d="M${(xL + xR) / 2} ${Yh(v.y1)}V${Yh(v.y0)}M${xL} ${Yh((v.y0 + v.y1) / 2)}H${xR}" stroke="${col}" stroke-width=".8" ${v.guess ? 'stroke-dasharray="3 3"' : ''}/>`;
+}
+// высота проёма — подпись внутри
+const label = o.type === 'balcony' ? `${mFmt(mNum(o.h))} / ${mFmt(mNum(o.dh))}` : mFmt(mNum(o.h));
+out += `<text x="${(xL + xR) / 2}" y="${Yh((v.y0 + v.y1) / 2) - 6}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14181f">${o.type === 'door' ? 'дверь' : o.type === 'balcony' ? 'балк.' : 'окно'}</text>`;
+out += `<text x="${(xL + xR) / 2}" y="${Yh((v.y0 + v.y1) / 2) + 9}" text-anchor="middle" font-size="11" fill="#586270">↕ ${label}</text>`;
+// подоконник — размер от пола
+if (o.type !== 'door' && o.type !== 'balcony') {
+const sx = xR + 7;
+out += `<path d="M${sx} ${yF}V${Yh(v.y0)}M${sx - 3} ${yF}h6M${sx - 3} ${Yh(v.y0)}h6" stroke="#586270" stroke-width="1"/>`;
+out += `<text x="${sx + 4}" y="${(yF + Yh(v.y0)) / 2 + 4}" font-size="10.5" fill="${v.guess ? '#c2361f' : '#586270'}">${v.guess ? '?' : mFmt(v.y0)}</text>`;
+out += `<rect x="${sx - 8}" y="${Yh(v.y0)}" width="24" height="${v.y0 * k}" fill="transparent" style="cursor:pointer" onclick="rulerEdit('op', ${oi}, 'sill')"><title>Подоконник от пола</title></rect>`;
+}
+// касание проёма — изменить
+out += `<rect x="${xL}" y="${Yh(v.y1)}" width="${xR - xL}" height="${(v.y1 - v.y0) * k}" fill="transparent" style="cursor:pointer" onclick="rulerEdit('op', ${oi}, 'w')"><title>Изменить проём</title></rect>`;
+});
+// цепочка размеров снизу
+const pts = [...new Set(edges.map(e => Math.round(e * 1000) / 1000))].sort((a, b) => a - b);
+const yC = yF + 18;
+for (let j = 0; j < pts.length - 1; j++) {
+const pa = XA(pts[j]), pb = XA(pts[j + 1]);
+const lo = Math.min(pa, pb), hi = Math.max(pa, pb);
+out += `<path d="M${lo} ${yC}H${hi}M${lo} ${yC - 5}v10M${hi} ${yC - 5}v10" stroke="#586270" stroke-width="1"/>`;
+const seg = pts[j + 1] - pts[j];
+if (hi - lo > 14) out += `<text x="${(lo + hi) / 2}" y="${yC - 4}" text-anchor="middle" font-size="10.5" fill="#14181f">${mFmt(seg)}</text>`;
+}
+// общая длина — касание правит стену
+const yT = yF + 42;
+out += `<path d="M${x0} ${yT}H${x0 + L * k}M${x0} ${yT - 6}v12M${x0 + L * k} ${yT - 6}v12" stroke="#14181f" stroke-width="1.2"/>`;
+out += `<text x="${x0 + L * k / 2}" y="${yT - 5}" text-anchor="middle" font-size="13" font-weight="700" fill="#14181f">${mFmt(L)} м</text>`;
+out += `<rect x="${x0}" y="${yT - 22}" width="${L * k}" height="30" fill="transparent" style="cursor:pointer" onclick="rulerEdit('wall', ${i})"><title>Длина стены</title></rect>`;
+// высота стены слева — касание правит свою высоту
+const xh = x0 - 18;
+out += `<path d="M${xh} ${yF}V${Yh(Hh)}M${xh - 5} ${yF}h10M${xh - 5} ${Yh(Hh)}h10" stroke="#14181f" stroke-width="1.2"/>`;
+out += `<text x="${xh - 4}" y="${(yF + Yh(Hh)) / 2}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#14181f" transform="rotate(-90 ${xh - 4} ${(yF + Yh(Hh)) / 2})">${mFmt(Hh)}${mNum((m.wallHeights || [])[i]) ? ' (своя)' : ''}</text>`;
+out += `<rect x="${xh - 20}" y="${Yh(Hh)}" width="30" height="${Hh * k}" fill="transparent" style="cursor:pointer" onclick="rulerEdit('wallH', ${i})"><title>Высота этой стены</title></rect>`;
+box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Развёртка стены ${i + 1}" font-family="inherit">${out}</svg>`;
+// площадь стены
+const opsArea = ops.reduce((a, { o }) => a + (o.type === 'balcony' ? mNum(o.w) * mNum(o.h) + mNum(o.dw) * mNum(o.dh) : mNum(o.w) * mNum(o.h)) * mCount(o.n), 0);
+const sum = document.getElementById('rlElevSum');
+if (sum) sum.innerHTML = `Стена ${i + 1}: ${mFmt(L)} × ${mFmt(Hh)} = <b>${mFmt(L * Hh)} м²</b>${opsArea > 0 ? ` − проёмы ${mFmt(opsArea)} = <b>${mFmt(L * Hh - opsArea)} м²</b>` : ''}`;
+const nav = document.getElementById('rlElevNav');
+if (nav) nav.textContent = `Стена ${i + 1} из ${g.segs.length}`;
+}
+
 function renderRulerSketch() {
 const box = document.getElementById('rlSketch');
 if (!box) return;
 const m = measure;
 const shape = rlShape(m);
 if (!shape) { box.innerHTML = rulerShapePickerHtml(); const c = document.getElementById('rlCheck'); if (c) c.innerHTML = ''; return; }
+if (rlView === 'elev') {
+renderElevation(box);
+const chk0 = document.getElementById('rlCheck');
+if (chk0) chk0.innerHTML = rulerCheckText(rulerGeometry(m));
+const hb0 = document.getElementById('rlHeightVal');
+if (hb0) hb0.textContent = mNum(m.height) ? mFmt(mNum(m.height)) + ' м' : 'не задана';
+return;
+}
 const g = rulerGeometry(m);
 const W = 320, H = 230, P = 38;
 const xs = [0, ...g.segs.map(s => s.x2)], ys = [0, ...g.segs.map(s => s.y2)];
@@ -5773,7 +5946,17 @@ return `<section class="mp-sec rl-sec">
 ${shape ? `<button type="button" class="rl-chip rl-shape-chip" onclick="rulerChangeShape()">${shapeName} ▾</button>` : ''}
 <span class="rl-check" id="rlCheck"></span>
 </div>
+${shape ? `<div class="rl-view" role="group" aria-label="Вид">
+<button type="button" class="${rlView === 'plan' ? 'on' : ''}" onclick="rulerSetView('plan')">План</button>
+<button type="button" class="${rlView === 'elev' ? 'on' : ''}" onclick="rulerSetView('elev')">Развёртки стен</button>
+</div>` : ''}
+${shape && rlView === 'elev' ? `<div class="rl-elev-nav">
+<button type="button" onclick="rulerElevStep(-1)" aria-label="Предыдущая стена">‹</button>
+<span id="rlElevNav"></span>
+<button type="button" onclick="rulerElevStep(1)" aria-label="Следующая стена">›</button>
+</div>` : ''}
 <div class="rl-sketch" id="rlSketch"></div>
+${shape && rlView === 'elev' ? '<div class="rl-elev-sum" id="rlElevSum"></div><div class="rl-ophint">Коснитесь длины, высоты, окна или двери — откроется клавиатура. Окно: ширина → высота → подоконник → отступ.</div>' : ''}
 ${shape ? `<div class="rl-walls">${chips}</div>` : ''}
 ${shape ? underlayBarHtml() : ''}
 ${shape ? (rulerPick
@@ -5846,9 +6029,14 @@ if (!Array.isArray(measure.wallHeights)) measure.wallHeights = [];
 measure.wallHeights[idx] = '';
 }
 rulerTarget = kind === 'op' ? { kind, idx, field: field || 'w' } : { kind, idx };
+if (rlView === 'elev') {
+if ((kind === 'wall' || kind === 'wallH') && typeof idx === 'number') rlElevWall = idx;
+if (kind === 'op' && measure.openings[idx] && typeof measure.openings[idx].wall === 'number') rlElevWall = measure.openings[idx].wall;
+}
 rulerBuf = rulerFieldValue(rulerTarget);
 rulerFresh = true;
 document.getElementById('measurePanel').classList.add('ruler-open');
+rulerToggleKeys(false);
 if (measureTab !== 'walls') measureTab = 'walls';
 renderMeasure();
 renderRulerPad();
@@ -5856,7 +6044,7 @@ renderRulerPad();
 
 // Поля проёма по порядку ввода
 function rulerOpFields(o) {
-const f = o && o.type === 'balcony' ? ['w', 'h', 'dw', 'dh'] : ['w', 'h'];
+const f = o && o.type === 'balcony' ? ['w', 'h', 'dw', 'dh'] : o && o.type === 'door' ? ['w', 'h'] : ['w', 'h', 'sill'];
 if (o && typeof o.wall === 'number') f.push('off');
 return f;
 }
@@ -5864,7 +6052,7 @@ return f;
 function rulerLabel(t) {
 if (t.kind === 'height') return 'Высота стен';
 if (t.kind === 'wall') return `${rulerWallName(t.idx)} · длина`.replace('Длина · длина', 'Длина комнаты').replace('Ширина · длина', 'Ширина комнаты');
-if (t.kind === 'wallH') return `${rulerWallName(t.idx)} · своя высота`;
+if (t.kind === 'wallH') return `Стена ${t.idx + 1} · своя высота`;
 if (t.kind === 'angle') return `Угол после стены ${t.idx + 1}, градусов (прямой — 90)`;
 if (t.kind === 'op') {
 const o = measure.openings[t.idx] || {};
@@ -5874,6 +6062,7 @@ const fl = {
 w: o.type === 'balcony' ? 'окно, ширина ↔' : 'ширина ↔',
 h: o.type === 'balcony' ? 'окно, высота ↕' : 'высота ↕',
 dw: 'дверь, ширина ↔', dh: 'дверь, высота ↕',
+sill: 'подоконник, от пола, м — можно пропустить',
 off: `отступ от угла ${o.from === 'end' ? 'Б' : 'А'}, м — можно пропустить`,
 }[t.field] || '';
 return `${name}${where} · ${fl}`;
@@ -5946,7 +6135,8 @@ const toolsEl = document.getElementById('rlPadTools');
 toolsEl.innerHTML = tools;
 toolsEl.style.display = tools ? '' : 'none';
 let nextLabel = 'Готово ✓';
-if (t.kind === 'height') nextLabel = 'К стенам →';
+if (rlView === 'elev' && (t.kind === 'wall' || t.kind === 'wallH' || t.kind === 'height')) nextLabel = 'Готово ✓';
+else if (t.kind === 'height') nextLabel = 'К стенам →';
 else if (t.kind === 'wall') nextLabel = shape === 'rect' && t.idx % 2 === 1 ? 'Готово ✓' : 'Далее →';
 else if (t.kind === 'angle') nextLabel = 'Дальше →';
 else if (t.kind === 'op') {
@@ -6076,6 +6266,8 @@ rulerApply();
 function rulerNext() {
 if (!rulerTarget) return;
 const t = rulerTarget;
+// на развёртке правим одно значение и остаёмся на этой стене
+if (rlView === 'elev' && (t.kind === 'wall' || t.kind === 'wallH' || t.kind === 'height')) { rulerClose(); return; }
 const shape = rlShape(measure);
 if (t.kind === 'height') {
 if (!shape) { rulerClose(); return; }
@@ -6142,7 +6334,20 @@ return;
 }
 }
 
+// Свернуть клавиатуру в полоску, чтобы посмотреть чертёж и проёмы целиком
+function rulerToggleKeys(force) {
+const panel = document.getElementById('measurePanel');
+const collapsed = typeof force === 'boolean' ? force : !panel.classList.contains('ruler-collapsed');
+panel.classList.toggle('ruler-collapsed', collapsed);
+const btn = document.getElementById('rlHideBtn');
+if (btn) {
+btn.innerHTML = collapsed ? '⌃<small>Клавиатура</small>' : '⌄<small>Скрыть</small>';
+btn.setAttribute('aria-label', collapsed ? 'Показать клавиатуру' : 'Скрыть клавиатуру');
+}
+}
+
 function rulerClose() {
+rulerToggleKeys(false);
 rulerTarget = null;
 const w = measure.walls;
 if (rlShape(measure) === 'free' && w.length > 1 && !String(w[w.length - 1]).trim()) {
