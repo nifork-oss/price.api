@@ -5434,6 +5434,8 @@ out += `<text x="${cx - s.dy * 14 * o2 - s.dx * 12}" y="${cy + s.dx * 14 * o2 - 
 });
 }
 // проёмы
+let opHits = '';
+rlOpHits = {};
 (m.openings || []).forEach((o, oi) => {
 if (typeof o.wall !== 'number') return;
 const s = g.segs[o.wall];
@@ -5442,7 +5444,17 @@ const wl = s.len > 0 ? s.len : Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
 const [a0, a1] = openingSpan(o, wl);
 const P2 = a => [X(s.x1 + s.dx * a), Y(s.y1 + s.dy * a)];
 const [ax, ay] = P2(a0), [bx, by] = P2(a1);
+// для перетаскивания: направление стены на экране и масштаб
+rlOpHits[oi] = { ux: s.dx, uy: s.dy, ppm: k * z, L: wl, a0, ow: a1 - a0 };
+const picked = opSel === o;
+if (picked) out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#ffc83d" stroke-width="16" stroke-linecap="round" opacity=".85"/>`;
 out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#ffffff" stroke-width="9"/>`;
+// зона касания проёма — поверх стен
+opHits += `<path data-op="${oi}" d="M${ax} ${ay}L${bx} ${by}" stroke="transparent" stroke-width="28" stroke-linecap="round" style="cursor:grab" onclick="rulerOpTap(${oi})"><title>${o.type === 'door' ? 'Дверь' : o.type === 'balcony' ? 'Балконный блок' : 'Окно'} — коснитесь, чтобы изменить, тащите вдоль стены</title></path>`;
+if (picked) {
+const mx2 = (ax + bx) / 2, my2 = (ay + by) / 2, ix = -s.dy * 22 * o2, iy = s.dx * 22 * o2;
+out += `<text x="${mx2 + ix}" y="${my2 + iy + 5}" text-anchor="middle" font-size="15" font-weight="700" fill="#14181f">⇆</text>`;
+}
 const part = (r0, r1, door) => {
 const [px, py] = P2(r0), [qx, qy] = P2(r1);
 out += `<path d="M${px} ${py}L${qx} ${qy}" stroke="#14181f" stroke-width="${door ? 1.2 : 2.4}" ${door ? 'stroke-dasharray="3 2"' : ''}/>`;
@@ -5479,6 +5491,7 @@ g.segs.forEach(s => {
 if (rulerPick) out += `<path class="rl-pickwall" d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="#ffc83d" stroke-width="14" stroke-linecap="round" opacity=".55"/>`;
 out += `<path d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="transparent" stroke-width="26" style="cursor:pointer" onclick="rulerWallTap(${s.i})"><title>Стена ${s.i + 1}</title></path>`;
 });
+out += opHits;
 // середины стен без приближения — к ним приближаем
 rlWallMids = g.segs.map(s => ({ i: s.i, x: (Xb(s.x1) + Xb(s.x2)) / 2, y: (Yb(s.y1) + Yb(s.y2)) / 2 }));
 box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Чертёж комнаты" font-family="inherit">${out}</svg>
@@ -5519,6 +5532,22 @@ else if (target) rlPan = { x: rlPan.x + (target.x - (W / 2 + rlPan.x)) * 0.5, y:
 renderRulerSketch();
 }
 function rulerZoomReset() { rlZoom = 1; rlPan = { x: 0, y: 0 }; renderRulerSketch(); }
+let rlOpHits = {};
+function rulerOpTap(i) {
+if (rlDragged) { rlDragged = false; return; }
+rulerEdit('op', i, 'w');
+}
+function rulerRemoveOpening() {
+const t = rulerTarget; if (!t || t.kind !== 'op') return;
+rulerSnapshot();
+measure.openings.splice(t.idx, 1);
+rulerTarget = null;
+document.getElementById('measurePanel').classList.remove('ruler-open');
+saveMeasureDraft();
+renderMeasure();
+showAddToast('Проём убран — можно отменить ↶');
+}
+
 function rulerWallTap(i) {
 if (rlDragged) { rlDragged = false; return; }
 rulerEdit('wall', i);
@@ -5531,6 +5560,9 @@ let start = null;
 const snapshot = () => ({ pan: { ...rlPan }, zoom: rlZoom, pts: new Map(pts), moved: start ? start.moved : false });
 box.addEventListener('pointerdown', (e) => {
 if (e.target.closest('.rl-zoom')) return;
+// палец на проёме — будем тащить его вдоль стены
+const opEl = e.target.closest && e.target.closest('[data-op]');
+box._op = opEl && rlOpHits[opEl.dataset.op] ? { i: Number(opEl.dataset.op), ...rlOpHits[opEl.dataset.op], started: false } : null;
 if (typeof rlUnderlayAdjust !== 'undefined' && rlUnderlayAdjust) {
 const u = getUnderlay(measure.id);
 box._ul = u ? { x: u.x, y: u.y, w: u.w, ar: u.ar } : null;
@@ -5552,6 +5584,29 @@ const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
 if (!start.moved && Math.hypot(dx, dy) < 6) return;
 if (!start.moved) { try { box.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ } }
 start.moved = true; rlDragged = true;
+if (box._op) {
+const op = box._op, o = measure.openings[op.i];
+if (o) {
+if (!op.started) {
+// начало перетаскивания: выбираем проём, запоминаем для «Отменить»
+op.started = true;
+rulerSnapshot();
+if (!o.from) o.from = 'start';
+rulerTarget = { kind: 'op', idx: op.i, field: 'off' };
+document.getElementById('measurePanel').classList.add('ruler-open');
+}
+const scr = 320 / (box.clientWidth || 320);
+const d = (dx * op.ux + dy * op.uy) * scr / op.ppm;
+const a0 = Math.max(0, Math.min(op.L - op.ow, op.a0 + d));
+const off = o.from === 'end' ? op.L - (a0 + op.ow) : a0;
+o.off = String(Math.round(off * 100) / 100).replace('.', ',');
+rulerBuf = o.off; rulerFresh = true;
+saveMeasureDraft();
+renderRulerSketch();
+renderRulerPad();
+}
+return;
+}
 if (rlUnderlayAdjust && box._ul && rlLastFit) {
 // двигаем подложку в метрах комнаты
 const mpp = (320 / (box.clientWidth || 320)) / (rlLastFit.k * rlZoom);
@@ -5599,9 +5654,11 @@ window.addEventListener('pointercancel', end);
 // Где на стене проём (метры от угла А): отступ от выбранного угла, иначе по центру
 function openingSpan(o, wallLen) {
 const ow = Math.min(openingWidth(o) || 0.9, wallLen * 0.9);
-const off = mNum(o.off);
+// пустой отступ — по центру стены; 0 — вплотную к углу
+const raw = String(o.off == null ? '' : o.off).trim();
+const v = raw === '' ? NaN : evalMeasureExpr(raw);
 let a0 = (wallLen - ow) / 2;
-if (off > 0) a0 = o.from === 'end' ? Math.max(0, wallLen - Math.min(off, wallLen) - ow) : Math.min(off, Math.max(0, wallLen - ow));
+if (isFinite(v) && v >= 0) a0 = o.from === 'end' ? Math.max(0, wallLen - Math.min(v, wallLen) - ow) : Math.min(v, Math.max(0, wallLen - ow));
 return [a0, a0 + ow];
 }
 // Части балконного блока на стене: где дверь, где окно
@@ -5802,6 +5859,7 @@ tools += `<button type="button" class="rl-tool rl-turn${tr === 'R' ? ' on' : ''}
 if (t.kind === 'op') {
 const o = measure.openings[t.idx] || {};
 const ty = o.type === 'door' ? 'door' : o.type === 'balcony' ? 'balcony' : 'window';
+if (typeof o.wall === 'number') tools += `<span class="rl-turn-label">⇆ тащите проём по стене</span>`;
 tools += ['window', 'door', 'balcony'].map(k => `<button type="button" class="rl-tool${ty === k ? ' on' : ''}" onclick="rulerSetOpType('${k}')">${{ window: 'Окно', door: 'Дверь', balcony: 'Балк. блок' }[k]}</button>`).join('');
 if (typeof o.wall === 'number') {
 tools += `<span class="rl-turn-label">Отступ от:</span>
@@ -5813,6 +5871,7 @@ tools += `<span class="rl-turn-label">Дверь у:</span>
 <button type="button" class="rl-tool rl-turn${o.side !== 'end' ? ' on' : ''}" onclick="rulerSetOpSide('start')">угла А</button>
 <button type="button" class="rl-tool rl-turn${o.side === 'end' ? ' on' : ''}" onclick="rulerSetOpSide('end')">угла Б</button>`;
 }
+tools += `<button type="button" class="rl-tool rl-tool-del" onclick="rulerRemoveOpening()">Убрать проём</button>`;
 }
 const toolsEl = document.getElementById('rlPadTools');
 toolsEl.innerHTML = tools;
