@@ -499,6 +499,7 @@ renderMeasure();
 
 function closeMeasure() {
 if (cpFull) { cpFull = false; document.body.classList.remove('cp-full-open'); }
+if (typeof rlFull !== 'undefined' && rlFull) { rlFull = false; document.body.classList.remove('rl-full-open'); }
 cpZoom = 1; cpPan = { x: 0, y: 0 }; cpRot = 0;
 if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; rulerPick = null; if (typeof rlEditBase !== "undefined") rlEditBase = null; rlZoom = 1; rlPan = { x: 0, y: 0 }; rlUnderlayAdjust = false; rlLastFit = null; }
 document.getElementById('measurePanel').classList.remove('ruler-open');
@@ -764,6 +765,7 @@ function setCeilPick(p) { measureCeilPick = p; updateMeasureOutputs(); }
 
 function setMeasureTab(tab) {
 if (cpFull) cpToggleFull(false);
+if (typeof rlFull !== 'undefined' && rlFull) { rlFull = false; document.body.classList.remove('rl-full-open'); }
 if (typeof rulerTarget !== 'undefined' && rulerTarget) { rulerTarget = null; document.getElementById('measurePanel').classList.remove('ruler-open'); }
 measureTab = tab;
 saveMeasureDraft();

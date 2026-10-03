@@ -274,11 +274,32 @@ const nav = document.getElementById('rlElevNav');
 if (nav) nav.textContent = `Стена ${i + 1} из ${g.segs.length}`;
 }
 
+/* ---------- чертёж стен во весь экран ---------- */
+let rlFull = false;
+// высота чертежа в единицах рисунка: во весь экран — по пропорциям экрана
+function rlH(box) {
+if (rlFull && box && box.clientWidth > 0 && box.clientHeight > 0) return Math.round(320 * box.clientHeight / box.clientWidth);
+return 230;
+}
+function rulerToggleFull(on) {
+rlFull = typeof on === 'boolean' ? on : !rlFull;
+const box = document.getElementById('rlSketch');
+if (box) box.classList.toggle('full', rlFull);
+document.body.classList.toggle('rl-full-open', rlFull);
+// вписываем заново под новый размер
+if (!rlUnderlayAdjust && !rlEditBase) rlLastFit = null;
+rlPan = { x: 0, y: 0 }; rlZoom = 1;
+renderRulerSketch();
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && rlFull && !rulerTarget) rulerToggleFull(false); });
+window.addEventListener('resize', () => { if (rlFull) renderRulerSketch(); });
+
 function renderRulerSketch() {
 const box = document.getElementById('rlSketch');
 if (!box) return;
 const m = measure;
 const shape = rlShape(m);
+if ((!shape || rlView === 'elev') && rlFull) { rlFull = false; box.classList.remove('full'); document.body.classList.remove('rl-full-open'); }
 if (!shape) { box.innerHTML = rulerShapePickerHtml(); const c = document.getElementById('rlCheck'); if (c) c.innerHTML = ''; return; }
 if (rlView === 'elev') {
 renderElevation(box);
@@ -289,7 +310,12 @@ if (hb0) hb0.textContent = mNum(m.height) ? mFmt(mNum(m.height)) + ' м' : 'не
 return;
 }
 const g = rulerGeometry(m);
-const W = 320, H = 230, P = 38;
+// во весь экран с открытой клавиатурой — чертёж над ней, а не под ней
+if (rlFull) {
+const pad = document.querySelector('#measurePanel.ruler-open .rl-pad');
+box.style.bottom = pad && pad.offsetHeight ? pad.offsetHeight + 'px' : '';
+} else box.style.bottom = '';
+const W = 320, H = rlH(box), P = 38;
 const xs = [0, ...g.segs.map(s => s.x2)], ys = [0, ...g.segs.map(s => s.y2)];
 let ghost = null;
 const draftingLast = rulerTarget && rulerTarget.kind === 'wall' && rulerTarget.idx >= m.walls.length - 1;
@@ -306,8 +332,12 @@ const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), ma
 let k = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
 let ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
 // пока подстраиваем подложку, масштаб чертежа замираем — иначе она «плывёт» под пальцем
-if ((rlUnderlayAdjust || rlEditBase) && rlLastFit) ({ k, ox, oy } = rlLastFit);
-rlLastFit = { k, ox, oy };
+if ((rlUnderlayAdjust || rlEditBase) && rlLastFit) {
+({ k, ox, oy } = rlLastFit);
+// масштаб заморожен, а высота чертежа поменялась (клавиатура во весь экран) — держим по центру
+if (rlLastFit.H && rlLastFit.H !== H) oy += (H - rlLastFit.H) / 2;
+}
+rlLastFit = { k, ox, oy, H };
 // Приближение растягивает только саму комнату: цифры, номера и толщина
 // линий остаются обычного размера, поэтому в тесных местах подписи расходятся
 const z = rlZoom;
@@ -461,6 +491,7 @@ box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label
 <button type="button" onclick="rulerZoom(1.6)" aria-label="Приблизить">+</button>
 <button type="button" onclick="rulerZoom(1 / 1.6)" aria-label="Отдалить">−</button>
 ${Math.abs(rlZoom - 1) > 0.01 || Math.abs(rlPan.x) > 1 || Math.abs(rlPan.y) > 1 ? '<button type="button" onclick="rulerZoomReset()" aria-label="Весь чертёж">⤢</button>' : ''}
+<button type="button" onclick="rulerToggleFull()" aria-label="${rlFull ? 'Закрыть' : 'Во весь экран'}">${rlFull ? '✕' : '⛶'}</button>
 </div>`;
 rulerBindPanZoom(box);
 const chk = document.getElementById('rlCheck');
@@ -474,7 +505,7 @@ let rlZoom = 1, rlPan = { x: 0, y: 0 }, rlDragged = false, rlWallMids = [];
 // Приближаем к выбранной стене (или к стене проёма); без выбора — к стене,
 // ближайшей к середине того, что сейчас видно
 function rulerZoom(f) {
-const W = 320, H = 230;
+const W = 320, H = rlH(document.getElementById('rlSketch'));
 const before = rlZoom;
 // отдалять можно до половины исходного размера, приближать — до 5 раз
 rlZoom = Math.min(5, Math.max(0.5, rlZoom * f));
@@ -698,7 +729,7 @@ ${shape && rlView === 'elev' ? `<div class="rl-elev-nav">
 <span id="rlElevNav"></span>
 <button type="button" onclick="rulerElevStep(1)" aria-label="Следующая стена">›</button>
 </div>` : ''}
-<div class="rl-sketch" id="rlSketch"></div>
+<div class="rl-sketch${rlFull && rlView === 'plan' ? ' full' : ''}" id="rlSketch"></div>
 ${shape && rlView === 'elev' ? '<div class="rl-elev-sum" id="rlElevSum"></div><div class="rl-ophint">Коснитесь длины, высоты, окна или двери — откроется клавиатура. Окно: ширина → высота → подоконник → отступ.</div>' : ''}
 ${shape ? `<div class="rl-walls">${chips}</div>` : ''}
 ${shape ? underlayBarHtml() : ''}
@@ -825,7 +856,16 @@ return `${name}${where} · ${fl}`;
 return '';
 }
 
+// во весь экран: клавиатура открылась или поменяла высоту — вписываем чертёж над ней
+function rulerFitAbovePad() {
+if (!rlFull) return;
+const box = document.getElementById('rlSketch');
+const pad = document.querySelector('#measurePanel.ruler-open .rl-pad');
+const want = pad && pad.offsetHeight ? pad.offsetHeight + 'px' : '';
+if (box && box.style.bottom !== want) renderRulerSketch();
+}
 function renderRulerPad() {
+setTimeout(rulerFitAbovePad, 0);
 const pad = document.getElementById('rlPad');
 if (!pad || !rulerTarget) return;
 const t = rulerTarget;
