@@ -340,11 +340,24 @@ return `<div class="stamp" style="--cols:3"><div>Итого<b>${rub(total)}</b><
 ${list ? `<div class="pay-list">${list}</div>` : ''}`;
 }
 
-// Работа в нескольких помещениях: разбивка под строкой
+// Что именно считали в помещениях. Должен совпадать с SURFACE_INVOICE_LABEL в calc-rooms.js.
+const SURFACE_LABELS = {
+walls: 'Стены',
+wallsMinus: 'Стены без участков',
+parts: 'Участки стен',
+ceiling: 'Потолок',
+slopes: 'Откосы',
+narrow: 'Узкие поверхности',
+};
+
+// Разбивка под строкой: «Стены: Гостиная 37,32 · Спальня 30,1 м²», для одного помещения — «Потолок: Кухня»
 function roomsLine(i) {
-if (!Array.isArray(i.rooms) || i.rooms.length < 2) return '';
+if (!Array.isArray(i.rooms) || !i.rooms.length) return '';
+const label = i.surface && i.surface !== 'manual' ? (SURFACE_LABELS[i.surface] || '') : '';
+if (i.rooms.length < 2) return label ? `${label}: ${i.rooms[0].name}` : '';
 const f = n => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
-return i.rooms.map(r => `${r.name} ${f(r.qty)}`).join(' · ') + (i.unit ? ' ' + i.unit : '');
+const list = i.rooms.map(r => `${r.name} ${f(r.qty)}`).join(' · ') + (i.unit ? ' ' + i.unit : '');
+return label ? `${label}: ${list}` : list;
 }
 
 function renderInvoice(rec) {

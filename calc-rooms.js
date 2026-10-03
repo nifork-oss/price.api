@@ -54,10 +54,30 @@ if (s && s.value > 0) { value += roundQty(s.value, s.unit); unit = s.unit; }
 return { value: Math.round(value * 1000) / 1000, unit };
 }
 
-// Разбивка работы по помещениям: «Гостиная 37,32 · Спальня 30,1 м²»
+// Как называется поверхность в счёте, PDF и на странице заказчика.
+// Должен совпадать с SURFACE_LABELS в view.html.
+const SURFACE_INVOICE_LABEL = {
+walls: 'Стены',
+wallsMinus: 'Стены без участков',
+parts: 'Участки стен',
+ceiling: 'Потолок',
+slopes: 'Откосы',
+narrow: 'Узкие поверхности',
+};
+function surfaceInvoiceLabel(item) {
+if (!item || !item.surface || item.surface === 'manual') return '';
+return SURFACE_INVOICE_LABEL[item.surface] || '';
+}
+
+// Разбивка работы по помещениям с указанием, что именно считали:
+// «Стены: Гостиная 37,32 · Спальня 30,1 м²», для одного помещения — «Потолок: Кухня».
+// Если поверхность неизвестна (старый счёт, ручной ввод) — как раньше, без подписи.
 function roomsBreakdownText(item) {
-if (!item || !Array.isArray(item.rooms) || item.rooms.length < 2) return '';
-return item.rooms.map(r => `${r.name} ${mFmt(r.qty)}`).join(' · ') + (item.unit ? ' ' + item.unit : '');
+if (!item || !Array.isArray(item.rooms) || !item.rooms.length) return '';
+const label = surfaceInvoiceLabel(item);
+if (item.rooms.length < 2) return label ? `${label}: ${item.rooms[0].name}` : '';
+const list = item.rooms.map(r => `${r.name} ${mFmt(r.qty)}`).join(' · ') + (item.unit ? ' ' + item.unit : '');
+return label ? `${label}: ${list}` : list;
 }
 
 // Пересобрать строку работы из помещений объекта
@@ -254,6 +274,20 @@ const obj = calcObject();
 return objectRooms(obj).filter(r => selectedRoomIds.has(r.id));
 }
 
+// Какую поверхность мастер выбирал для этой работы в прошлый раз — на этом телефоне.
+function lastSurfaceStoreKey() { return 'lastSurface:' + (currentUser || ''); }
+function loadLastSurfaces() {
+try { return JSON.parse(localStorage.getItem(lastSurfaceStoreKey()) || '{}') || {}; } catch (e) { return {}; }
+}
+function rememberSurface(name, key) {
+const m = loadLastSurfaces();
+m[name] = key;
+// держим список небольшим: не больше 300 работ
+const names = Object.keys(m);
+if (names.length > 300) delete m[names[0]];
+try { localStorage.setItem(lastSurfaceStoreKey(), JSON.stringify(m)); } catch (e) { /* пусто */ }
+}
+
 function suggestSurface(srv, has) {
 const n = String(srv.name || '').toLowerCase();
 if (/откос/.test(n) && has('slopes')) return 'slopes';
@@ -264,6 +298,15 @@ if (srv.unit === 'пог. м') return has('slopes') ? 'slopes' : (has('narrow') 
 if (has('walls')) return 'walls';
 if (has('ceiling')) return 'ceiling';
 return null;
+}
+
+// Что из отмеченных помещений уже добавлено в счёт этой работой по этой поверхности
+function workSurfaceState(srv, surfaceKey, rooms) {
+const price = Number(srv.price) || 0;
+const item = invoiceCart.find(i => i.name === srv.name && i.surface === surfaceKey && i.price === price && Array.isArray(i.rooms));
+if (!item) return { state: 'none', item: null };
+const have = rooms.filter(r => item.rooms.some(x => x.roomId === r.id)).length;
+return { state: have === rooms.length ? 'all' : (have > 0 ? 'some' : 'none'), item };
 }
 
 function openWorkPicker() {
@@ -287,6 +330,8 @@ function renderWorkPicker() {
 const rooms = pickedRooms();
 const body = document.getElementById('wpBody');
 if (!rooms.length) { body.innerHTML = ''; return; }
+const keepScroll = body.scrollTop;
+const lastSurf = loadLastSurfaces();
 const sums = {};
 SURFACES.forEach(s => { sums[s.key] = sumSurface(rooms, s.key); });
 const has = k => sums[k].value > 0;
@@ -300,16 +345,23 @@ if (q && !String(srv.name).toLowerCase().includes(q) && !(cat && cat.toLowerCase
 any = true;
 if (cat && !catPrinted) { html += `<div class="wp-cat">${escapeHtml(cat)}</div>`; catPrinted = true; }
 const open = workPickerOpenIdx === idx;
-const sug = suggestSurface(srv, has);
+const remembered = lastSurf[srv.name];
+const sug = remembered && has(remembered) ? remembered : suggestSurface(srv, has);
 html += `<div class="wp-item${inCart.has(srv.name) ? ' added' : ''}">
 <button type="button" class="wp-row" onclick="toggleWorkOptions(${idx})">
 <span class="wp-row-name">${escapeHtml(srv.name)}${inCart.has(srv.name) ? ' <span class="wp-badge">✓ в счёте</span>' : ''}</span>
 <span class="wp-row-price">${Number(srv.price).toLocaleString('ru-RU')} ₽${srv.unit ? '/' + escapeHtml(srv.unit) : ''}</span>
 </button>
 ${open ? `<div class="wp-opts">
-<div class="wp-opts-title">Что считаем в отмеченных помещениях:</div>
+<div class="wp-opts-title">Что считаем в отмеченных помещениях: <span class="wp-opts-hint">можно несколько, повторное нажатие — убрать</span></div>
 <div class="wp-surfaces">
-${SURFACES.filter(s => has(s.key)).map(s => `<button type="button" class="wp-surface${s.key === sug ? ' suggested' : ''}" onclick="addWorkToRooms(${idx}, '${s.key}')">${s.label}<small>${mFmt(sums[s.key].value)} ${sums[s.key].unit}</small></button>`).join('')}
+${SURFACES.filter(s => has(s.key)).map(s => {
+const st = workSurfaceState(srv, s.key, rooms).state;
+const cls = `wp-surface${s.key === sug ? ' suggested' : ''}${st === 'all' ? ' done' : ''}${st === 'some' ? ' partial' : ''}`;
+const mark = st === 'all' ? '✓ ' : '';
+const extra = st === 'some' ? ' · не все помещения' : '';
+return `<button type="button" class="${cls}" onclick="toggleWorkSurface(${idx}, '${s.key}')">${mark}${s.label}<small>${mFmt(sums[s.key].value)} ${sums[s.key].unit}${extra}</small></button>`;
+}).join('')}
 </div>
 <div class="wp-manual">
 <input class="mp-in" id="wpManualQty" type="text" inputmode="decimal" placeholder="своё кол-во">
@@ -320,6 +372,7 @@ ${SURFACES.filter(s => has(s.key)).map(s => `<button type="button" class="wp-sur
 </div>`;
 });
 body.innerHTML = `<div class="mp-body-inner">${any ? html : '<div class="mp-empty">Ничего не найдено</div>'}</div>`;
+body.scrollTop = keepScroll;
 }
 
 function toggleWorkOptions(idx) {
@@ -339,6 +392,7 @@ const unit = document.getElementById('wpManualUnit').value;
 if (!(qty > 0)) { alert('Укажите количество.'); document.getElementById('wpManualQty').focus(); return; }
 invoiceCart.push({ name: srv.name, price: Number(srv.price) || 0, qty: roundQty(qty, unit), unit, location: names, surface: 'manual' });
 showAddToast(`${srv.name}: ${mFmt(roundQty(qty, unit))} ${unit}`);
+document.getElementById('wpManualQty').value = '';
 } else {
 const unit = sumSurface(rooms, surfaceKey).unit || srv.unit || 'м²';
 const price = Number(srv.price) || 0;
@@ -352,9 +406,28 @@ rooms.forEach(room => {
 if (!item.rooms.some(r => r.roomId === room.id)) item.rooms.push({ roomId: room.id, name: roomName(room), qty: 0 });
 });
 rebuildRoomItem(item, obj);
-showAddToast(`${srv.name}: ${mFmt(item.qty)} ${item.unit}`);
+rememberSurface(srv.name, surfaceKey);
+showAddToast(`${srv.name} · ${surfaceInvoiceLabel({ surface: surfaceKey }).toLowerCase()}: ${mFmt(item.qty)} ${item.unit}`);
 }
-workPickerOpenIdx = null;
+// Список вариантов у работы остаётся открытым — можно сразу добавить
+// другую поверхность (потолок, откосы), не выбирая работу заново.
+renderInvoice();
+renderWorkPicker();
+scheduleDraftSave();
+}
+
+// Нажатие на поверхность: добавлена — убираем, не добавлена или добавлена не везде — добавляем.
+function toggleWorkSurface(serviceIdx, surfaceKey) {
+const rooms = pickedRooms();
+const srv = (cloudData.services || [])[serviceIdx];
+if (!rooms.length || !srv) return;
+const st = workSurfaceState(srv, surfaceKey, rooms);
+if (st.state !== 'all') { addWorkToRooms(serviceIdx, surfaceKey); return; }
+const ids = new Set(rooms.map(r => r.id));
+st.item.rooms = st.item.rooms.filter(r => !ids.has(r.roomId));
+if (!st.item.rooms.length) invoiceCart = invoiceCart.filter(i => i !== st.item);
+else rebuildRoomItem(st.item, calcObject());
+showAddToast(`${srv.name} · ${surfaceInvoiceLabel({ surface: surfaceKey }).toLowerCase()}: убрано`);
 renderInvoice();
 renderWorkPicker();
 scheduleDraftSave();

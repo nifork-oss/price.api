@@ -790,3 +790,9 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .rl-elev-nav span { font-weight: 700; font-size: 15px; }
 .rl-elev-nav button { width: 48px; height: 40px; border: 1.5px solid var(--s-ink); border-radius: 8px; background: #ffffff; font-size: 22px; font-weight: 700; line-height: 1; cursor: pointer; color: var(--s-ink); }
 .rl-elev-sum { font-size: 14px; margin-top: 8px; color: var(--s-ink); }
+
+/* Выбор поверхности у работы: добавлено — тёмная кнопка с галочкой, добавлено не во все помещения — пунктир */
+.wp-surface.done { background: var(--s-ink); border-color: var(--s-ink); color: #ffffff; }
+.wp-surface.done small { color: #d9dde2; }
+.wp-surface.partial { border-style: dashed; border-width: 2px; border-color: var(--s-ok); }
+.wp-opts-hint { font-weight: 400; color: var(--s-ink3); }
