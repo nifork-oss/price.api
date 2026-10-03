@@ -780,6 +780,9 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .mp-ce-wall { min-width: 36px; min-height: 36px; padding: 4px 8px; border: 1px solid #cfd5dd; border-radius: 3px; background: #ffffff; color: var(--s-ink); font-size: 14px; font-weight: 700; cursor: pointer; }
 .mp-ce-wall.on { background: var(--s-ink); border-color: var(--s-ink); color: #ffffff; }
 .mp-ce-all { font-weight: 600; font-size: 13px; }
+.mp-ce-card.active { border-color: var(--s-ink); box-shadow: inset 3px 0 0 #ffc83d; }
+.mp-ce-corner { min-height: 26px; padding: 2px 8px; margin: 0 2px; border: 1px solid #cfd5dd; border-radius: 3px; background: #ffc83d; color: var(--s-ink); font-size: 12px; font-weight: 700; cursor: pointer; }
+.mp-ce-plan-hint { margin-top: -4px; }
 
 /* свёрнутая клавиатура — узкая полоска */
 .rl-hide { flex: 0 0 auto; min-width: 58px; height: 44px; padding: 0 8px; border: 1px solid #c9ced5; border-radius: 8px; background: #ffffff; color: var(--s-ink); font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: inherit; }

@@ -199,7 +199,7 @@ ceilEls.forEach(e => {
 const isBox = e.type === 'box';
 e.strips.forEach(p => {
 s += `<path d="M${p.poly.map(([x, y]) => `${X(x)} ${Y(y)}`).join('L')}Z" fill="${isBox ? '#efe9d6' : '#e3ecf8'}" stroke="none"/>`;
-s += `<line x1="${X(p.inner[0][0])}" y1="${Y(p.inner[0][1])}" x2="${X(p.inner[1][0])}" y2="${Y(p.inner[1][1])}" stroke="#000" stroke-width="0.3" stroke-dasharray="${isBox ? '2.4 0.8 0.4 0.8' : '1.4 0.9'}"/>`;
+s += `<path d="${ceilStripEdge(p, X, Y)}" fill="none" stroke="#000" stroke-width="0.3" stroke-dasharray="${isBox ? '2.4 0.8 0.4 0.8' : '1.4 0.9'}"/>`;
 });
 });
 // подписи — поверх всех полос
@@ -219,11 +219,26 @@ if (a0 - cur > best[1] - best[0]) best = [cur, a0];
 cur = Math.max(cur, a1);
 });
 }
-const t = (best[0] + best[1]) / 2 / (q.len || 1);
+const t = p.span ? 0.5 : (best[0] + best[1]) / 2 / (q.len || 1);
 const mx = p.inner[0][0] + (p.inner[1][0] - p.inner[0][0]) * t + nx * (2.2 / k), my = p.inner[0][1] + (p.inner[1][1] - p.inner[0][1]) * t + ny * (2.2 / k);
 const ang = plTextAngle(q);
 const label = `${e.code} ${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
 s += T(X(mx), Y(my), label, 2.3, 700, 'middle', isBox ? '#5a4500' : '#1f3f73', `transform="rotate(${ang} ${X(mx)} ${Y(my)})" dominant-baseline="middle"`);
+// не на всю стену — размер от угла до начала элемента, за его кромкой
+const sp = e.strips.length === 1 ? e.strips[0].span : null;
+if (sp && e.partial && e.partial.off > 0.0005) {
+const fromEnd = e.partial.corner === 'Б';
+const c0 = fromEnd ? q.len : 0, c1 = fromEnd ? sp[1] : sp[0];
+const io = e.w + 2.5 / k;
+const sx = q.x1 + q.dx * c0 + nx * io, sy = q.y1 + q.dy * c0 + ny * io, ex = q.x1 + q.dx * c1 + nx * io, ey = q.y1 + q.dy * c1 + ny * io;
+s += `<line x1="${X(sx)}" y1="${Y(sy)}" x2="${X(ex)}" y2="${Y(ey)}" stroke="#000" stroke-width="0.15"/>`;
+[[sx, sy], [ex, ey]].forEach(([px, py]) => {
+const d = 1 / k;
+s += `<line x1="${X(px - (q.dx + nx) * d)}" y1="${Y(py - (q.dy + ny) * d)}" x2="${X(px + (q.dx + nx) * d)}" y2="${Y(py + (q.dy + ny) * d)}" stroke="#000" stroke-width="0.35"/>`;
+});
+const ox2 = (sx + ex) / 2 + nx * (1.8 / k), oy2 = (sy + ey) / 2 + ny * (1.8 / k);
+s += T(X(ox2), Y(oy2), String(plMm(e.partial.off)), 2.2, 400, 'middle', '#333', `transform="rotate(${ang} ${X(ox2)} ${Y(oy2)})" dominant-baseline="middle"`);
+}
 });
 g.segs.forEach(q => {
 s += `<line x1="${X(q.x1)}" y1="${Y(q.y1)}" x2="${X(q.x2)}" y2="${Y(q.y2)}" stroke="#000" stroke-width="0.9" stroke-linecap="square"/>`;
@@ -335,7 +350,8 @@ ceilList.forEach(e => {
 const what = e.type === 'box' ? 'короб' : 'закарнизная ниша';
 const size = `${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
 const extra = e.type === 'box' ? `, низ ${plM2(e.area)}${e.h ? ` + борт ${plM2(e.side)}` : ''} м²` : '';
-s += T(box.x, ly, `${e.code} — ${what}${e.where ? ' ' + e.where : ''}, ${size}, L = ${plMm(e.len)}${extra}`, 2.6, 400, 'start', '#222');
+const where = e.wallsTxt ? ` ${e.wallsTxt === 'по периметру' ? e.wallsTxt : '(' + e.wallsTxt + (e.partial ? `, от угла ${e.partial.corner} ${plMm(e.partial.off)}` : '') + ')'}` : '';
+s += T(box.x, ly, `${e.code} — ${what}${where}, ${size}, L = ${plMm(e.len)}${extra}`, 2.6, 400, 'start', '#222');
 ly += 4.2;
 });
 }
