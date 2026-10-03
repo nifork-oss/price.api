@@ -39,7 +39,7 @@ function rlTurns() { if (!Array.isArray(measure.turns)) measure.turns = []; retu
 function rulerSnapshot() {
 const m = measure;
 // углы и начальное направление тоже — иначе после «Отменить» план мог перекоситься
-const snap = JSON.stringify({ shape: m.shape, height: m.height, walls: m.walls, wallHeights: m.wallHeights, turns: m.turns, angles: m.angles || [], startHeading: m.startHeading || 0, openings: m.openings });
+const snap = JSON.stringify({ shape: m.shape, height: m.height, walls: m.walls, wallHeights: m.wallHeights, turns: m.turns, angles: m.angles || [], startHeading: m.startHeading || 0, openings: m.openings, ceilEls: m.ceilEls || [] });
 if (rulerUndo[rulerUndo.length - 1] !== snap) rulerUndo.push(snap);
 if (rulerUndo.length > 50) rulerUndo.shift();
 }
@@ -338,6 +338,16 @@ const uh = ul.w * ul.ar, ucx = ul.x + ul.w / 2, ucy = ul.y + uh / 2;
 const tr = `rotate(${ul.rot || 0} ${X(ucx)} ${Y(ucy)})`;
 out += `<image href="${underlayHref(m.id, ul.src)}" x="${X(ul.x)}" y="${Y(ul.y)}" width="${ul.w * k * z}" height="${uh * k * z}" preserveAspectRatio="none" opacity="${ul.op || 0.45}" transform="${tr}"/>`;
 if (rlUnderlayAdjust) out += `<rect x="${X(ul.x)}" y="${Y(ul.y)}" width="${ul.w * k * z}" height="${uh * k * z}" fill="none" stroke="#e8a900" stroke-width="2" stroke-dasharray="6 4" transform="${tr}"/>`;
+}
+// ниши и короба потолка — бледной полосой со штриховой кромкой
+if (Array.isArray(m.ceilEls) && m.ceilEls.length && typeof ceilElStrips === 'function') {
+m.ceilEls.forEach(el => {
+const isBox = el.type === 'box';
+ceilElStrips(m, el, g).forEach(p => {
+out += `<path d="M${p.poly.map(([x, y]) => `${X(x)} ${Y(y)}`).join('L')}Z" fill="${isBox ? '#ffe7a3' : '#cfe3ff'}" opacity=".75"/>`;
+out += `<path d="M${X(p.inner[0][0])} ${Y(p.inner[0][1])}L${X(p.inner[1][0])} ${Y(p.inner[1][1])}" stroke="${isBox ? '#a87b00' : '#2f6fc0'}" stroke-width="1.2" stroke-dasharray="5 3"/>`;
+});
+});
 }
 if (shape === 'free' && g.segs.length >= 2 && g.filled === g.segs.length && !g.checkClosed && g.checkGap > 0.02 && !ghost) {
 out += `<path d="M${X(g.endX)} ${Y(g.endY)}L${X(0)} ${Y(0)}" stroke="#c2361f" stroke-width="1.5" stroke-dasharray="4 4"/>`;
@@ -1206,6 +1216,8 @@ const [a0] = openingSpan(o, Lb);
 o.off = String(Math.round((La + a0) * 1000) / 1000).replace('.', ','); o.from = 'start'; o.wall = a;
 } else if (typeof o.wall === 'number' && o.wall > b) o.wall -= 1;
 });
+// ниши и короба: стена b вошла в стену a, дальше номера на один меньше
+remapCeilElWalls(m, m.walls.map((w, i) => i < b ? i : i === b ? a : i - 1));
 m.walls[a] = String(Math.round((La + Lb) * 1000) / 1000).replace('.', ',');
 if (Array.isArray(m.turns)) { m.turns[a] = m.turns[b]; m.turns.splice(b, 1); }
 if (Array.isArray(m.angles)) { m.angles[a] = m.angles[b] || ''; m.angles.splice(b, 1); }
@@ -1217,7 +1229,7 @@ m.walls.splice(b, 1);
 function rlNormDeg(d) { while (d > 180) d -= 360; while (d <= -180) d += 360; return d; }
 function rulerWallList(m) {
 const g = rulerGeometry(m);
-return g.segs.map((q, i) => ({ L: mNum(m.walls[i]), h: q.heading, wh: (m.wallHeights || [])[i] || '', x1: q.x1, y1: q.y1, ops: [] }));
+return g.segs.map((q, i) => ({ L: mNum(m.walls[i]), h: q.heading, wh: (m.wallHeights || [])[i] || '', x1: q.x1, y1: q.y1, ops: [], src: [i] }));
 }
 // Записать список стен обратно: длины, направление первой, повороты и углы — из направлений
 function rulerApplyWallList(m, list) {
@@ -1253,12 +1265,20 @@ else if (o.wall === n - 1) { const [a0] = openingSpan(o, LL); o.wall = 0; o.off 
 const sx = Lst.x1, sy = Lst.y1;
 if (rlEditBase) rlEditBase.pts = rlEditBase.pts.map(([px, py]) => [px - sx, py - sy]);
 if (rlLastFit) rlLastFit = { ...rlLastFit, ox: rlLastFit.ox + sx * rlLastFit.k, oy: rlLastFit.oy + sy * rlLastFit.k };
+remapCeilElWalls(m, m.walls.map((w, i) => i === n - 1 ? 0 : i));
 m.walls[0] = String(Math.round((LF + LL) * 1000) / 1000).replace('.', ',');
 m.walls.pop();
 if (Array.isArray(m.wallHeights)) m.wallHeights.length = Math.min(m.wallHeights.length, n - 1);
 if (Array.isArray(m.turns)) m.turns.length = Math.min(m.turns.length, n - 1);
 if (Array.isArray(m.angles)) m.angles.length = Math.min(m.angles.length, n - 1);
 return true;
+}
+
+// Ниши и короба — на новые номера стен по списку (у каждой стены — откуда она)
+function rulerRemapCeilByList(m, list) {
+const map = [];
+list.forEach((w, k) => (w.src || []).forEach(i => { map[i] = k; }));
+remapCeilElWalls(m, map);
 }
 
 function rulerRemoveWall() {
@@ -1287,6 +1307,7 @@ const rot = [...list.slice(i + 1), ...list.slice(0, i)];
 const sx0 = rot[0].x1, sy0 = rot[0].y1;
 if (rlEditBase) rlEditBase.pts = rlEditBase.pts.map(([px, py]) => [px - sx0, py - sy0]);
 if (rlLastFit) rlLastFit = { ...rlLastFit, ox: rlLastFit.ox + sx0 * rlLastFit.k, oy: rlLastFit.oy + sy0 * rlLastFit.k };
+rulerRemapCeilByList(m, rot);
 rulerApplyWallList(m, rot);
 // после последней стены — тот же поворот, что вёл к убранной: «Замкнуть» предложит её длину
 const last = rot.length - 1;
@@ -1312,7 +1333,7 @@ const A = list[k], B = list[k + 1];
 const d = Math.abs(rlNormDeg(B.h - A.h));
 if (d < 0.05) {
 B.ops.forEach(p => { p.a0 += A.L; });
-A.ops.push(...B.ops); A.L += B.L;
+A.ops.push(...B.ops); A.L += B.L; A.src = [...(A.src || []), ...(B.src || [])];
 list.splice(k + 1, 1); merged++;
 k = Math.max(0, k - 1);
 } else if (Math.abs(d - 180) < 0.05) {
@@ -1333,6 +1354,7 @@ if (Math.abs(sx) > 1e-9 || Math.abs(sy) > 1e-9) {
 if (rlEditBase) rlEditBase.pts = rlEditBase.pts.map(([px, py]) => [px - sx, py - sy]);
 if (rlLastFit) rlLastFit = { ...rlLastFit, ox: rlLastFit.ox + sx * rlLastFit.k, oy: rlLastFit.oy + sy * rlLastFit.k };
 }
+rulerRemapCeilByList(m, list);
 rulerApplyWallList(m, list);
 // проёмы — на новые номера стен
 list.forEach((w, k) => w.ops.forEach(({ o, a0 }) => {

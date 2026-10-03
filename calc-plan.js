@@ -152,6 +152,7 @@ const note = (t) => { s += `<text x="${x0}" y="${y}" font-family="${PL_FONT}" fo
 note('Размеры на чертежах — в миллиметрах, по внутренним поверхностям стен.');
 note('Площадь пола считается по контуру, если комната сошлась при замере.');
 note('Окна и двери показаны на стене, к которой привязаны при замере; положение вдоль стены условное.');
+if (rows.some(r => r.ceilEls)) note('Ниши (Н) и короба (К) потолка — штриховой линией: ширина от стены × высота, L — длина по стенам.');
 s += plFrame(info, 1, sheetCount, 'Экспликация помещений');
 return s;
 }
@@ -177,7 +178,11 @@ const xs = [0, ...g.segs.map(q => q.x2)], ys = [0, ...g.segs.map(q => q.y2)];
 const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
 const wM = maxX - minX, hM = maxY - minY;
 const pad = 16; // место под размерные линии, мм
-const availW = box.w - 2 * pad, availH = box.h - 10 - 2 * pad;
+// ниши и короба потолка — подписаны под чертежом, место под строки оставляем заранее
+const ceilEls = (r.ceilEls || []).filter(e => e.strips.length);
+const loose0 = (m.openings || []).some(o => typeof o.wall !== 'number' && mNum(o.w));
+const legendH = (r.ceilEls || []).length ? 4.2 * (r.ceilEls || []).length + (loose0 ? 4 : 0) : 0;
+const availW = box.w - 2 * pad, availH = box.h - 10 - 2 * pad - legendH;
 let scale = PL_SCALES[PL_SCALES.length - 1];
 for (const sc of PL_SCALES) { if (wM * 1000 / sc <= availW && hM * 1000 / sc <= availH) { scale = sc; break; } }
 const k = 1000 / scale; // мм листа на метр
@@ -189,6 +194,37 @@ s += T(box.x + box.w, box.y + 5, `М 1:${scale}`, 3.2, 700, 'end');
 const pts = [[0, 0], ...g.segs.map(q => [q.x2, q.y2])];
 if (g.closed) s += `<path d="M${pts.map(p => `${X(p[0])} ${Y(p[1])}`).join('L')}Z" fill="#fff7dc" stroke="none"/>`;
 else s += T(box.x, box.y + 10.5, `Контур не замкнут: разрыв ${plMm(g.gap)} мм — проверьте замер`, 2.9, 700, 'start', '#c2361f');
+// ниши и короба потолка: полоса вдоль стен и штриховая кромка (элемент выше секущей плоскости)
+ceilEls.forEach(e => {
+const isBox = e.type === 'box';
+e.strips.forEach(p => {
+s += `<path d="M${p.poly.map(([x, y]) => `${X(x)} ${Y(y)}`).join('L')}Z" fill="${isBox ? '#efe9d6' : '#e3ecf8'}" stroke="none"/>`;
+s += `<line x1="${X(p.inner[0][0])}" y1="${Y(p.inner[0][1])}" x2="${X(p.inner[1][0])}" y2="${Y(p.inner[1][1])}" stroke="#000" stroke-width="0.3" stroke-dasharray="${isBox ? '2.4 0.8 0.4 0.8' : '1.4 0.9'}"/>`;
+});
+});
+// подписи — поверх всех полос
+ceilEls.forEach(e => {
+const isBox = e.type === 'box';
+// подпись — у самой длинной полосы, вдоль неё, внутри комнаты
+const p = e.strips.slice().sort((a, b) => b.q.len - a.q.len)[0];
+const q = p.q, o = g.orient || 1;
+const nx = -q.dy * o, ny = q.dx * o;
+// вдоль стены — в середину самого длинного участка без окон и дверей (там их подписи)
+const spans = (m.openings || []).filter(op => op.wall === q.i && openingWidth(op) > 0).map(op => openingSpan(op, q.len)).sort((a, b) => a[0] - b[0]);
+let best = [0, q.len], cur = 0;
+if (spans.length) {
+best = [0, 0];
+spans.concat([[q.len, q.len]]).forEach(([a0, a1]) => {
+if (a0 - cur > best[1] - best[0]) best = [cur, a0];
+cur = Math.max(cur, a1);
+});
+}
+const t = (best[0] + best[1]) / 2 / (q.len || 1);
+const mx = p.inner[0][0] + (p.inner[1][0] - p.inner[0][0]) * t + nx * (2.2 / k), my = p.inner[0][1] + (p.inner[1][1] - p.inner[0][1]) * t + ny * (2.2 / k);
+const ang = plTextAngle(q);
+const label = `${e.code} ${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
+s += T(X(mx), Y(my), label, 2.3, 700, 'middle', isBox ? '#5a4500' : '#1f3f73', `transform="rotate(${ang} ${X(mx)} ${Y(my)})" dominant-baseline="middle"`);
+});
 g.segs.forEach(q => {
 s += `<line x1="${X(q.x1)}" y1="${Y(q.y1)}" x2="${X(q.x2)}" y2="${Y(q.y2)}" stroke="#000" stroke-width="0.9" stroke-linecap="square"/>`;
 });
@@ -291,6 +327,18 @@ s += T(X(cx), Y(cy) + 3, `S = ${plM2(area)} м²`, 3, 400);
 if (mNum(m.height)) s += T(X(cx), Y(cy) + 7.5, `h = ${plMm(mNum(m.height))}`, 2.7, 400, 'middle', '#333');
 }
 const loose = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => typeof o.wall !== 'number' && mNum(o.w) && (o.type === 'balcony' ? winH(o) : mNum(o.h)));
+// ниши и короба — строками под чертежом
+const ceilList = r.ceilEls || [];
+if (ceilList.length) {
+let ly = box.y + box.h - 1 - (loose.length ? 4 : 0) - 4.2 * (ceilList.length - 1);
+ceilList.forEach(e => {
+const what = e.type === 'box' ? 'короб' : 'закарнизная ниша';
+const size = `${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
+const extra = e.type === 'box' ? `, низ ${plM2(e.area)}${e.h ? ` + борт ${plM2(e.side)}` : ''} м²` : '';
+s += T(box.x, ly, `${e.code} — ${what}${e.where ? ' ' + e.where : ''}, ${size}, L = ${plMm(e.len)}${extra}`, 2.6, 400, 'start', '#222');
+ly += 4.2;
+});
+}
 if (loose.length) {
 s += T(box.x, box.y + box.h - 1, 'Без привязки к стене: ' + loose.map(({ o, oi }) =>
 (o.type === 'balcony'
@@ -342,7 +390,7 @@ const win = ops.filter(o => o.type !== 'door' && o.type !== 'balcony').reduce((a
 const door = ops.filter(o => o.type === 'door').reduce((a, o) => a + mCount(o.n), 0);
 const balc = ops.filter(o => o.type === 'balcony').reduce((a, o) => a + mCount(o.n), 0);
 const opsText = [win ? `окна ${win}` : '', door ? `двери ${door}` : '', balc ? `балк. бл. ${balc}` : ''].filter(Boolean).join(', ');
-return { name: roomName(room), floor: plFloorArea(g) || r.ceiling || 0, per: r.perimeter, h: mNum(m.height), walls: r.wallsGross, net: r.openingsArea > 0 ? r.wallsNet : r.wallsGross, ops: opsText };
+return { ceilEls: (r.ceilEls || []).length, name: roomName(room), floor: plFloorArea(g) || r.ceiling || 0, per: r.perimeter, h: mNum(m.height), walls: r.wallsGross, net: r.openingsArea > 0 ? r.wallsNet : r.wallsGross, ops: opsText };
 }
 
 async function buildMeasurePlanPDF(objectId) {
