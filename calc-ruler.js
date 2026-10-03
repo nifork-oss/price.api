@@ -346,6 +346,7 @@ const isBox = el.type === 'box';
 ceilElStrips(m, el, g).forEach(p => {
 out += `<path d="M${p.poly.map(([x, y]) => `${X(x)} ${Y(y)}`).join('L')}Z" fill="${isBox ? '#ffe7a3' : '#cfe3ff'}" opacity=".75"/>`;
 out += `<path d="${ceilStripEdge(p, X, Y)}" fill="none" stroke="${isBox ? '#a87b00' : '#2f6fc0'}" stroke-width="1.2" stroke-dasharray="5 3"/>`;
+if (el.light) { const [l0, l1] = ceilLightPts(p); out += `<path d="M${X(l0[0])} ${Y(l0[1])}L${X(l1[0])} ${Y(l1[1])}" stroke="#ff8c00" stroke-width="2" stroke-linecap="round" stroke-dasharray="0.1 4"/>`; }
 });
 });
 }
@@ -510,6 +511,7 @@ function rulerRemoveOpening() {
 const t = rulerTarget; if (!t || t.kind !== 'op') return;
 rulerSnapshot();
 measure.openings.splice(t.idx, 1);
+if (typeof remapCeilElOpsAfterRemove === 'function') remapCeilElOpsAfterRemove(measure, t.idx);
 rulerTarget = null;
 document.getElementById('measurePanel').classList.remove('ruler-open');
 saveMeasureDraft();

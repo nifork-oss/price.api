@@ -783,6 +783,8 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .mp-ce-card.active { border-color: var(--s-ink); box-shadow: inset 3px 0 0 #ffc83d; }
 .mp-ce-corner { min-height: 26px; padding: 2px 8px; margin: 0 2px; border: 1px solid #cfd5dd; border-radius: 3px; background: #ffc83d; color: var(--s-ink); font-size: 12px; font-weight: 700; cursor: pointer; }
 .mp-ce-plan-hint { margin-top: -4px; }
+.mp-ce-over { margin: 2px 0 6px; }
+.mp-ce-light { border-bottom: none; padding: 8px 2px 0; }
 .mp-ce-plan.full { position: fixed; inset: 0; z-index: 120; margin: 0; border: none; border-radius: 0; background: #ffffff; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .mp-ce-plan.full svg { height: 100%; }
 .cp-zoom { top: 6px; }
