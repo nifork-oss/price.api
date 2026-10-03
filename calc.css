@@ -796,3 +796,7 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .wp-surface.done small { color: #d9dde2; }
 .wp-surface.partial { border-style: dashed; border-width: 2px; border-color: var(--s-ok); }
 .wp-opts-hint { font-weight: 400; color: var(--s-ink3); }
+
+/* Кнопка «Сохранить» в окне замера помещения: жёлтая, пока есть несохранённые правки */
+.mp-room-save:disabled { opacity: 0.45; cursor: default; }
+.mp-room-save.dirty { background: var(--tape); border-color: var(--tape); color: var(--s-ink); }

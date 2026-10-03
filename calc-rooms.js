@@ -180,16 +180,50 @@ renderRooms();
 scheduleDraftSave();
 }
 
-/* ---------- замер помещения: «Готово» ---------- */
-async function finishRoomMeasure() {
+/* ---------- замер помещения: сохранение и закрытие ---------- */
+// roomSavedJson — снимок замера на момент последнего сохранения (null — помещение
+// ещё не сохранялось). По нему видно, есть ли несохранённые правки. Переменную
+// выставляет openMeasure (calc-measure.js); здесь только гарантируем, что она есть.
+if (typeof roomSavedJson === 'undefined') window.roomSavedJson = null;
+
+// Снимок того, что сейчас на экране: замер и название помещения
+function roomStateJson() {
+const nameEl = document.getElementById('mpRoom');
+if (!measure) return 'null';
+return JSON.stringify({ ...measure, room: (nameEl ? nameEl.value : (measure.room || '')).trim() });
+}
+
+// Есть ли в окне замера помещения то, чего ещё нет в сохранённом
+function roomIsDirty() {
+if (!measure) return false;
+if (roomSavedJson === null) {
+// помещение новое: сохранять есть что, если введено название или хоть какие-то размеры
+const nameEl = document.getElementById('mpRoom');
+return !isMeasureEmpty(measure) || !!(nameEl && nameEl.value.trim());
+}
+return roomStateJson() !== roomSavedJson;
+}
+
+// Кнопка «Сохранить» вверху: подсвечена и нажимается, только когда есть что сохранять
+function updateRoomSaveBtn() {
+const btn = document.getElementById('mpRoomSaveBtn');
+if (!btn) return;
+const dirty = roomIsDirty();
+btn.classList.toggle('dirty', dirty);
+btn.disabled = !dirty;
+}
+
+// close = true — записать и закрыть окно (кнопка внизу);
+// close = false — записать и остаться в замере (кнопка «Сохранить» вверху).
+async function saveRoomMeasure(close) {
 const name = document.getElementById('mpRoom').value.trim();
 if (!name) {
 alert('Назовите помещение, например: Гостиная.');
 document.getElementById('mpRoom').focus();
-return;
+return false;
 }
 const obj = (cloudData.objects || []).find(o => o.id === measureTarget.objectId);
-if (!obj) { alert('Объект не найден.'); return; }
+if (!obj) { alert('Объект не найден.'); return false; }
 measure.room = name;
 measure.objectId = obj.id;
 const snapshot = JSON.parse(JSON.stringify(measure));
@@ -202,17 +236,45 @@ room = { id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), m
 obj.rooms.push(room);
 }
 const roomId = room.id, objectId = obj.id;
+const prevSaved = roomSavedJson;
+if (close) {
 closeMeasure();
+} else {
+// остаёмся в окне: новое помещение теперь «живёт» под своим номером,
+// и следующее нажатие «Сохранить» обновит его, а не создаст ещё одно
+measureTarget.roomId = roomId;
+measureDirty = false;
+roomSavedJson = roomStateJson();
+updateRoomSaveBtn();
+if (typeof renderMeasureFooter === 'function') renderMeasureFooter(computeMeasure(measure));
+}
 syncCartWithRooms();
 renderInvoice();
 if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
 scheduleDraftSave();
-await saveCloudData();
+const ok = (await saveCloudData()) !== false;
 // после сохранения данные пришли с сервера заново — перерисуем
 syncCartWithRooms();
 renderInvoice();
 if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
-showAddToast(isNew ? `«${name}» добавлено` : 'Замер обновлён');
+if (!ok) {
+// не сохранилось в облаке — в окне остаётся отметка «есть несохранённое»
+if (!close) { roomSavedJson = prevSaved; updateRoomSaveBtn(); }
+return false;
+}
+showAddToast(close ? (isNew ? `«${name}» добавлено` : 'Замер обновлён') : `«${name}» сохранено`);
+return true;
+}
+
+async function finishRoomMeasure() { return saveRoomMeasure(true); }
+async function quickSaveRoom() { return saveRoomMeasure(false); }
+
+// Крестик в окне замера: если в замере помещения есть несохранённые правки —
+// сначала спрашиваем. Обычный замер сам хранит черновик, там спрашивать нечего.
+function requestCloseMeasure() {
+if (measureTarget && measureTarget.kind === 'room' && roomIsDirty() &&
+!confirm('В замере есть несохранённые изменения. Закрыть без сохранения?')) return;
+closeMeasure();
 }
 
 function addRoom(objectId) {
