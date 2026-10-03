@@ -5336,7 +5336,12 @@ xs.push(ghost.x2); ys.push(ghost.y2);
 const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
 const k = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
 const ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
-const X = v => ox + v * k, Y = v => oy + v * k;
+// Приближение растягивает только саму комнату: цифры, номера и толщина
+// линий остаются обычного размера, поэтому в тесных местах подписи расходятся
+const z = rlZoom;
+const vx = (W - W / z) / 2 + rlPan.x, vy = (H - H / z) / 2 + rlPan.y;
+const Xb = v => ox + v * k, Yb = v => oy + v * k;      // без приближения
+const X = v => (Xb(v) - vx) * z, Y = v => (Yb(v) - vy) * z;
 const t = rulerTarget;
 const sel = t && (t.kind === 'wall' || t.kind === 'wallH' || t.kind === 'angle') ? t.idx : -1;
 const opSel = t && t.kind === 'op' ? measure.openings[t.idx] : null;
@@ -5344,9 +5349,12 @@ const opWall = opSel && typeof opSel.wall === 'number' ? opSel.wall : -1;
 const linked = i => shape === 'rect' && sel >= 0 && i % 2 === sel % 2;
 const o2 = g.orient;
 let out = '';
+// миллиметровка движется вместе с чертежом
 let grid = '';
-for (let gx = -2 * W; gx <= 3 * W; gx += 16) grid += `M${gx} ${-2 * H}V${3 * H}`;
-for (let gy = -2 * H; gy <= 3 * H; gy += 16) grid += `M${-2 * W} ${gy}H${3 * W}`;
+const step = 16;
+const gx0 = ((-vx * z) % step + step) % step, gy0 = ((-vy * z) % step + step) % step;
+for (let gx = gx0; gx <= W; gx += step) grid += `M${gx} 0V${H}`;
+for (let gy = gy0; gy <= H; gy += step) grid += `M0 ${gy}H${W}`;
 out += `<path d="${grid}" stroke="#eff1f4" stroke-width="1"/>`;
 if (shape === 'free' && g.segs.length >= 2 && g.filled === g.segs.length && !g.checkClosed && g.checkGap > 0.02 && !ghost) {
 out += `<path d="M${X(g.endX)} ${Y(g.endY)}L${X(0)} ${Y(0)}" stroke="#c2361f" stroke-width="1.5" stroke-dasharray="4 4"/>`;
@@ -5417,14 +5425,11 @@ out += `<text x="${(ax + bx) / 2 + dy * 16}" y="${(ay + by) / 2 - dx * 16 + 4}" 
 }
 g.segs.forEach(s => {
 if (rulerPick) out += `<path class="rl-pickwall" d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="#ffc83d" stroke-width="14" stroke-linecap="round" opacity=".55"/>`;
-out += `<path d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="transparent" stroke-width="${Math.max(16, 28 / rlZoom)}" style="cursor:pointer" onclick="rulerWallTap(${s.i})"><title>Стена ${s.i + 1}</title></path>`;
+out += `<path d="M${X(s.x1)} ${Y(s.y1)}L${X(s.x2)} ${Y(s.y2)}" stroke="transparent" stroke-width="26" style="cursor:pointer" onclick="rulerWallTap(${s.i})"><title>Стена ${s.i + 1}</title></path>`;
 });
-// середины стен в координатах чертежа — к ним приближаем
-rlWallMids = g.segs.map(s => ({ i: s.i, x: (X(s.x1) + X(s.x2)) / 2, y: (Y(s.y1) + Y(s.y2)) / 2 }));
-// приближение: смотрим на часть чертежа
-const vw = W / rlZoom, vh = H / rlZoom;
-const vx = (W - vw) / 2 + rlPan.x, vy = (H - vh) / 2 + rlPan.y;
-box.innerHTML = `<svg viewBox="${vx} ${vy} ${vw} ${vh}" width="100%" role="img" aria-label="Чертёж комнаты" font-family="inherit">${out}</svg>
+// середины стен без приближения — к ним приближаем
+rlWallMids = g.segs.map(s => ({ i: s.i, x: (Xb(s.x1) + Xb(s.x2)) / 2, y: (Yb(s.y1) + Yb(s.y2)) / 2 }));
+box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Чертёж комнаты" font-family="inherit">${out}</svg>
 <div class="rl-zoom">
 <button type="button" onclick="rulerZoom(1.6)" aria-label="Приблизить">+</button>
 <button type="button" onclick="rulerZoom(1 / 1.6)" aria-label="Отдалить">−</button>
