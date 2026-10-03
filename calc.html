@@ -5697,7 +5697,9 @@ const emptyLast = t.kind === 'wall' && !mNum(measure.walls[t.idx]) && t.idx === 
 if (shape !== 'rect' && emptyLast && gg.closeLen > 0) {
 tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCloseRoom(${gg.closeLen})">Замкнуть: ${mFmt(gg.closeLen)} м</button>`;
 } else if (shape === 'free' && emptyLast && gg.closeAny) {
-tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCloseAny()">Замкнуть по месту: ${mFmt(gg.closeAny.len)} м, угол ${Math.round(gg.closeAny.interior)}°</button>`;
+const cc = rulerCornerClose(gg);
+if (cc) tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCloseCorner()">Замкнуть углом 90°: ${mFmt(cc.a)} + ${mFmt(cc.b)} м</button>`;
+tools += `<button type="button" class="rl-tool${cc ? '' : ' rl-tool-close'}" onclick="rulerCloseAny()">${cc ? 'По прямой' : 'Замкнуть по месту'}: ${mFmt(gg.closeAny.len)} м, угол ${Math.round(gg.closeAny.interior)}°</button>`;
 }
 if (shape === 'free' && t.kind === 'wall') {
 const tr = rlTurns()[t.idx] === 'L' ? 'L' : 'R';
@@ -5776,6 +5778,53 @@ rulerSnapshot();
 rulerBuf = String(v);
 rulerApply();
 }
+// Замкнуть углом 90°: две стены под прямыми углами вместо одной диагонали.
+// Первая — поперёк последней введённой стены, вторая — вдоль неё, до начала.
+function rulerCornerClose(g) {
+if (!g || !g.checkable || g.filled < 2) return null;
+const last = g.segs[g.filled - 1];
+const h = last.heading * Math.PI / 180;
+const u = [Math.cos(h), Math.sin(h)];                    // вдоль последней стены
+const vR = [Math.cos(h + Math.PI / 2), Math.sin(h + Math.PI / 2)]; // направо от неё
+const gx = -g.lastX, gy = -g.lastY;                      // от конца до начала комнаты
+const gu = gx * u[0] + gy * u[1], gv = gx * vR[0] + gy * vR[1];
+if (Math.abs(gv) < 0.02 || Math.abs(gu) < 0.02) return null; // тут хватит одной стены
+const firstDir = gv > 0 ? 'R' : 'L';
+// вторая стена идёт вдоль последней (вперёд или назад) — поворот снова на 90°
+const hA = last.heading + (firstDir === 'R' ? 90 : -90);
+const hB = last.heading + (gu > 0 ? 0 : 180);
+let turn2 = hB - hA;
+while (turn2 > 180) turn2 -= 360;
+while (turn2 <= -180) turn2 += 360;
+// последняя стена не должна лечь обратно поверх первой
+let back = hB - (g.segs[0] ? g.segs[0].heading : 0);
+while (back > 180) back -= 360;
+while (back <= -180) back += 360;
+if (Math.abs(Math.abs(back) - 180) < 1) return null;
+return { a: Math.abs(gv), b: Math.abs(gu), dir1: firstDir, dir2: turn2 > 0 ? 'R' : 'L' };
+}
+
+function rulerCloseCorner() {
+const t = rulerTarget; if (!t) return;
+const c = rulerCornerClose(rulerGeometry(measure));
+if (!c) return;
+rulerSnapshot();
+const n = t.idx; // пустая стена, на которой стоим
+const fmt = v => String(Math.round(v * 1000) / 1000).replace('.', ',');
+const turns = rlTurns();
+if (!Array.isArray(measure.angles)) measure.angles = [];
+turns[n - 1] = c.dir1; measure.angles[n - 1] = '';
+measure.walls[n] = fmt(c.a);
+turns[n] = c.dir2; measure.angles[n] = '';
+measure.walls[n + 1] = fmt(c.b);
+if (!Array.isArray(measure.wallHeights)) measure.wallHeights = [];
+measure.wallHeights[n] = measure.wallHeights[n] || '';
+measure.wallHeights[n + 1] = '';
+saveMeasureDraft();
+rulerClose();
+showAddToast(rulerGeometry(measure).closed ? 'Комната сошлась углом 90°' : 'Стены добавлены');
+}
+
 // Последняя стена — прямо в начало комнаты, угол подбирается сам
 function rulerCloseAny() {
 const t = rulerTarget; if (!t) return;
