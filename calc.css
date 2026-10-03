@@ -785,6 +785,16 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .mp-ce-plan-hint { margin-top: -4px; }
 .mp-ce-over { margin: 2px 0 6px; }
 .mp-ce-light { border-bottom: none; padding: 8px 2px 0; }
+/* режим подсчёта стен */
+.mp-mode { display: flex; gap: 6px; margin: 2px 0 8px; }
+.mp-mode button { flex: 1; min-height: 44px; padding: 6px 8px; border: 1px solid #cfd5dd; border-radius: 3px; background: #ffffff; color: var(--s-ink); font-size: 13.5px; font-weight: 700; line-height: 1.2; cursor: pointer; }
+.mp-mode button small { display: block; font-size: 11px; font-weight: 500; color: var(--s-ink2); }
+.mp-mode button.on { background: var(--s-ink); border-color: var(--s-ink); color: #ffffff; }
+.mp-mode button.on small { color: #d7dbe0; }
+/* вкладка «Углы» */
+.mp-cn-row { margin-top: 6px; }
+.mp-cn-row .mp-ce-walls-label { flex-basis: 100%; }
+.mp-ce-wall small { display: block; font-size: 10.5px; font-weight: 500; opacity: .75; }
 .mp-ce-plan.full { position: fixed; inset: 0; z-index: 120; margin: 0; border: none; border-radius: 0; background: #ffffff; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .mp-ce-plan.full svg { height: 100%; }
 .cp-zoom { top: 6px; }
