@@ -16,6 +16,10 @@ const SURFACES = [
 { key: 'wallsMinus', tab: 'wallsMinus', label: 'Стены − участки' },
 { key: 'parts', tab: 'parts', label: 'Участки стен' },
 { key: 'ceiling', tab: 'ceiling', label: 'Потолок' },
+{ key: 'ceilingNet', tab: 'ceilingNet', label: 'Потолок − ниши/короба' },
+{ key: 'ceilNiche', tab: 'ceilNiche', label: 'Закарнизные ниши' },
+{ key: 'ceilBox', tab: 'ceilBox', label: 'Короба, длина' },
+{ key: 'ceilBoxArea', tab: 'ceilBoxArea', label: 'Короба, площадь' },
 { key: 'slopes', tab: 'slopes', label: 'Откосы' },
 { key: 'narrow', tab: 'narrow', label: 'Узкие' },
 ];
@@ -61,6 +65,10 @@ walls: 'Стены',
 wallsMinus: 'Стены без участков',
 parts: 'Участки стен',
 ceiling: 'Потолок',
+ceilingNet: 'Потолок без ниш и коробов',
+ceilNiche: 'Закарнизные ниши',
+ceilBox: 'Короба',
+ceilBoxArea: 'Короба',
 slopes: 'Откосы',
 narrow: 'Узкие поверхности',
 };
@@ -143,7 +151,7 @@ list.innerHTML = '<div class="rooms-hint">У объекта пока нет по
 return;
 }
 const picked = rooms.filter(r => selectedRoomIds.has(r.id));
-const sums = SURFACES.filter(s => s.key !== 'wallsMinus').map(s => ({ s, v: sumSurface(picked, s.key) })).filter(x => x.v.value > 0);
+const sums = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'ceilingNet').map(s => ({ s, v: sumSurface(picked, s.key) })).filter(x => x.v.value > 0);
 list.innerHTML = `
 <div class="room-select-all">
 <button type="button" class="chip" onclick="selectAllRooms(true)">Отметить все</button>
@@ -152,7 +160,7 @@ ${picked.length ? `<button type="button" class="chip" onclick="selectAllRooms(fa
 ${rooms.map(room => {
 const surf = roomSurfaces(room);
 const on = selectedRoomIds.has(room.id);
-const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && surf[s.key].value > 0).map(s => `${s.label.toLowerCase()} ${mFmt(surf[s.key].value)}`).join(' · ');
+const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'ceilingNet' && surf[s.key].value > 0).map(s => `${s.label.toLowerCase()} ${mFmt(surf[s.key].value)}`).join(' · ');
 return `<div class="room-row${on ? ' on' : ''}">
 <label class="room-check">
 <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleRoom('${room.id}', this.checked)">
@@ -354,6 +362,9 @@ function suggestSurface(srv, has) {
 const n = String(srv.name || '').toLowerCase();
 if (/откос/.test(n) && has('slopes')) return 'slopes';
 if (/плитк|кафел|фартук|панел/.test(n) && has('parts')) return 'parts';
+if (/ниш/.test(n) && has('ceilNiche')) return 'ceilNiche';
+if (/короб/.test(n) && has('ceilBox')) return srv.unit === 'пог. м' ? 'ceilBox' : 'ceilBoxArea';
+if (/натяж/.test(n) && has('ceilingNet')) return 'ceilingNet';
 if (/потол/.test(n) && has('ceiling')) return 'ceiling';
 if (/стен|обо[ий]|плитк|кафел/.test(n) && has('walls')) return 'walls';
 if (srv.unit === 'пог. м') return has('slopes') ? 'slopes' : (has('narrow') ? 'narrow' : null);
@@ -523,7 +534,7 @@ const canEdit = !isCurrentClient();
 const list = rooms.length
 ? rooms.map(room => {
 const surf = roomSurfaces(room);
-const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
+const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'ceilingNet' && surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
 return `<div class="room-card">
 <div class="room-head">
 <div class="room-name">${escapeHtml(roomName(room))}</div>
