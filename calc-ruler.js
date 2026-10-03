@@ -39,7 +39,7 @@ function rlTurns() { if (!Array.isArray(measure.turns)) measure.turns = []; retu
 function rulerSnapshot() {
 const m = measure;
 // углы и начальное направление тоже — иначе после «Отменить» план мог перекоситься
-const snap = JSON.stringify({ shape: m.shape, height: m.height, walls: m.walls, wallHeights: m.wallHeights, turns: m.turns, angles: m.angles || [], startHeading: m.startHeading || 0, openings: m.openings, ceilEls: m.ceilEls || [] });
+const snap = JSON.stringify({ shape: m.shape, height: m.height, walls: m.walls, wallHeights: m.wallHeights, turns: m.turns, angles: m.angles || [], startHeading: m.startHeading || 0, openings: m.openings, ceilEls: m.ceilEls || [], molding: m.molding || null });
 if (rulerUndo[rulerUndo.length - 1] !== snap) rulerUndo.push(snap);
 if (rulerUndo.length > 50) rulerUndo.shift();
 }
@@ -202,6 +202,8 @@ const selWall = t && (t.kind === 'wall' || t.kind === 'wallH') && t.idx === i;
 // стена
 out += `<rect x="${x0}" y="${Yh(Hh)}" width="${L * k}" height="${Hh * k}" fill="#ffffff" stroke="${selWall ? '#e8a900' : '#14181f'}" stroke-width="${selWall ? 3 : 1.6}"/>`;
 out += `<path d="M${x0 - 8} ${yF}H${x0 + L * k + 8}" stroke="#14181f" stroke-width="4"/>`;
+// лепнина: карниз, плинтус, рамки и линии молдингов
+if (typeof molElevShapes === 'function') out += molElevShapes(m, i, XA, Yh, L, Hh);
 // углы А и Б
 const cornerA = XA(0), cornerB = XA(L);
 [[cornerA, 'А'], [cornerB, 'Б']].forEach(([cx, letter]) => {

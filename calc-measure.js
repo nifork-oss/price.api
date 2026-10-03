@@ -615,6 +615,17 @@ r.cornersMin = cr.min;
 if (cr.linesOut.length) r.lines.cornersOut = `Наружные углы: ${cr.linesOut.join(' + ')} = ${mFmt(cr.out)} пог. м`;
 if (cr.linesIn.length) r.lines.cornersIn = `Внутренние углы: ${cr.linesIn.join(' + ')} = ${mFmt(cr.in)} пог. м`;
 if (cr.out > 0 && cr.in > 0) r.lines.cornersTotal = `Углы всего: ${mFmt(cr.out)} + ${mFmt(cr.in)} = ${mFmt(r.corners)} пог. м`;
+
+// Лепнина: карниз, плинтус, молдинги
+if (typeof moldingCompute === 'function') {
+const mo = moldingCompute(m);
+r.mol = mo;
+r.molCornice = mo.cornice ? mo.cornice.len : 0;
+r.molPlinth = mo.plinth ? mo.plinth.len : 0;
+r.molCeil = mo.ceilLen;
+r.molWall = mo.wallLen;
+Object.keys(mo.lines).forEach(k => { r.lines['mol_' + k] = mo.lines[k]; });
+}
 return r;
 }
 
@@ -624,6 +635,10 @@ if (tab === 'walls') {
 return { value: r.wallsCalc, unit: 'м²', label: r.wallsGrossMode && r.openingsArea > 0 ? 'Стены без вычета проёмов' : r.openingsArea > 0 ? 'Стены без проёмов' : 'Площадь стен',
 text: [r.lines.walls, r.lines.openings, r.lines.net].filter(Boolean).join('\n') };
 }
+if (tab === 'molCornice') return { value: r.molCornice || 0, unit: 'пог. м', label: 'Карниз', text: r.lines.mol_cornice || '' };
+if (tab === 'molPlinth') return { value: r.molPlinth || 0, unit: 'пог. м', label: 'Плинтус', text: r.lines.mol_plinth || '' };
+if (tab === 'molCeil') return { value: r.molCeil || 0, unit: 'пог. м', label: 'Молдинг на потолке', text: r.lines.mol_ceil || '' };
+if (tab === 'molWall') return { value: r.molWall || 0, unit: 'пог. м', label: 'Молдинг на стенах', text: r.lines.mol_wall || '' };
 if (tab === 'corners' || tab === 'cornersOut' || tab === 'cornersIn') {
 const cmin = r.cornersMin ? MIN_NOTE : '';
 if (tab === 'cornersOut') return { value: r.cornersOut, unit: 'пог. м', label: 'Углы наружные', text: (r.lines.cornersOut || '') + cmin };
@@ -893,6 +908,8 @@ ${m.narrow.map((v, i) => `<div class="mp-row"><span class="mp-row-label">${i + 1
 </section>`;
 } else if (measureTab === 'corners') {
 html += cornersTabHtml(m);
+} else if (measureTab === 'molding') {
+html += typeof moldingTabHtml === 'function' ? moldingTabHtml(m) : '';
 } else if (measureTab === 'history') {
 html += renderMeasureHistoryHtml();
 }
@@ -924,6 +941,7 @@ set('mpCeilElOver' + i, `Стена ${op.wall + 1}: проём ${mFmt(openingWid
 }
 });
 if (measureTab === 'ceiling') renderCeilPlan();
+if (measureTab === 'molding' && typeof updateMoldingOutputs === 'function') updateMoldingOutputs(r);
 (measure.parts || []).forEach((pt, i) => {
 const l = mNum(pt.l), h = mNum(pt.h);
 set('mpPartArea' + i, l && h ? `${mFmt(l * h)} м²` : '');
@@ -966,6 +984,9 @@ pick = `<div class="mp-pick">${opt('ceiling', 'Потолок', r.ceiling, 'м²
 } else if (measureTab === 'corners' && r.cornersOut > 0 && r.cornersIn > 0 && measureTarget.kind !== 'room') {
 const opt = (key, label, val) => `<button type="button" class="${measureCornersPick === key ? 'active' : ''}" onclick="setCornersPick('${key}')">${label}<br><b>${mFmt(val)}</b> пог. м</button>`;
 pick = `<div class="mp-pick">${opt('cornersOut', 'Наружные', r.cornersOut)}${opt('cornersIn', 'Внутренние', r.cornersIn)}${opt('corners', 'Все', r.corners)}</div>`;
+} else if (measureTab === 'molding' && ['molCornice', 'molPlinth', 'molCeil', 'molWall'].filter(k => r[k] > 0).length > 1 && measureTarget.kind !== 'room') {
+const opt = (key, label) => r[key] > 0 ? `<button type="button" class="${effTab === key ? 'active' : ''}" onclick="setMolPick('${key}')">${label}<br><b>${mFmt(r[key])}</b> пог. м</button>` : '';
+pick = `<div class="mp-pick">${opt('molCornice', 'Карниз')}${opt('molPlinth', 'Плинтус')}${opt('molCeil', 'Потолок')}${opt('molWall', 'Стены')}</div>`;
 } else if (measureTab === 'walls') {
 sub = r.wallsGrossMode && r.openingsArea > 0
 ? `Проёмы не вычитаются${r.openStrips > 0 ? ` · у проёмов ${mFmt(r.openStrips)} пог. м (в «Узких»)` : ''}`
@@ -999,6 +1020,10 @@ function measureEffTab(r) {
 if (measureTab === 'walls') return r.parts > 0 ? measureWallsPick : 'walls';
 if (measureTab === 'ceiling') return r.ceilNiche > 0 || r.ceilBox > 0 ? measureCeilPick : 'ceiling';
 if (measureTab === 'corners') return r.cornersOut > 0 && r.cornersIn > 0 ? measureCornersPick : (r.cornersOut > 0 ? 'cornersOut' : r.cornersIn > 0 ? 'cornersIn' : 'corners');
+if (measureTab === 'molding') {
+const have = ['molCornice', 'molPlinth', 'molCeil', 'molWall'].filter(k => r[k] > 0);
+return have.includes(measureMolPick) ? measureMolPick : (have[0] || 'molCornice');
+}
 return measureTab;
 }
 
@@ -1248,6 +1273,7 @@ renderMeasure();
 
 // Номера стен в нишах и коробах после перестройки стен: map[старый] = новый (или -1)
 function remapCeilElWalls(m, map) {
+if (typeof remapMoldingWalls === 'function') remapMoldingWalls(m, map);
 (Array.isArray(m.ceilEls) ? m.ceilEls : []).forEach(el => {
 if (!Array.isArray(el.walls)) return;
 el.walls = [...new Set(el.walls.map(i => map[i]).filter(i => Number.isInteger(i) && i >= 0))].sort((a, b) => a - b);
@@ -1598,7 +1624,7 @@ return list.sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedA
 
 function measureSummaryLines(m) {
 const r = computeMeasure(m);
-return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn].filter(Boolean);
+return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn, r.lines.mol_cornice, r.lines.mol_plinth, r.lines.mol_ceil, r.lines.mol_wall].filter(Boolean);
 }
 
 function measurePills(m) {
@@ -1614,6 +1640,9 @@ if (r.ceilLight > 0) p.push(`Подсветка ${mFmt(r.ceilLight)} пог. м`
 if (r.slopesLen > 0) p.push(`Откосы ${mFmt(r.slopesLen)} пог. м`);
 if (r.narrow > 0) p.push(`Узкие ${mFmt(r.narrow)} пог. м`);
 if (r.corners > 0) p.push(`Углы ${mFmt(r.corners)} пог. м`);
+if (r.molCornice > 0) p.push(`Карниз ${mFmt(r.molCornice)} пог. м`);
+if (r.molPlinth > 0) p.push(`Плинтус ${mFmt(r.molPlinth)} пог. м`);
+if (r.molCeil + r.molWall > 0) p.push(`Молдинги ${mFmt(r.molCeil + r.molWall)} пог. м`);
 return p;
 }
 

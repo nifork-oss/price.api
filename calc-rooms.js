@@ -27,6 +27,10 @@ const SURFACES = [
 { key: 'corners', tab: 'corners', label: 'Углы' },
 { key: 'cornersOut', tab: 'cornersOut', label: 'Углы наружные' },
 { key: 'cornersIn', tab: 'cornersIn', label: 'Углы внутренние' },
+{ key: 'molCornice', tab: 'molCornice', label: 'Карниз' },
+{ key: 'molPlinth', tab: 'molPlinth', label: 'Плинтус' },
+{ key: 'molCeil', tab: 'molCeil', label: 'Молдинг на потолке' },
+{ key: 'molWall', tab: 'molWall', label: 'Молдинг на стенах' },
 ];
 
 function calcObject() {
@@ -82,6 +86,10 @@ narrow: 'Узкие поверхности',
 corners: 'Углы',
 cornersOut: 'Углы наружные',
 cornersIn: 'Углы внутренние',
+molCornice: 'Карниз',
+molPlinth: 'Плинтус',
+molCeil: 'Молдинг на потолке',
+molWall: 'Молдинг на стенах',
 };
 function surfaceInvoiceLabel(item) {
 if (!item || !item.surface || item.surface === 'manual') return '';
@@ -371,6 +379,10 @@ try { localStorage.setItem(lastSurfaceStoreKey(), JSON.stringify(m)); } catch (e
 
 function suggestSurface(srv, has) {
 const n = String(srv.name || '').toLowerCase();
+// лепнина: потолочный плинтус — это карниз
+if (/карниз|галтел|потолочн\S* плинтус/.test(n) && has('molCornice')) return 'molCornice';
+if (/плинтус/.test(n) && has('molPlinth')) return 'molPlinth';
+if (/молдинг/.test(n) && (has('molCeil') || has('molWall'))) return /потол/.test(n) && has('molCeil') ? 'molCeil' : has('molWall') ? 'molWall' : 'molCeil';
 if (/угл|уголк/.test(n) && has('corners')) return /наруж/.test(n) && has('cornersOut') ? 'cornersOut' : /внутр/.test(n) && has('cornersIn') ? 'cornersIn' : 'corners';
 if (/откос/.test(n) && has('slopes')) return 'slopes';
 if (/плитк|кафел|фартук|панел/.test(n) && has('parts')) return 'parts';
