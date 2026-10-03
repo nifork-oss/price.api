@@ -177,10 +177,12 @@ return { i, q, poly, span: sp, cutA, cutB, outerLen: Math.hypot(s1[0] - s0[0], s
 
 // Кромка полосы для чертежа: внутренняя кромка, а где элемент обрывается
 // посреди стены — ещё и торец (на стыках «на ус» и у соседней стены торец не нужен)
-function ceilStripEdge(p, X, Y) {
+function ceilStripEdgePts(p) {
 const [s0, s1, b, a] = p.poly;
-return (p.cutA ? `M${X(s0[0])} ${Y(s0[1])}L${X(a[0])} ${Y(a[1])}` : `M${X(a[0])} ${Y(a[1])}`) +
-`L${X(b[0])} ${Y(b[1])}` + (p.cutB ? `L${X(s1[0])} ${Y(s1[1])}` : '');
+return [...(p.cutA ? [s0] : []), a, b, ...(p.cutB ? [s1] : [])];
+}
+function ceilStripEdge(p, X, Y) {
+return 'M' + ceilStripEdgePts(p).map(([x, y]) => `${X(x)} ${Y(y)}`).join('L');
 }
 
 function ceilElsCompute(m) {
@@ -459,6 +461,8 @@ renderMeasure();
 }
 
 function closeMeasure() {
+if (cpFull) { cpFull = false; document.body.classList.remove('cp-full-open'); }
+cpZoom = 1; cpPan = { x: 0, y: 0 }; cpRot = 0;
 if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; rulerPick = null; if (typeof rlEditBase !== "undefined") rlEditBase = null; rlZoom = 1; rlPan = { x: 0, y: 0 }; rlUnderlayAdjust = false; rlLastFit = null; }
 document.getElementById('measurePanel').classList.remove('ruler-open');
 document.getElementById('measurePanel').classList.remove('open');
@@ -651,7 +655,7 @@ set('mpCalcCeilEls', [r.lines.ceilEls, r.lines.ceilingNet].filter(Boolean).map(e
 const e = (r.ceilEls || []).find(x => x.idx === i);
 set('mpCeilElRes' + i, e ? (e.type === 'box' ? `${mFmt(e.len)} пог. м · ${mFmt(e.total)} м²` : `${mFmt(e.len)} пог. м`) : '');
 });
-if (measureTab === 'ceiling') set('mpCeilPlan', ceilPlanSvg(measure, r));
+if (measureTab === 'ceiling') renderCeilPlan();
 (measure.parts || []).forEach((pt, i) => {
 const l = mNum(pt.l), h = mNum(pt.h);
 set('mpPartArea' + i, l && h ? `${mFmt(l * h)} м²` : '');
@@ -717,6 +721,7 @@ let measureCeilPick = 'ceiling';
 function setCeilPick(p) { measureCeilPick = p; updateMeasureOutputs(); }
 
 function setMeasureTab(tab) {
+if (cpFull) cpToggleFull(false);
 if (typeof rulerTarget !== 'undefined' && rulerTarget) { rulerTarget = null; document.getElementById('measurePanel').classList.remove('ruler-open'); }
 measureTab = tab;
 saveMeasureDraft();
@@ -844,7 +849,7 @@ if (!(ceilElActive >= 0 && ceilElActive < els.length)) ceilElActive = els.length
 return `<section class="mp-sec">
 <div class="mp-sec-title">Ниши и короба</div>
 <div class="mp-hint">Закарнизная ниша или короб из ГКЛ вдоль стен: отметьте стены, укажите ширину от стены и высоту. Попадут на чертёж и в обмерный план.</div>
-${hasWalls && els.length ? `<div class="mp-ce-plan" id="mpCeilPlan"></div>
+${hasWalls && els.length ? `<div class="mp-ce-plan rl-sketch${cpFull ? ' full' : ''}" id="mpCeilPlan"></div>
 <div class="mp-hint mp-ce-plan-hint">Касание стены на чертеже добавляет её к выделенному элементу или убирает; касание полосы — выделяет элемент.</div>` : ''}
 ${els.map((el, i) => {
 const isBox = el.type === 'box';
@@ -968,12 +973,14 @@ if (card) setCeilElActive(Number(card.dataset.ce));
 
 // Касание стены на чертеже — добавить её к выделенному элементу или убрать
 function ceilPlanWallTap(wi) {
+if (cpDragged) { cpDragged = false; return; }
 const els = measure.ceilEls || [];
 if (!els[ceilElActive]) return;
 toggleCeilElWall(ceilElActive, wi);
 }
 // Касание полосы: чужая — выделить элемент, своя — убрать эту стену из элемента
 function ceilPlanStripTap(idx, wi) {
+if (cpDragged) { cpDragged = false; return; }
 if (idx !== ceilElActive) {
 ceilElActive = idx;
 renderMeasure();
@@ -984,27 +991,124 @@ return;
 toggleCeilElWall(idx, wi);
 }
 
+/* ---------- чертёж потолка: приближение, перемещение, поворот, весь экран ---------- */
+let cpZoom = 1, cpPan = { x: 0, y: 0 }, cpRot = 0, cpFull = false, cpDragged = false, cpLastHtml = '';
+const CP_W = 340;
+function cpSize(box) {
+// во весь экран — по пропорциям экрана, иначе обычная рамка
+if (cpFull && box && box.clientWidth > 0 && box.clientHeight > 0) return { W: CP_W, H: Math.round(CP_W * box.clientHeight / box.clientWidth) };
+return { W: CP_W, H: 270 };
+}
+function renderCeilPlan() {
+const box = document.getElementById('mpCeilPlan');
+if (!box || !measure) { if (cpFull) { cpFull = false; document.body.classList.remove('cp-full-open'); } return; }
+const r = computeMeasure(measure);
+const { W, H } = cpSize(box);
+const svg = ceilPlanSvg(measure, r, W, H);
+const moved = Math.abs(cpZoom - 1) > 0.01 || Math.abs(cpPan.x) > 1 || Math.abs(cpPan.y) > 1;
+const els = measure.ceilEls || [];
+const act = (r.ceilEls || []).find(e => e.idx === ceilElActive);
+const cap = cpFull ? `<div class="cp-caption">${act ? `Выделено: <b>${escapeHtml(act.code)}</b> ${act.type === 'box' ? 'короб' : 'ниша'} · касание стены добавляет или убирает её` : (els.length ? 'Коснитесь полосы, чтобы выделить нишу или короб' : '')}</div>` : '';
+box.innerHTML = `${svg}<div class="rl-zoom cp-zoom">
+<button type="button" onclick="cpZoomBy(1.6)" aria-label="Приблизить">+</button>
+<button type="button" onclick="cpZoomBy(1 / 1.6)" aria-label="Отдалить">−</button>
+<button type="button" onclick="cpRotate()" aria-label="Повернуть на 90°">⟳</button>
+${moved ? '<button type="button" onclick="cpReset()" aria-label="Весь чертёж">⤢</button>' : ''}
+<button type="button" onclick="cpToggleFull()" aria-label="${cpFull ? 'Закрыть' : 'Во весь экран'}">${cpFull ? '✕' : '⛶'}</button>
+</div>${cap}`;
+cpBindPanZoom(box);
+}
+function cpZoomBy(f) { cpZoom = Math.min(6, Math.max(0.5, cpZoom * f)); renderCeilPlan(); }
+function cpReset() { cpZoom = 1; cpPan = { x: 0, y: 0 }; renderCeilPlan(); }
+function cpRotate() { cpRot = (cpRot + 90) % 360; cpPan = { x: 0, y: 0 }; renderCeilPlan(); }
+function cpToggleFull(on) {
+cpFull = typeof on === 'boolean' ? on : !cpFull;
+const box = document.getElementById('mpCeilPlan');
+if (box) box.classList.toggle('full', cpFull);
+document.body.classList.toggle('cp-full-open', cpFull);
+renderCeilPlan();
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cpFull) cpToggleFull(false); });
+window.addEventListener('resize', () => { if (cpFull) renderCeilPlan(); });
+
+// Палец — двигаем, два пальца — масштаб, колесо мыши — масштаб.
+// Касания стен и полос после перетаскивания не срабатывают.
+function cpBindPanZoom(box) {
+if (box.dataset.pz) return;
+box.dataset.pz = '1';
+const pts = new Map();
+let start = null;
+const unit = () => (CP_W / cpZoom) / (box.clientWidth || CP_W);
+box.addEventListener('pointerdown', (e) => {
+if (e.target.closest('.cp-zoom')) return;
+if (e.isPrimary) pts.clear();
+pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+start = { pan: { ...cpPan }, zoom: cpZoom, pts: new Map(pts), moved: false };
+cpDragged = false;
+});
+box.addEventListener('pointermove', (e) => {
+if (!pts.has(e.pointerId) || !start) return;
+pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+if (pts.size === 1 && start.pts.size === 1) {
+const p0 = start.pts.get(e.pointerId); if (!p0) return;
+const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
+if (!start.moved && Math.hypot(dx, dy) < 6) return;
+if (!start.moved) { try { box.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ } }
+start.moved = true; cpDragged = true;
+cpPan = { x: start.pan.x - dx * unit(), y: start.pan.y - dy * unit() };
+renderCeilPlan();
+} else if (pts.size === 2) {
+if (start.pts.size !== 2) { start = { pan: { ...cpPan }, zoom: cpZoom, pts: new Map(pts), moved: true }; return; }
+const a = [...pts.values()], b = [...start.pts.values()];
+const d1 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), d0 = Math.hypot(b[0].x - b[1].x, b[0].y - b[1].y) || 1;
+cpZoom = Math.min(6, Math.max(0.5, start.zoom * d1 / d0));
+start.moved = true; cpDragged = true;
+renderCeilPlan();
+}
+});
+const end = (e) => {
+pts.delete(e.pointerId);
+if (!pts.size) start = null;
+else start = { pan: { ...cpPan }, zoom: cpZoom, pts: new Map(pts), moved: true };
+};
+box.addEventListener('pointerup', end);
+box.addEventListener('pointercancel', end);
+box.addEventListener('wheel', (e) => {
+e.preventDefault();
+cpZoom = Math.min(6, Math.max(0.5, cpZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+renderCeilPlan();
+}, { passive: false });
+}
+
 // Чертёж на вкладке «Потолок»: стены с длинами, ниши и короба с размерами,
-// у выделенного элемента — углы А/Б и отступ от угла
-function ceilPlanSvg(m, r) {
+// у выделенного элемента — углы А/Б и отступ от угла.
+// Поворот — на 90°, подписи остаются читаемыми; масштаб не меняет размер подписей.
+function ceilPlanSvg(m, r, W = CP_W, H = 270) {
 let g;
 try { g = rulerGeometry(m); } catch (e) { return ''; }
 if (!g || !g.segs.length) return '';
-const W = 340, H = 270, P = 44;
-const xs = [0, ...g.segs.map(q => q.x2)], ys = [0, ...g.segs.map(q => q.y2)];
+const P0 = 44;
+const R = cpRot;
+const rot = ([x, y]) => R === 90 ? [-y, x] : R === 180 ? [-x, -y] : R === 270 ? [y, -x] : [x, y];
+const raw = [[0, 0], ...g.segs.map(q => [q.x2, q.y2])].map(rot);
+const xs = raw.map(p => p[0]), ys = raw.map(p => p[1]);
 const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-const k = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
+const k = Math.min((W - 2 * P0) / Math.max(maxX - minX, 0.5), (H - 2 * P0) / Math.max(maxY - minY, 0.5));
 const ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
-const X = v => ox + v * k, Y = v => oy + v * k;
+const z = cpZoom, vx = (W - W / z) / 2 + cpPan.x, vy = (H - H / z) / 2 + cpPan.y;
+// точка комнаты (м) → экран; направление стены → экран
+const P = (x, y) => { const [rx, ry] = rot([x, y]); return [(ox + rx * k - vx) * z, (oy + ry * k - vy) * z]; };
+const D = q => rot([q.dx, q.dy]);
+const kz = k * z;                                  // пикселей на метр
 const o = g.orient || 1;
+const path = list => 'M' + list.map(([x, y]) => P(x, y).join(' ')).join('L');
+const angOf = d => { let a = Math.atan2(d[1], d[0]) * 180 / Math.PI; if (a > 90) a -= 180; if (a <= -90) a += 180; return a; };
 const els = Array.isArray(m.ceilEls) ? m.ceilEls : [];
 const act = els[ceilElActive] ? ceilElActive : -1;
 let out = '', top = '', hits = '';
-const pts = [[0, 0], ...g.segs.map(q => [q.x2, q.y2])];
-if (g.closed) out += `<path d="M${pts.map(p => `${X(p[0])} ${Y(p[1])}`).join('L')}Z" fill="#f6f7f9"/>`;
-// касание стен — под полосами
+if (g.closed) out += `<path d="${path([[0, 0], ...g.segs.map(q => [q.x2, q.y2])])}Z" fill="#f6f7f9"/>`;
 g.segs.forEach(q => {
-if (q.len > 0) hits += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="transparent" stroke-width="24" style="cursor:pointer" onclick="ceilPlanWallTap(${q.i})"><title>Стена ${q.i + 1}</title></path>`;
+if (q.len > 0) hits += `<path d="${path([[q.x1, q.y1], [q.x2, q.y2]])}" stroke="transparent" stroke-width="24" style="cursor:pointer" onclick="ceilPlanWallTap(${q.i})"><title>Стена ${q.i + 1}</title></path>`;
 });
 const list = (r.ceilEls || []).slice().sort((a, b) => (a.idx === act) - (b.idx === act)); // выделенный — сверху
 list.forEach(e => {
@@ -1012,25 +1116,25 @@ const box = e.type === 'box', on = e.idx === act;
 const fill = box ? (on ? '#ffd166' : '#ffe7a3') : (on ? '#9cc3f5' : '#cfe3ff');
 const ink = box ? '#7a5a00' : '#1f4f8f';
 e.strips.forEach(p => {
-out += `<path d="M${p.poly.map(([x, y]) => `${X(x)} ${Y(y)}`).join('L')}Z" fill="${fill}" ${on ? `stroke="${ink}" stroke-width="1"` : 'stroke="none"'}/>`;
-out += `<path d="${ceilStripEdge(p, X, Y)}" fill="none" stroke="${ink}" stroke-width="1.4" stroke-dasharray="5 3"/>`;
-hits += `<path d="M${p.poly.map(([x, y]) => `${X(x)} ${Y(y)}`).join('L')}Z" fill="transparent" stroke="transparent" stroke-width="8" style="cursor:pointer" onclick="ceilPlanStripTap(${e.idx}, ${p.i})"><title>${escapeHtml(e.code)}</title></path>`;
+out += `<path d="${path(p.poly)}Z" fill="${fill}" ${on ? `stroke="${ink}" stroke-width="1"` : 'stroke="none"'}/>`;
+out += `<path d="${path(ceilStripEdgePts(p))}" fill="none" stroke="${ink}" stroke-width="1.4" stroke-dasharray="5 3"/>`;
+hits += `<path d="${path(p.poly)}Z" fill="transparent" stroke="transparent" stroke-width="8" style="cursor:pointer" onclick="ceilPlanStripTap(${e.idx}, ${p.i})"><title>${escapeHtml(e.code)}</title></path>`;
 });
 // подпись: код, ширина, длина — у самой длинной полосы, внутри комнаты
 const p = e.strips.slice().sort((a, b) => b.innerLen - a.innerLen)[0];
 if (!p) return;
-const q = p.q, nx = -q.dy * o, ny = q.dx * o;
-const mx = (p.inner[0][0] + p.inner[1][0]) / 2, my = (p.inner[0][1] + p.inner[1][1]) / 2;
-const ang = (() => { let a = Math.atan2(q.dy, q.dx) * 180 / Math.PI; if (a > 90) a -= 180; if (a <= -90) a += 180; return a; })();
-const tx = X(mx) + nx * 11, ty = Y(my) + ny * 11;
+const d = D(p.q), nx = -d[1] * o, ny = d[0] * o;
+const [mx, my] = P((p.inner[0][0] + p.inner[1][0]) / 2, (p.inner[0][1] + p.inner[1][1]) / 2);
+const tx = mx + nx * 11, ty = my + ny * 11, ang = angOf(d);
 const txt = `${e.code} · ${mFmt(e.w)}${p.span ? ` · L ${mFmt(e.len)}` : ''}`;
 top += `<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="700" fill="${ink}" transform="rotate(${ang} ${tx} ${ty})" paint-order="stroke" stroke="#ffffff" stroke-width="3">${escapeHtml(txt)}</text>`;
 });
 // стены, их номера и длины — снаружи
 g.segs.forEach(q => {
-out += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="#14181f" stroke-width="3.5" stroke-linecap="square" ${q.empty ? 'stroke-dasharray="5 5" opacity=".35"' : ''}/>`;
+out += `<path d="${path([[q.x1, q.y1], [q.x2, q.y2]])}" stroke="#14181f" stroke-width="3.5" stroke-linecap="square" ${q.empty ? 'stroke-dasharray="5 5" opacity=".35"' : ''}/>`;
 if (!(q.len > 0)) return;
-const mx = (X(q.x1) + X(q.x2)) / 2 + q.dy * o * 16, my = (Y(q.y1) + Y(q.y2)) / 2 - q.dx * o * 16;
+const d = D(q), [ax, ay] = P(q.x1, q.y1), [bx, by] = P(q.x2, q.y2);
+const mx = (ax + bx) / 2 + d[1] * o * 16, my = (ay + by) / 2 - d[0] * o * 16;
 const t = `${q.i + 1}: ${mFmt(q.len)}`, wpx = t.length * 6.2 + 8;
 const used = act >= 0 && (els[act].walls || []).includes(q.i);
 top += `<rect x="${mx - wpx / 2}" y="${my - 8}" width="${wpx}" height="16" rx="3" fill="${used ? '#14181f' : '#ffffff'}" stroke="#14181f" stroke-width="1"/>`;
@@ -1040,10 +1144,10 @@ top += `<text x="${mx}" y="${my + 4}" text-anchor="middle" font-size="11" font-w
 const ae = (r.ceilEls || []).find(e => e.idx === act);
 const one = act >= 0 && Array.isArray(els[act].walls) && els[act].walls.length === 1 ? g.segs[els[act].walls[0]] : null;
 if (one && one.len > 0) {
-const q = one, nx = -q.dy * o, ny = q.dx * o;
+const q = one, d = D(q), nx = -d[1] * o, ny = d[0] * o;
 const fromEnd = els[act].from === 'end';
-[[q.x1, q.y1, 'А', !fromEnd, -1], [q.x2, q.y2, 'Б', fromEnd, 1]].forEach(([px, py, letter, on, sgn]) => {
-const cx = X(px) + nx * 14 + q.dx * sgn * 0, cy = Y(py) + ny * 14;
+[[q.x1, q.y1, 'А', !fromEnd], [q.x2, q.y2, 'Б', fromEnd]].forEach(([px, py, letter, on]) => {
+const [sx, sy] = P(px, py), cx = sx + nx * 14, cy = sy + ny * 14;
 top += `<circle cx="${cx}" cy="${cy}" r="9" fill="${on ? '#ffc83d' : '#ffffff'}" stroke="#14181f" stroke-width="1.3"/>`;
 top += `<text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="#14181f">${letter}</text>`;
 });
@@ -1052,10 +1156,12 @@ if (p && p.span) {
 const off = fromEnd ? q.len - p.span[1] : p.span[0];
 if (off > 0.0005) {
 const c0 = fromEnd ? q.len : 0, c1 = fromEnd ? p.span[1] : p.span[0];
-const d = (mNum(els[act].w) * k + 16) / k;      // за кромкой полосы
-const sx = q.x1 + q.dx * c0 + nx * d, sy = q.y1 + q.dy * c0 + ny * d, ex = q.x1 + q.dx * c1 + nx * d, ey = q.y1 + q.dy * c1 + ny * d;
-top += `<path d="M${X(sx)} ${Y(sy)}L${X(ex)} ${Y(ey)}" stroke="#e8a900" stroke-width="2.5"/>`;
-top += `<text x="${(X(sx) + X(ex)) / 2 + nx * 11}" y="${(Y(sy) + Y(ey)) / 2 + ny * 11 + 4}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14181f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${mFmt(off)}</text>`;
+const wn = mNum(els[act].w) + 16 / kz;      // за кромкой полосы
+const wnx = -q.dy * o, wny = q.dx * o;
+const [sx, sy] = P(q.x1 + q.dx * c0 + wnx * wn, q.y1 + q.dy * c0 + wny * wn);
+const [ex, ey] = P(q.x1 + q.dx * c1 + wnx * wn, q.y1 + q.dy * c1 + wny * wn);
+top += `<path d="M${sx} ${sy}L${ex} ${ey}" stroke="#e8a900" stroke-width="2.5"/>`;
+top += `<text x="${(sx + ex) / 2 + nx * 11}" y="${(sy + ey) / 2 + ny * 11 + 4}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14181f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${mFmt(off)}</text>`;
 }
 }
 }
