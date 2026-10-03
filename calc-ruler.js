@@ -154,7 +154,7 @@ return own || mNum(m.height);
 
 // Где проём по высоте (метры от пола): [низ, верх]
 function openingVert(o, wallH) {
-const h = mNum(o.h);
+const h = o.type === 'balcony' ? winH(o) : mNum(o.h);
 if (o.type === 'door') return { y0: 0, y1: h, guess: false };
 if (o.type === 'balcony') {
 const dh = mNum(o.dh);
@@ -226,7 +226,7 @@ out += `<rect x="${xL}" y="${Yh(v.y1)}" width="${xR - xL}" height="${(v.y1 - v.y
 if (!isDoor) out += `<path d="M${(xL + xR) / 2} ${Yh(v.y1)}V${Yh(v.y0)}M${xL} ${Yh((v.y0 + v.y1) / 2)}H${xR}" stroke="${col}" stroke-width=".8" ${v.guess ? 'stroke-dasharray="3 3"' : ''}/>`;
 }
 // высота проёма — подпись внутри
-const label = o.type === 'balcony' ? `${mFmt(mNum(o.h))} / ${mFmt(mNum(o.dh))}` : mFmt(mNum(o.h));
+const label = o.type === 'balcony' ? `${mFmt(winH(o))} / ${mFmt(mNum(o.dh))}` : mFmt(mNum(o.h));
 out += `<text x="${(xL + xR) / 2}" y="${Yh((v.y0 + v.y1) / 2) - 6}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14181f">${o.type === 'door' ? 'дверь' : o.type === 'balcony' ? 'балк.' : 'окно'}</text>`;
 out += `<text x="${(xL + xR) / 2}" y="${Yh((v.y0 + v.y1) / 2) + 9}" text-anchor="middle" font-size="11" fill="#586270">↕ ${label}</text>`;
 // подоконник — размер от пола
@@ -261,7 +261,7 @@ out += `<text x="${xh - 4}" y="${(yF + Yh(Hh)) / 2}" text-anchor="middle" font-s
 out += `<rect x="${xh - 20}" y="${Yh(Hh)}" width="30" height="${Hh * k}" fill="transparent" style="cursor:pointer" onclick="rulerEdit('wallH', ${i})"><title>Высота этой стены</title></rect>`;
 box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Развёртка стены ${i + 1}" font-family="inherit">${out}</svg>`;
 // площадь стены
-const opsArea = ops.reduce((a, { o }) => a + (o.type === 'balcony' ? mNum(o.w) * mNum(o.h) + mNum(o.dw) * mNum(o.dh) : mNum(o.w) * mNum(o.h)) * mCount(o.n), 0);
+const opsArea = ops.reduce((a, { o }) => a + (o.type === 'balcony' ? mNum(o.w) * winH(o) + mNum(o.dw) * mNum(o.dh) : mNum(o.w) * mNum(o.h)) * mCount(o.n), 0);
 const sum = document.getElementById('rlElevSum');
 if (sum) sum.innerHTML = `Стена ${i + 1}: ${mFmt(L)} × ${mFmt(Hh)} = <b>${mFmt(L * Hh)} м²</b>${opsArea > 0 ? ` − проёмы ${mFmt(opsArea)} = <b>${mFmt(L * Hh - opsArea)} м²</b>` : ''}`;
 const nav = document.getElementById('rlElevNav');
@@ -762,7 +762,8 @@ renderRulerPad();
 
 // Поля проёма по порядку ввода
 function rulerOpFields(o) {
-const f = o && o.type === 'balcony' ? ['w', 'h', 'dw', 'dh'] : o && o.type === 'door' ? ['w', 'h'] : ['w', 'h', 'sill'];
+// балконный блок: высоту окна не меряем — она = дверь до верха − подоконник
+const f = o && o.type === 'balcony' ? ['w', 'dw', 'dh', 'sill'] : o && o.type === 'door' ? ['w', 'h'] : ['w', 'h', 'sill'];
 if (o && typeof o.wall === 'number') f.push('off');
 return f;
 }
@@ -779,8 +780,8 @@ const name = o.type === 'door' ? 'Дверь' : o.type === 'balcony' ? 'Балк
 const fl = {
 w: o.type === 'balcony' ? 'окно, ширина ↔' : 'ширина ↔',
 h: o.type === 'balcony' ? 'окно, высота ↕' : 'высота ↕',
-dw: 'дверь, ширина ↔', dh: 'дверь, высота ↕',
-sill: 'подоконник, от пола, м — можно пропустить',
+dw: 'дверь, ширина ↔', dh: o.type === 'balcony' ? 'дверь, высота до верха ↕' : 'дверь, высота ↕',
+sill: o.type === 'balcony' ? 'окно от пола до низа — высота окна посчитается сама' : 'подоконник, от пола, м — можно пропустить',
 off: `отступ от угла ${o.from === 'end' ? 'Б' : 'А'}, м — можно пропустить`,
 }[t.field] || '';
 return `${name}${where} · ${fl}`;

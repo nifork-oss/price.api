@@ -77,6 +77,14 @@ const mCount = raw => { const s = String(raw == null ? '' : raw).trim(); if (!s)
 const typeLabel = t => t === 'door' ? 'дверь' : t === 'balcony' ? 'балк. блок' : 'окно';
 // Ширина проёма целиком (у балконного блока — окно + дверь)
 const openingWidth = o => o.type === 'balcony' ? mNum(o.w) + mNum(o.dw) : mNum(o.w);
+// Высота окна балконного блока: верх окна вровень с верхом двери, поэтому
+// если задан подоконник (от пола до низа окна) — высота окна = дверь − подоконник.
+// Иначе — высота окна, введённая напрямую (так было раньше).
+const hasSill = o => o && o.sill !== undefined && o.sill !== null && String(o.sill).trim() !== '';
+const winH = o => {
+if (o && o.type === 'balcony' && hasSill(o)) return Math.max(0, mNum(o.dh) - Math.max(0, evalMeasureExpr(o.sill) || 0));
+return mNum(o && o.h);
+};
 // Погонный метр: кусок короче метра считается за 1 пог. м, длиннее — как есть
 const minLen = v => (v > 0 && v < 1 ? 1 : v);
 const fmtMin = v => (v > 0 && v < 1 ? `1*` : mFmt(v));
@@ -106,7 +114,7 @@ r.lines.walls = `Стены: ${partsText.join(' + ')} = ${mFmt(r.wallsGross)} м
 r.lines.walls = `Периметр: ${wallList.map(w => mFmt(w.l)).join(' + ')} = ${mFmt(perim)} м · укажите высоту стен`;
 }
 
-const ops = m.openings.map(o => ({ type: o.type, w: mNum(o.w), h: mNum(o.h), dw: mNum(o.dw), dh: mNum(o.dh), n: mCount(o.n), slopes: o.slopes !== false }))
+const ops = m.openings.map(o => ({ type: o.type, w: mNum(o.w), h: winH(o), dw: mNum(o.dw), dh: mNum(o.dh), n: mCount(o.n), slopes: o.slopes !== false }))
 .filter(o => o.w > 0 && o.h > 0 && o.n > 0 && (o.type !== 'balcony' || (o.dw > 0 && o.dh > 0)));
 // Балконный блок: площадь окна + площадь двери
 const opArea = o => o.type === 'balcony' ? o.w * o.h + o.dw * o.dh : o.w * o.h;
@@ -337,14 +345,17 @@ ${m.openings.map((o, i) => `<div class="mp-open">
 <button type="button" class="mp-del" onclick="removeMeasureRow('openings', ${i})" aria-label="Убрать проём">✕</button>
 </div>
 <div class="mp-dims">
-<label>Ширина ↔${mIn(`openings.${i}.w`, o.w, '1,4')}</label><span class="mp-x">×</span>
-<label>Высота ↕${mIn(`openings.${i}.h`, o.h, o.type === 'door' ? '2,1' : '1,5')}</label><span class="mp-x">×</span>
+<label>${o.type === 'balcony' ? 'Окно, ширина ↔' : 'Ширина ↔'}${mIn(`openings.${i}.w`, o.w, '1,4')}</label><span class="mp-x">×</span>
+${o.type === 'balcony' && (hasSill(o) || !String(o.h || '').trim())
+? `<label>Окно от пола ↕${mIn(`openings.${i}.sill`, o.sill, '0,9')}</label><span class="mp-x">·</span>`
+: `<label>Высота ↕${mIn(`openings.${i}.h`, o.h, o.type === 'door' ? '2,1' : '1,5')}</label><span class="mp-x">×</span>`}
 <label>Шт.${mIn(`openings.${i}.n`, o.n, '1', 'inputmode="numeric"')}</label>
 </div>
 ${o.type === 'balcony' ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;">
 <label>Дверь, ширина ↔${mIn(`openings.${i}.dw`, o.dw, '0,8')}</label><span class="mp-x">×</span>
-<label>Дверь, высота ↕${mIn(`openings.${i}.dh`, o.dh, '2,1')}</label>
-</div>` : ''}
+<label>Дверь, высота до верха ↕${mIn(`openings.${i}.dh`, o.dh, '2,1')}</label>
+</div>
+${hasSill(o) ? `<div class="mp-hint" style="margin:6px 0 0;">Окно по высоте: <b>${mFmt(winH(o))} м</b> — до верха двери</div>` : ''}` : ''}
 ${m.walls.length ? `<div class="mp-place">
 <label>На плане
 <select onchange="setOpeningWall(${i}, this.value)">

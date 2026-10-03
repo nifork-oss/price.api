@@ -290,11 +290,11 @@ s += T(X(cx), Y(cy) - 2, name, 3.4, 700);
 s += T(X(cx), Y(cy) + 3, `S = ${plM2(area)} м²`, 3, 400);
 if (mNum(m.height)) s += T(X(cx), Y(cy) + 7.5, `h = ${plMm(mNum(m.height))}`, 2.7, 400, 'middle', '#333');
 }
-const loose = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => typeof o.wall !== 'number' && mNum(o.w) && mNum(o.h));
+const loose = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => typeof o.wall !== 'number' && mNum(o.w) && (o.type === 'balcony' ? winH(o) : mNum(o.h)));
 if (loose.length) {
 s += T(box.x, box.y + box.h - 1, 'Без привязки к стене: ' + loose.map(({ o, oi }) =>
 (o.type === 'balcony'
-? `Б-${oi + 1} окно ${plMm(mNum(o.w))}×${plMm(mNum(o.h))} + дверь ${plMm(mNum(o.dw))}×${plMm(mNum(o.dh))}`
+? `Б-${oi + 1} окно ${plMm(mNum(o.w))}×${plMm(winH(o))} + дверь ${plMm(mNum(o.dw))}×${plMm(mNum(o.dh))}`
 : `${o.type === 'door' ? 'Д' : 'О'}-${oi + 1} ${plMm(mNum(o.w))}×${plMm(mNum(o.h))}`) + (mCount(o.n) !== 1 ? ' ×' + mCount(o.n) : '')).join(', '), 2.6, 400, 'start', '#444');
 }
 return { svg: s, scale };
@@ -337,7 +337,7 @@ function plRoomRow(room) {
 const m = room.measure;
 const r = computeMeasure(m);
 const g = plRoomPolygon(m);
-const ops = (m.openings || []).filter(o => mNum(o.w) && mNum(o.h));
+const ops = (m.openings || []).filter(o => mNum(o.w) && (o.type === 'balcony' ? winH(o) : mNum(o.h)));
 const win = ops.filter(o => o.type !== 'door' && o.type !== 'balcony').reduce((a, o) => a + mCount(o.n), 0);
 const door = ops.filter(o => o.type === 'door').reduce((a, o) => a + mCount(o.n), 0);
 const balc = ops.filter(o => o.type === 'balcony').reduce((a, o) => a + mCount(o.n), 0);
