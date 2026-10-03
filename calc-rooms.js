@@ -20,6 +20,7 @@ const SURFACES = [
 { key: 'ceilNiche', tab: 'ceilNiche', label: 'Закарнизные ниши' },
 { key: 'ceilBox', tab: 'ceilBox', label: 'Короба, длина' },
 { key: 'ceilBoxArea', tab: 'ceilBoxArea', label: 'Короба, площадь' },
+{ key: 'ceilLight', tab: 'ceilLight', label: 'Подсветка' },
 { key: 'slopes', tab: 'slopes', label: 'Откосы' },
 { key: 'narrow', tab: 'narrow', label: 'Узкие' },
 ];
@@ -69,6 +70,7 @@ ceilingNet: 'Потолок без ниш и коробов',
 ceilNiche: 'Закарнизные ниши',
 ceilBox: 'Короба',
 ceilBoxArea: 'Короба',
+ceilLight: 'Подсветка',
 slopes: 'Откосы',
 narrow: 'Узкие поверхности',
 };
@@ -362,6 +364,7 @@ function suggestSurface(srv, has) {
 const n = String(srv.name || '').toLowerCase();
 if (/откос/.test(n) && has('slopes')) return 'slopes';
 if (/плитк|кафел|фартук|панел/.test(n) && has('parts')) return 'parts';
+if (/подсвет|светодиод|led|лент/.test(n) && has('ceilLight')) return 'ceilLight';
 if (/ниш/.test(n) && has('ceilNiche')) return 'ceilNiche';
 if (/короб/.test(n) && has('ceilBox')) return srv.unit === 'пог. м' ? 'ceilBox' : 'ceilBoxArea';
 if (/натяж/.test(n) && has('ceilingNet')) return 'ceilingNet';

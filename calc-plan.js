@@ -152,7 +152,7 @@ const note = (t) => { s += `<text x="${x0}" y="${y}" font-family="${PL_FONT}" fo
 note('Размеры на чертежах — в миллиметрах, по внутренним поверхностям стен.');
 note('Площадь пола считается по контуру, если комната сошлась при замере.');
 note('Окна и двери показаны на стене, к которой привязаны при замере; положение вдоль стены условное.');
-if (rows.some(r => r.ceilEls)) note('Ниши (Н) и короба (К) потолка — штриховой линией: ширина от стены × высота, L — длина по стенам.');
+if (rows.some(r => r.ceilEls)) note('Ниши (Н) и короба (К) потолка — штриховой линией: ширина от стены × высота, L — длина по стенам; точки — подсветка.');
 s += plFrame(info, 1, sheetCount, 'Экспликация помещений');
 return s;
 }
@@ -200,6 +200,8 @@ const isBox = e.type === 'box';
 e.strips.forEach(p => {
 s += `<path d="M${p.poly.map(([x, y]) => `${X(x)} ${Y(y)}`).join('L')}Z" fill="${isBox ? '#efe9d6' : '#e3ecf8'}" stroke="none"/>`;
 s += `<path d="${ceilStripEdge(p, X, Y)}" fill="none" stroke="#000" stroke-width="0.3" stroke-dasharray="${isBox ? '2.4 0.8 0.4 0.8' : '1.4 0.9'}"/>`;
+// подсветка — точечная линия внутри полосы
+if (e.light) { const [l0, l1] = ceilLightPts(p); s += `<line x1="${X(l0[0])}" y1="${Y(l0[1])}" x2="${X(l1[0])}" y2="${Y(l1[1])}" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-dasharray="0.01 1.1"/>`; }
 });
 });
 // подписи — поверх всех полос
@@ -220,9 +222,11 @@ cur = Math.max(cur, a1);
 });
 }
 const t = p.span ? 0.5 : (best[0] + best[1]) / 2 / (q.len || 1);
-const mx = p.inner[0][0] + (p.inner[1][0] - p.inner[0][0]) * t + nx * (2.2 / k), my = p.inner[0][1] + (p.inner[1][1] - p.inner[0][1]) * t + ny * (2.2 / k);
+// у ниши над проёмом посередине стоит подпись проёма — отодвигаем дальше в комнату
+const lift = (e.overOp ? 6.5 : 2.2) / k;
+const mx = p.inner[0][0] + (p.inner[1][0] - p.inner[0][0]) * t + nx * lift, my = p.inner[0][1] + (p.inner[1][1] - p.inner[0][1]) * t + ny * lift;
 const ang = plTextAngle(q);
-const label = `${e.code} ${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
+const label = `${e.code} ${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}${e.light ? ' подсв.' : ''}`;
 s += T(X(mx), Y(my), label, 2.3, 700, 'middle', isBox ? '#5a4500' : '#1f3f73', `transform="rotate(${ang} ${X(mx)} ${Y(my)})" dominant-baseline="middle"`);
 // не на всю стену — размер от угла до начала элемента, за его кромкой
 const sp = e.strips.length === 1 ? e.strips[0].span : null;
@@ -350,8 +354,9 @@ ceilList.forEach(e => {
 const what = e.type === 'box' ? 'короб' : 'закарнизная ниша';
 const size = `${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
 const extra = e.type === 'box' ? `, низ ${plM2(e.area)}${e.h ? ` + борт ${plM2(e.side)}` : ''} м²` : '';
-const where = e.wallsTxt ? ` ${e.wallsTxt === 'по периметру' ? e.wallsTxt : '(' + e.wallsTxt + (e.partial ? `, от угла ${e.partial.corner} ${plMm(e.partial.off)}` : '') + ')'}` : '';
-s += T(box.x, ly, `${e.code} — ${what}${where}, ${size}, L = ${plMm(e.len)}${extra}`, 2.6, 400, 'start', '#222');
+const where = e.wallsTxt ? ` ${e.wallsTxt === 'по периметру' ? e.wallsTxt : '(' + e.wallsTxt + (e.overOp ? `, вынос ${plMm(e.overOp.ext)}` : '') + (e.partial ? `, от угла ${e.partial.corner} ${plMm(e.partial.off)}` : '') + ')'}` : '';
+const lightTxt = e.light ? `, с подсветкой ${plMm(e.lightLen)}` : '';
+s += T(box.x, ly, `${e.code} — ${what}${where}, ${size}, L = ${plMm(e.len)}${extra}${lightTxt}`, 2.6, 400, 'start', '#222');
 ly += 4.2;
 });
 }

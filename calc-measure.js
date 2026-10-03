@@ -106,13 +106,30 @@ const n = els.slice(0, idx + 1).filter(x => (x.type === 'box') === (e.type === '
 return (e.type === 'box' ? 'К-' : 'Н-') + n;
 };
 
+// Ниша над проёмом: el.overOp — номер окна или балконного блока, el.ext — вынос
+// за проём с каждой стороны. Стена и длина берутся от проёма: сдвинули окно — ниша следом.
+function ceilElOp(m, el) {
+if (!el || !Number.isInteger(el.overOp)) return null;
+const o = (Array.isArray(m.openings) ? m.openings : [])[el.overOp];
+return o && typeof o.wall === 'number' && openingWidth(o) > 0 ? o : null;
+}
+const opCode = (o, i) => (o.type === 'balcony' ? 'Б' : o.type === 'door' ? 'Д' : 'О') + '-' + (i + 1);
+
 // Элемент на одной стене может идти не от угла до угла: отступ от угла А или Б
 // (el.off, el.from) и длина по стене (el.span). Возвращает [начало, конец] вдоль стены
 // или null — если элемент на всю стену.
 const ceilElPartial = el => Array.isArray(el.walls) && el.walls.length === 1 &&
 (String(el.off == null ? '' : el.off).trim() !== '' || mNum(el.span) > 0);
-function ceilElSpan(el, L) {
-if (!ceilElPartial(el) || !(L > 0)) return null;
+function ceilElSpan(m, el, L) {
+if (!(L > 0)) return null;
+const op = ceilElOp(m, el);
+if (op) {
+const [a0, a1] = openingSpan(op, L);
+const ext = Math.max(0, evalMeasureExpr(el.ext) || 0);
+const sp = [Math.max(0, a0 - ext), Math.min(L, a1 + ext)];
+return sp[0] < 0.0005 && sp[1] > L - 0.0005 ? null : sp;
+}
+if (!ceilElPartial(el)) return null;
 const offRaw = String(el.off == null ? '' : el.off).trim();
 const off = Math.min(L, Math.max(0, offRaw === '' ? 0 : (evalMeasureExpr(offRaw) || 0)));
 const span = mNum(el.span);
@@ -120,9 +137,11 @@ if (el.from === 'end') { const e = L - off; return [span > 0 ? Math.max(0, e - s
 return [off, span > 0 ? Math.min(L, off + span) : L];
 }
 
-function ceilElWalls(el, g) {
+function ceilElWalls(m, el, g) {
 const n = g.segs.length;
-return [...new Set((Array.isArray(el.walls) ? el.walls : []).filter(i => Number.isInteger(i) && i >= 0 && i < n && g.segs[i].len > 0))].sort((a, b) => a - b);
+const op = ceilElOp(m, el);
+const list = op ? [op.wall] : (Array.isArray(el.walls) ? el.walls : []);
+return [...new Set(list.filter(i => Number.isInteger(i) && i >= 0 && i < n && g.segs[i].len > 0))].sort((a, b) => a - b);
 }
 
 // Полосы элемента по стенам: внешний край — стена, внутренний — на w внутрь комнаты.
@@ -130,13 +149,14 @@ return [...new Set((Array.isArray(el.walls) ? el.walls : []).filter(i => Number.
 function ceilElStrips(m, el, g) {
 const w = mNum(el.w);
 if (!g || !(w > 0)) return [];
-const walls = ceilElWalls(el, g);
+const walls = ceilElWalls(m, el, g);
 if (!walls.length) return [];
 const sel = new Set(walls);
 const n = g.segs.length, o = g.orient || 1;
 // короб упирается в кромку закарнизной ниши на соседней стене (ниша идёт от угла до угла)
+// (ниша на части стены, например над окном, короб не останавливает)
 const nicheW = j => el.type !== 'box' ? 0 : Math.max(0, ...(Array.isArray(m.ceilEls) ? m.ceilEls : [])
-.filter(e => e !== el && e.type !== 'box' && Array.isArray(e.walls) && e.walls.includes(j)).map(e => mNum(e.w)));
+.filter(e => e !== el && e.type !== 'box' && ceilElWalls(m, e, g).includes(j) && !ceilElSpan(m, e, g.segs[j].len)).map(e => mNum(e.w)));
 // пересечение стены q1, сдвинутой внутрь на d1, со стеной q2, сдвинутой на d2
 const cross = (q1, d1, q2, d2) => {
 const ax = q1.x1 - q1.dy * o * d1, ay = q1.y1 + q1.dx * o * d1;
@@ -156,7 +176,7 @@ const q = g.segs[i];
 const nx = -q.dy * o, ny = q.dx * o;
 const prev = near(i, -1), next = near(i, 1);
 // на часть стены: конец, не дошедший до угла, обрезан поперёк
-const sp = ceilElSpan(el, q.len);
+const sp = ceilElSpan(m, el, q.len);
 const cutA = !!sp && sp[0] > 0.0005, cutB = !!sp && sp[1] < q.len - 0.0005;
 const at = t => [q.x1 + q.dx * t, q.y1 + q.dy * t];
 let a = prev && !cutA ? cross(q, w, prev, sel.has(prev.i) ? w : nicheW(prev.i)) : null;
@@ -171,7 +191,7 @@ if (!cutB && next && !sel.has(next.i) && nicheW(next.i) > 0) s1 = cross(q, 0, ne
 const poly = [s0, s1, b, a];
 let a2 = 0;
 for (let k = 0; k < 4; k++) { const [x1, y1] = poly[k], [x2, y2] = poly[(k + 1) % 4]; a2 += x1 * y2 - x2 * y1; }
-return { i, q, poly, span: sp, cutA, cutB, outerLen: Math.hypot(s1[0] - s0[0], s1[1] - s0[1]), inner: [a, b], innerLen: Math.hypot(b[0] - a[0], b[1] - a[1]), area: Math.abs(a2) / 2 };
+return { i, q, poly, n: [nx, ny], span: sp, cutA, cutB, outerLen: Math.hypot(s1[0] - s0[0], s1[1] - s0[1]), inner: [a, b], innerLen: Math.hypot(b[0] - a[0], b[1] - a[1]), area: Math.abs(a2) / 2 };
 });
 }
 
@@ -181,12 +201,18 @@ function ceilStripEdgePts(p) {
 const [s0, s1, b, a] = p.poly;
 return [...(p.cutA ? [s0] : []), a, b, ...(p.cutB ? [s1] : [])];
 }
+// Линия подсветки: вдоль полосы, ближе к внутренней кромке
+function ceilLightPts(p) {
+const [s0, s1, b, a] = p.poly;
+const t = 0.35;
+return [[a[0] + (s0[0] - a[0]) * t, a[1] + (s0[1] - a[1]) * t], [b[0] + (s1[0] - b[0]) * t, b[1] + (s1[1] - b[1]) * t]];
+}
 function ceilStripEdge(p, X, Y) {
 return 'M' + ceilStripEdgePts(p).map(([x, y]) => `${X(x)} ${Y(y)}`).join('L');
 }
 
 function ceilElsCompute(m) {
-const out = { list: [], niche: 0, box: 0, boxArea: 0, strips: 0 };
+const out = { list: [], niche: 0, box: 0, boxArea: 0, strips: 0, light: 0 };
 const els = Array.isArray(m.ceilEls) ? m.ceilEls : [];
 if (!els.length) return out;
 let g = null;
@@ -194,7 +220,7 @@ try { if (typeof rulerGeometry === 'function' && Array.isArray(m.walls) && m.wal
 els.forEach((el, idx) => {
 const w = mNum(el.w), h = mNum(el.h);
 const strips = g ? ceilElStrips(m, el, g) : [];
-let len, innerLen, area, where, wallsTxt = '', partial = null;
+let len, innerLen, area, where, wallsTxt = '', partial = null, overOp = null;
 if (strips.length) {
 len = strips.reduce((a, p) => a + p.outerLen, 0);
 innerLen = strips.reduce((a, p) => a + p.innerLen, 0);
@@ -202,8 +228,12 @@ area = strips.reduce((a, p) => a + p.area, 0);
 const all = g.closed && strips.length === g.segs.length;
 wallsTxt = all ? 'по периметру' : `${strips.length > 1 ? 'стены' : 'стена'} ${strips.map(p => p.i + 1).join(', ')}`;
 const sp = strips.length === 1 ? strips[0].span : null;
-if (sp) partial = { corner: el.from === 'end' ? 'Б' : 'А', off: el.from === 'end' ? strips[0].q.len - sp[1] : sp[0] };
-where = all ? wallsTxt : `(${wallsTxt}${partial ? `, от угла ${partial.corner} ${mFmt(partial.off)}` : ''})`;
+const op = ceilElOp(m, el);
+if (op) {
+overOp = { code: opCode(op, el.overOp), ext: Math.max(0, evalMeasureExpr(el.ext) || 0) };
+wallsTxt += `, над ${overOp.code}`;
+} else if (sp) partial = { corner: el.from === 'end' ? 'Б' : 'А', off: el.from === 'end' ? strips[0].q.len - sp[1] : sp[0] };
+where = all ? wallsTxt : `(${wallsTxt}${overOp ? `, вынос ${mFmt(overOp.ext)}` : ''}${partial ? `, от угла ${partial.corner} ${mFmt(partial.off)}` : ''})`;
 } else {
 len = mNum(el.len);
 innerLen = len;
@@ -213,16 +243,21 @@ where = '';
 if (!(len > 0) || !(w > 0)) return;
 const code = ceilElCode(els, idx);
 const size = `${mFmt(w)}${h ? '×' + mFmt(h) : ''}`;
-const e = { idx, code, type: el.type === 'box' ? 'box' : 'niche', w, h, len, innerLen, area, strips, where, wallsTxt, partial, side: 0, total: 0 };
+const e = { idx, code, type: el.type === 'box' ? 'box' : 'niche', w, h, len, innerLen, area, strips, where, wallsTxt, partial, overOp, side: 0, total: 0 };
+// подсветка: у ниши — по её длине, у короба — по внутренней кромке
+e.light = !!el.light;
+e.lightLen = e.light ? (e.type === 'box' ? innerLen : len) : 0;
+out.light += e.lightLen;
+const lightTxt = e.light ? `, подсветка ${mFmt(e.lightLen)} пог. м` : '';
 if (e.type === 'box') {
 e.side = innerLen * h;                     // борт короба — по внутренней кромке
 e.total = area + e.side;
 out.box += len;
 out.boxArea += e.total;
-e.line = `${code} короб${where ? ' ' + where : ''} ${size}: длина ${mFmt(len)} пог. м, низ ${mFmt(area)}${h ? ` + борт ${mFmt(innerLen)}×${mFmt(h)} = ${mFmt(e.total)}` : ''} м²`;
+e.line = `${code} короб${where ? ' ' + where : ''} ${size}: длина ${mFmt(len)} пог. м, низ ${mFmt(area)}${h ? ` + борт ${mFmt(innerLen)}×${mFmt(h)} = ${mFmt(e.total)}` : ''} м²${lightTxt}`;
 } else {
 out.niche += len;
-e.line = `${code} закарнизная ниша${where ? ' ' + where : ''} ${size}: ${mFmt(len)} пог. м`;
+e.line = `${code} закарнизная ниша${where ? ' ' + where : ''} ${size}: ${mFmt(len)} пог. м${lightTxt}`;
 }
 out.strips += area;
 out.list.push(e);
@@ -353,6 +388,7 @@ r.ceilNiche = ce.niche;
 r.ceilBox = ce.box;
 r.ceilBoxArea = ce.boxArea;
 r.ceilStrips = ce.strips;
+r.ceilLight = ce.light;
 if (ce.list.length) {
 r.lines.ceilEls = ce.list.map(e => e.line).join('\n');
 if (r.ceiling > 0 && ce.strips > 0) {
@@ -388,6 +424,7 @@ if (tab === 'ceiling') return { value: r.ceiling, unit: 'м²', label: 'Пото
 if (tab === 'ceilingNet') return { value: r.ceilingNet, unit: 'м²', label: 'Потолок без ниш и коробов', text: [r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet].filter(Boolean).join('\n') };
 if (tab === 'ceilNiche') return { value: r.ceilNiche, unit: 'пог. м', label: 'Закарнизные ниши', text: (r.ceilEls || []).filter(e => e.type === 'niche').map(e => e.line).join('\n') };
 if (tab === 'ceilBox') return { value: r.ceilBox, unit: 'пог. м', label: 'Короба, длина', text: (r.ceilEls || []).filter(e => e.type === 'box').map(e => e.line).join('\n') };
+if (tab === 'ceilLight') return { value: r.ceilLight, unit: 'пог. м', label: 'Подсветка', text: (r.ceilEls || []).filter(e => e.light).map(e => e.line).join('\n') };
 if (tab === 'ceilBoxArea') return { value: r.ceilBoxArea, unit: 'м²', label: 'Короба, площадь', text: (r.ceilEls || []).filter(e => e.type === 'box').map(e => e.line).join('\n') };
 if (tab === 'slopes') return { value: r.slopesLen, unit: 'пог. м', label: 'Откосы', text: r.lines.slopesLen || '' };
 if (tab === 'narrow') return { value: r.narrow, unit: 'пог. м', label: 'Узкие поверхности', text: [r.lines.narrowWalls, r.lines.narrow, r.lines.narrowTotal].filter(Boolean).join('\n') };
@@ -654,6 +691,11 @@ set('mpCalcCeilEls', [r.lines.ceilEls, r.lines.ceilingNet].filter(Boolean).map(e
 (measure.ceilEls || []).forEach((el, i) => {
 const e = (r.ceilEls || []).find(x => x.idx === i);
 set('mpCeilElRes' + i, e ? (e.type === 'box' ? `${mFmt(e.len)} пог. м · ${mFmt(e.total)} м²` : `${mFmt(e.len)} пог. м`) : '');
+const op = ceilElOp(measure, el);
+if (op) {
+const ext = Math.max(0, evalMeasureExpr(el.ext) || 0);
+set('mpCeilElOver' + i, `Стена ${op.wall + 1}: проём ${mFmt(openingWidth(op))} + вынос 2 × ${mFmt(ext)}${e ? ` = <b>${mFmt(e.len)} м</b>` : ''}${e && Math.abs(e.len - (openingWidth(op) + 2 * ext)) > 0.001 ? ' (упирается в угол)' : ''}`);
+}
 });
 if (measureTab === 'ceiling') renderCeilPlan();
 (measure.parts || []).forEach((pt, i) => {
@@ -694,7 +736,7 @@ const opt = (key, label, val) => `<button type="button" class="${measureWallsPic
 pick = `<div class="mp-pick">${opt('walls', 'Стены', r.openingsArea > 0 ? r.wallsNet : r.wallsGross)}${opt('parts', 'Участки', r.parts)}${opt('wallsMinus', 'Стены − участки', r.wallsMinusParts)}</div>`;
 } else if (measureTab === 'ceiling' && ceilHasEls && measureTarget.kind !== 'room') {
 const opt = (key, label, val, unit) => `<button type="button" class="${measureCeilPick === key ? 'active' : ''}" onclick="setCeilPick('${key}')">${label}<br><b>${mFmt(val)}</b> ${unit}</button>`;
-pick = `<div class="mp-pick">${opt('ceiling', 'Потолок', r.ceiling, 'м²')}${r.ceilingNet > 0 ? opt('ceilingNet', 'Без ниш/коробов', r.ceilingNet, 'м²') : ''}${r.ceilNiche > 0 ? opt('ceilNiche', 'Ниши', r.ceilNiche, 'пог. м') : ''}${r.ceilBox > 0 ? opt('ceilBox', 'Короба', r.ceilBox, 'пог. м') + opt('ceilBoxArea', 'Короба', r.ceilBoxArea, 'м²') : ''}</div>`;
+pick = `<div class="mp-pick">${opt('ceiling', 'Потолок', r.ceiling, 'м²')}${r.ceilingNet > 0 ? opt('ceilingNet', 'Без ниш/коробов', r.ceilingNet, 'м²') : ''}${r.ceilNiche > 0 ? opt('ceilNiche', 'Ниши', r.ceilNiche, 'пог. м') : ''}${r.ceilBox > 0 ? opt('ceilBox', 'Короба', r.ceilBox, 'пог. м') + opt('ceilBoxArea', 'Короба', r.ceilBoxArea, 'м²') : ''}${r.ceilLight > 0 ? opt('ceilLight', 'Подсветка', r.ceilLight, 'пог. м') : ''}</div>`;
 } else if (measureTab === 'walls') {
 sub = r.openingsArea > 0 ? `Стены ${mFmt(r.wallsGross)} − проёмы ${mFmt(r.openingsArea)} м²` : (r.perimeter ? `Периметр ${mFmt(r.perimeter)} м` : 'Введите высоту и длину стен');
 if (r.parts > 0) sub += ` · участки ${mFmt(r.parts)} м²`;
@@ -800,6 +842,7 @@ focusMeasurePath(kind === 'ceiling' ? `ceiling.${last}.l` : kind === 'parts' ? `
 
 function removeMeasureRow(kind, i) {
 measure[kind].splice(i, 1);
+if (kind === 'openings') remapCeilElOpsAfterRemove(measure, i);
 if (kind === 'walls' && Array.isArray(measure.wallHeights)) measure.wallHeights.splice(i, 1);
 if (kind !== 'openings' && kind !== 'parts' && kind !== 'ceilEls' && measure[kind].length === 0) measure[kind].push(kind === 'ceiling' ? { l: '', w: '' } : '');
 saveMeasureDraft();
@@ -855,14 +898,22 @@ ${els.map((el, i) => {
 const isBox = el.type === 'box';
 const sel = new Set(Array.isArray(el.walls) ? el.walls : []);
 const all = hasWalls && walls.every((w, wi) => !(mNum(w) > 0) || sel.has(wi));
-const one = sel.size === 1 ? [...sel][0] : -1;
+const op = ceilElOp(m, el);
+const one = !op && sel.size === 1 ? [...sel][0] : -1;
+// проёмы, над которыми можно поставить нишу: окна и балконные блоки на стенах
+const ops = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => o.type !== 'door' && typeof o.wall === 'number' && openingWidth(o) > 0);
 return `<div class="mp-open mp-ce-card${i === ceilElActive ? ' active' : ''}" data-ce="${i}">
 <div class="mp-open-top">
 <button type="button" class="mp-type" onclick="toggleCeilElType(${i})" aria-label="Сменить: ниша или короб">${escapeHtml(ceilElCode(els, i))} ${isBox ? 'Короб' : 'Ниша'} ▾</button>
 <span class="mp-open-area" id="mpCeilElRes${i}"></span>
 <button type="button" class="mp-del" onclick="removeMeasureRow('ceilEls', ${i})" aria-label="Убрать">✕</button>
 </div>
-${hasWalls ? `<div class="mp-ce-walls"><span class="mp-ce-walls-label">Стены:</span>
+${!isBox && ops.length ? `<div class="mp-place mp-ce-over"><label>Над проёмом
+<select onchange="setCeilElOver(${i}, this.value)">
+<option value="">нет — по стенам</option>
+${ops.map(({ o, oi }) => `<option value="${oi}" ${el.overOp === oi ? 'selected' : ''}>${opCode(o, oi)} ${o.type === 'balcony' ? 'балк. блок' : 'окно'} ${mFmt(openingWidth(o))} · стена ${o.wall + 1}</option>`).join('')}
+</select></label></div>` : ''}
+${hasWalls && !op ? `<div class="mp-ce-walls"><span class="mp-ce-walls-label">Стены:</span>
 ${walls.map((w, wi) => mNum(w) > 0 ? `<button type="button" class="mp-ce-wall${sel.has(wi) ? ' on' : ''}" onclick="toggleCeilElWall(${i}, ${wi})" aria-pressed="${sel.has(wi)}">${wi + 1}</button>` : '').join('')}
 <button type="button" class="mp-ce-wall mp-ce-all${all ? ' on' : ''}" onclick="setCeilElAllWalls(${i})">все</button>
 </div>` : ''}
@@ -875,15 +926,22 @@ ${one >= 0 ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;">
 <label>Длина по стене ↔${mIn(`ceilEls.${i}.span`, el.span, 'до угла')}</label>
 </div>
 <div class="mp-hint" style="margin:4px 0 0;">Не на всю стену — укажите отступ от угла и длину. Углы А и Б отмечены на чертеже. Пусто — от угла до угла.</div>` : ''}
-${!sel.size ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;">
+${op ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;">
+<label>Вынос за проём ↔${mIn(`ceilEls.${i}.ext`, el.ext, '0,2')}</label><span></span>
+<span class="mp-hint" style="margin:0;align-self:center;">с каждой стороны</span>
+</div>
+<div class="mp-hint" style="margin:4px 0 0;" id="mpCeilElOver${i}"></div>` : ''}
+${!op && !sel.size ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;">
 <label>Длина, м${mIn(`ceilEls.${i}.len`, el.len, '3,2+4,1')}</label><span></span><span class="mp-hint" style="margin:0;align-self:center;">${hasWalls ? 'или отметьте стены' : 'без чертежа — длиной'}</span>
 </div>` : ''}
+<label class="mp-check mp-ce-light"><input type="checkbox" ${el.light ? 'checked' : ''} onchange="setCeilElLight(${i}, this.checked)"><span>С подсветкой${isBox ? ' (по внутренней кромке)' : ''}</span></label>
 </div>`;
 }).join('')}
 <div class="mp-add-row">
 <button type="button" class="mp-add" onclick="addCeilEl('niche')">+ Закарнизная ниша</button>
 <button type="button" class="mp-add" onclick="addCeilEl('box')">+ Короб</button>
 </div>
+${(m.openings || []).some(o => o.type !== 'door' && typeof o.wall === 'number' && openingWidth(o) > 0) ? `<div class="mp-add-row"><button type="button" class="mp-add" onclick="addNichesOverWindows()">+ Ниши над окнами</button></div>` : ''}
 <div class="mp-calc" id="mpCalcCeilEls"></div>
 </section>`;
 }
@@ -925,6 +983,7 @@ function toggleCeilElWall(i, wi) {
 const el = measure.ceilEls[i];
 if (!el) return;
 ceilElActive = i;
+if (Number.isInteger(el.overOp)) { const op = ceilElOp(measure, el); delete el.overOp; el.walls = op ? [op.wall] : (el.walls || []); }
 const set = new Set(Array.isArray(el.walls) ? el.walls : []);
 if (set.has(wi)) set.delete(wi); else set.add(wi);
 el.walls = [...set].sort((a, b) => a - b);
@@ -957,6 +1016,62 @@ el.from = el.from === 'end' ? 'start' : 'end';
 ceilElActive = i;
 saveMeasureDraft();
 renderMeasure();
+}
+
+// Ниша над проёмом: стена и длина — от проёма, вводится только вынос
+function setCeilElOver(i, v) {
+const el = measure.ceilEls[i];
+if (!el) return;
+if (v === '') {
+// отвязали — остаётся на той же стене, на всю стену
+const op = ceilElOp(measure, el);
+delete el.overOp;
+if (op) el.walls = [op.wall];
+} else {
+el.overOp = Number(v);
+const op = ceilElOp(measure, el);
+if (op) el.walls = [op.wall];
+}
+ceilElActive = i;
+saveMeasureDraft();
+renderMeasure();
+if (v !== '') focusMeasurePath(`ceilEls.${i}.ext`);
+}
+
+// По нише над каждым окном и балконным блоком, у которых её ещё нет
+function addNichesOverWindows() {
+if (!Array.isArray(measure.ceilEls)) measure.ceilEls = [];
+const prev = [...measure.ceilEls].reverse().find(e => e.type !== 'box');
+const taken = new Set(measure.ceilEls.filter(e => Number.isInteger(e.overOp)).map(e => e.overOp));
+let added = 0;
+(measure.openings || []).forEach((o, oi) => {
+if (o.type === 'door' || typeof o.wall !== 'number' || !(openingWidth(o) > 0) || taken.has(oi)) return;
+measure.ceilEls.push({ type: 'niche', walls: [o.wall], overOp: oi, w: prev ? prev.w : '', h: prev ? prev.h : '', ext: prev && prev.ext != null ? prev.ext : '', light: prev ? !!prev.light : false });
+added++;
+});
+if (!added) { showAddToast('Над всеми окнами ниши уже есть'); return; }
+ceilElActive = measure.ceilEls.length - added;
+saveMeasureDraft();
+renderMeasure();
+showAddToast(added === 1 ? 'Ниша над окном добавлена — укажите вынос' : `Добавлено ниш над окнами: ${added} — укажите вынос`);
+focusMeasurePath(`ceilEls.${ceilElActive}.${prev && prev.w ? 'ext' : 'w'}`);
+}
+
+function setCeilElLight(i, on) {
+const el = measure.ceilEls[i];
+if (!el) return;
+el.light = !!on;
+saveMeasureDraft();
+updateMeasureOutputs();
+}
+
+// Проём убрали: ниши над ним остаются на стене, номера других проёмов сдвигаются
+function remapCeilElOpsAfterRemove(m, removed) {
+(Array.isArray(m.ceilEls) ? m.ceilEls : []).forEach(el => {
+if (!Number.isInteger(el.overOp)) return;
+if (el.overOp === removed) delete el.overOp;
+else if (el.overOp > removed) el.overOp -= 1;
+});
 }
 
 // Выделить элемент без перерисовки полей (чтобы не сбивать ввод)
@@ -1118,6 +1233,7 @@ const ink = box ? '#7a5a00' : '#1f4f8f';
 e.strips.forEach(p => {
 out += `<path d="${path(p.poly)}Z" fill="${fill}" ${on ? `stroke="${ink}" stroke-width="1"` : 'stroke="none"'}/>`;
 out += `<path d="${path(ceilStripEdgePts(p))}" fill="none" stroke="${ink}" stroke-width="1.4" stroke-dasharray="5 3"/>`;
+if (e.light) out += `<path d="${path(ceilLightPts(p))}" fill="none" stroke="#ff8c00" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="0.1 5"/>`;
 hits += `<path d="${path(p.poly)}Z" fill="transparent" stroke="transparent" stroke-width="8" style="cursor:pointer" onclick="ceilPlanStripTap(${e.idx}, ${p.i})"><title>${escapeHtml(e.code)}</title></path>`;
 });
 // подпись: код, ширина, длина — у самой длинной полосы, внутри комнаты
@@ -1126,7 +1242,7 @@ if (!p) return;
 const d = D(p.q), nx = -d[1] * o, ny = d[0] * o;
 const [mx, my] = P((p.inner[0][0] + p.inner[1][0]) / 2, (p.inner[0][1] + p.inner[1][1]) / 2);
 const tx = mx + nx * 11, ty = my + ny * 11, ang = angOf(d);
-const txt = `${e.code} · ${mFmt(e.w)}${p.span ? ` · L ${mFmt(e.len)}` : ''}`;
+const txt = `${e.code} · ${mFmt(e.w)}${p.span ? ` · L ${mFmt(e.len)}` : ''}${e.light ? ' · свет' : ''}`;
 top += `<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" font-size="11" font-weight="700" fill="${ink}" transform="rotate(${ang} ${tx} ${ty})" paint-order="stroke" stroke="#ffffff" stroke-width="3">${escapeHtml(txt)}</text>`;
 });
 // стены, их номера и длины — снаружи
@@ -1142,7 +1258,7 @@ top += `<text x="${mx}" y="${my + 4}" text-anchor="middle" font-size="11" font-w
 });
 // у выделенного элемента на одной стене — углы А/Б и отступ от угла
 const ae = (r.ceilEls || []).find(e => e.idx === act);
-const one = act >= 0 && Array.isArray(els[act].walls) && els[act].walls.length === 1 ? g.segs[els[act].walls[0]] : null;
+const one = act >= 0 && !ceilElOp(m, els[act]) && Array.isArray(els[act].walls) && els[act].walls.length === 1 ? g.segs[els[act].walls[0]] : null;
 if (one && one.len > 0) {
 const q = one, d = D(q), nx = -d[1] * o, ny = d[0] * o;
 const fromEnd = els[act].from === 'end';
@@ -1198,6 +1314,7 @@ if (r.parts > 0) p.push(`Участки ${mFmt(r.parts)} м²`);
 if (r.ceiling > 0) p.push(`Потолок ${mFmt(r.ceiling)} м²`);
 if (r.ceilNiche > 0) p.push(`Ниши ${mFmt(r.ceilNiche)} пог. м`);
 if (r.ceilBox > 0) p.push(`Короба ${mFmt(r.ceilBox)} пог. м`);
+if (r.ceilLight > 0) p.push(`Подсветка ${mFmt(r.ceilLight)} пог. м`);
 if (r.slopesLen > 0) p.push(`Откосы ${mFmt(r.slopesLen)} пог. м`);
 if (r.narrow > 0) p.push(`Узкие ${mFmt(r.narrow)} пог. м`);
 return p;
