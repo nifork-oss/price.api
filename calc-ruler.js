@@ -36,7 +36,8 @@ function rlTurns() { if (!Array.isArray(measure.turns)) measure.turns = []; retu
 /* ---------- отмена ---------- */
 function rulerSnapshot() {
 const m = measure;
-const snap = JSON.stringify({ shape: m.shape, height: m.height, walls: m.walls, wallHeights: m.wallHeights, turns: m.turns, openings: m.openings });
+// углы и начальное направление тоже — иначе после «Отменить» план мог перекоситься
+const snap = JSON.stringify({ shape: m.shape, height: m.height, walls: m.walls, wallHeights: m.wallHeights, turns: m.turns, angles: m.angles || [], startHeading: m.startHeading || 0, openings: m.openings });
 if (rulerUndo[rulerUndo.length - 1] !== snap) rulerUndo.push(snap);
 if (rulerUndo.length > 50) rulerUndo.shift();
 }
@@ -67,7 +68,7 @@ const turns = shape === 'L' ? RL_L_TURNS : shape === 'rect' ? ['R', 'R', 'R', 'R
 const ph = shape === 'L' ? RL_L_PLACEHOLDER : shape === 'rect' ? RL_RECT_PLACEHOLDER : null;
 // Курс в градусах: 0 — вправо, +90 — вниз (поворот направо по часовой)
 const turnDeg = i => rlTurnDeg(m, i, turns, shape);
-let x = 0, y = 0, hd = 0;
+let x = 0, y = 0, hd = shape === 'free' ? (Number(m.startHeading) || 0) : 0;
 const segs = [];
 lens.forEach((L, i) => {
 const len = L > 0 ? L : (ph ? ph[i] * (real.length ? avg / 3 : 1) : avg * 0.6);
@@ -118,8 +119,9 @@ return mNum(m.walls[0]) && mNum(m.walls[1]) ? '<span class="rl-ok">Комнат�
 }
 if (!g.checkable) return '';
 if (g.checkClosed) return '<span class="rl-ok">Комната сошлась</span>';
-if (rulerTarget && rulerTarget.kind === 'wall') return `<span class="rl-wait">До угла ${mFmt(g.checkGap)} м</span>`;
-return `<span class="rl-bad">Не сходится на ${mFmt(g.checkGap)} м</span>`;
+if (rulerTarget && rulerTarget.kind === 'wall' && !rlEditBase) return `<span class="rl-wait">До угла ${mFmt(g.checkGap)} м</span>`;
+const fix = !rulerTarget && rlShape(measure) !== 'rect' ? rulerFixOption(-1) : null;
+return `<span class="rl-bad">Не сходится на ${mFmt(g.checkGap)} м</span>${fix ? ` <button type="button" class="rl-fix-inline" onclick="rulerApplyFix(-1)">${escapeHtml(fix.label)}</button>` : ''}`;
 }
 
 /* ---------- чертёж ---------- */
@@ -286,7 +288,8 @@ const g = rulerGeometry(m);
 const W = 320, H = 230, P = 38;
 const xs = [0, ...g.segs.map(s => s.x2)], ys = [0, ...g.segs.map(s => s.y2)];
 let ghost = null;
-if (shape === 'free' && g.filled === g.segs.length && !g.checkClosed && !rlEditBase) {
+const draftingLast = rulerTarget && rulerTarget.kind === 'wall' && rulerTarget.idx >= m.walls.length - 1;
+if (shape === 'free' && g.filled === g.segs.length && !g.checkClosed && !rlEditBase && draftingLast) {
 const gl = Math.max(g.avg * 0.45, 0.6);
 ghost = { x1: g.lastX, y1: g.lastY, x2: g.lastX + g.nextDir[0] * gl, y2: g.lastY + g.nextDir[1] * gl };
 xs.push(ghost.x2); ys.push(ghost.y2);
@@ -639,6 +642,8 @@ const hasData = measure.walls.some(w => mNum(w) > 0);
 if (hasData && !confirm('Сменить форму комнаты? Длины стен придётся ввести заново (можно отменить кнопкой ↶).')) return;
 rulerSnapshot();
 measure.shape = shape;
+measure.startHeading = 0;
+measure.angles = [];
 const n = shape === 'rect' ? 4 : shape === 'L' ? 6 : 1;
 measure.walls = Array(n).fill('');
 measure.wallHeights = Array(n).fill('');
@@ -1206,8 +1211,21 @@ m.walls.splice(b, 1);
 
 function rulerRemoveWall() {
 const t = rulerTarget; if (!t) return;
+rulerStartEditSession(); // прежний контур — для пунктира и неподвижного масштаба
 rulerSnapshot();
 const i = t.idx;
+// убираем первую стену — следующая продолжает идти в своём направлении, план не поворачивается
+if (i === 0 && measure.walls.length > 1) {
+const g0 = rulerGeometry(measure);
+if (g0.segs[1]) {
+measure.startHeading = g0.segs[1].heading;
+// план теперь начинается с конца убранной стены — сдвигаем и пунктир прежнего контура
+const sx = g0.segs[0].x2, sy = g0.segs[0].y2;
+if (rlEditBase) rlEditBase.pts = rlEditBase.pts.map(([px, py]) => [px - sx, py - sy]);
+// и неподвижный чертёж сдвигаем так же — комната остаётся на своём месте на экране
+if (rlLastFit) rlLastFit = { ...rlLastFit, ox: rlLastFit.ox + sx * rlLastFit.k, oy: rlLastFit.oy + sy * rlLastFit.k };
+}
+}
 // Поворот до убираемой стены и поворот после неё складываем в один —
 // тогда все следующие стены сохраняют своё направление, а не разворачиваются
 const shapeNow = rlShape(measure);
@@ -1235,8 +1253,20 @@ else if (typeof o.wall === 'number' && o.wall > i) o.wall -= 1;
 // соседи убранной стены оказались на одной прямой — склеиваем в одну стену
 let merged = 0;
 if (i > 0 && i < measure.walls.length && rulerIsStraight(i - 1)) { rulerMergeWalls(i - 1); merged++; }
+saveMeasureDraft();
+const closedNow = rulerGeometry(measure).closed;
+if (closedNow) {
 rulerClose();
-showAddToast(merged ? 'Стена убрана, соседние стены на одной прямой склеены — можно отменить ↶' : 'Стена убрана — можно отменить ↶');
+showAddToast(merged ? 'Стена убрана, соседние стены склеены' : 'Стена убрана');
+} else {
+// комната разошлась — остаёмся на соседней стене: внизу будет «Подогнать стену …»
+const nb = Math.max(0, Math.min(i - 1 < 0 ? 0 : i - 1, measure.walls.length - 1));
+rulerEdit('wall', nb);
+const gap = rulerGeometry(measure).gap;
+showAddToast(rulerFixOption(nb) || rulerFixOption(-1)
+? 'Стена убрана. Комната разошлась — внизу есть «Подогнать»'
+: `Стена убрана. Комната разошлась на ${mFmt(gap)} м — поправьте стены или отмените ↶`);
+}
 }
 
 document.addEventListener('keydown', (e) => {
