@@ -267,7 +267,9 @@ box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label
 // площадь стены
 const opsArea = ops.reduce((a, { o }) => a + (o.type === 'balcony' ? mNum(o.w) * winH(o) + mNum(o.dw) * mNum(o.dh) : mNum(o.w) * mNum(o.h)) * mCount(o.n), 0);
 const sum = document.getElementById('rlElevSum');
-if (sum) sum.innerHTML = `Стена ${i + 1}: ${mFmt(L)} × ${mFmt(Hh)} = <b>${mFmt(L * Hh)} м²</b>${opsArea > 0 ? ` − проёмы ${mFmt(opsArea)} = <b>${mFmt(L * Hh - opsArea)} м²</b>` : ''}`;
+if (sum) sum.innerHTML = L < 1
+? `Стена ${i + 1}: уже метра (${mFmt(L)} м) — узкая, считается по высоте: <b>${mFmt(minLen(Hh))} пог. м</b> (во вкладке «Узкие»)`
+: `Стена ${i + 1}: ${mFmt(L)} × ${mFmt(Hh)} = <b>${mFmt(L * Hh)} м²</b>${opsArea > 0 ? ` − проёмы ${mFmt(opsArea)} = <b>${mFmt(L * Hh - opsArea)} м²</b>` : ''}`;
 const nav = document.getElementById('rlElevNav');
 if (nav) nav.textContent = `Стена ${i + 1} из ${g.segs.length}`;
 }

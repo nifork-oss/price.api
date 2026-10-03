@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=f56ab8d9">
+<link rel="stylesheet" href="calc.css?v=64e9cc3e">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -138,8 +138,9 @@
 <div class="mp-head"><div class="mp-head-inner">
 <div class="mp-head-row">
 <div class="mp-title">Замер</div>
+<button type="button" class="mp-head-btn mp-room-save" id="mpRoomSaveBtn" onclick="quickSaveRoom()" style="display:none">Сохранить</button>
 <button type="button" class="mp-head-btn" id="mpNewBtn" onclick="startNewMeasure()">Новый</button>
-<button type="button" class="mp-head-btn mp-close" onclick="closeMeasure()" aria-label="Закрыть">✕</button>
+<button type="button" class="mp-head-btn mp-close" onclick="requestCloseMeasure()" aria-label="Закрыть">✕</button>
 </div>
 <div class="mp-meta">
 <input type="text" id="mpRoom" placeholder="Помещение: гостиная, кухня…" oninput="measure.room = this.value; saveMeasureDraft()">
@@ -562,11 +563,11 @@
 
 <script src="calc-app.js?v=d0bd0281"></script>
 
-<script src="calc-measure.js?v=46189d7c"></script>
+<script src="calc-measure.js?v=40de4f34"></script>
 
-<script src="calc-rooms.js?v=518eb558"></script>
+<script src="calc-rooms.js?v=8e6a71ad"></script>
 
-<script src="calc-ruler.js?v=7f2d9411"></script>
+<script src="calc-ruler.js?v=9105a928"></script>
 
 <script src="calc-plan.js?v=500db605"></script>
 

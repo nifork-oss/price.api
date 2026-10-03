@@ -99,9 +99,30 @@ const H = mNum(m.height);
 // У стены может быть своя высота (мансарда, перегородка не до потолка);
 // не указана — берётся общая высота помещения.
 const wh = Array.isArray(m.wallHeights) ? m.wallHeights : [];
-const wallList = m.walls.map((w, i) => ({ l: mNum(w), h: mNum(wh[i]) })).filter(w => w.l > 0);
-const perim = wallList.reduce((a, w) => a + w.l, 0);
+const allWalls = m.walls.map((w, i) => ({ l: mNum(w), h: mNum(wh[i]) })).filter(w => w.l > 0);
+const perim = allWalls.reduce((a, w) => a + w.l, 0);
 r.perimeter = perim;
+// Стенка уже метра — узкая полоса от пола до потолка: считается погонными
+// метрами по высоте (в «Узкие»), а не квадратными в площадь стен.
+// Одна стена, введённая суммой («3,2+4,1+…»), под правило не попадает — её длина больше метра.
+const narrowWalls = allWalls.filter(w => w.l < 1);
+const wallList = allWalls.filter(w => w.l >= 1);
+r.narrowWalls = 0;
+r.narrowWallsCount = narrowWalls.length;
+if (narrowWalls.length) {
+const byH = new Map();
+let noH = 0;
+narrowWalls.forEach(w => {
+const hh = w.h || H;
+if (!(hh > 0)) { noH++; return; }
+r.narrowWalls += minLen(hh);
+const key = mFmt(hh);
+const e = byH.get(key) || { hh, widths: [] };
+e.widths.push(w.l); byH.set(key, e);
+});
+const parts = [...byH.values()].map(e => `${e.widths.length > 1 ? `${e.widths.length} × ` : ''}${e.hh < 1 ? '1*' : mFmt(e.hh)}`);
+r.lines.narrowWalls = `Узкие стены (уже 1 м: ${narrowWalls.map(w => mFmt(w.l)).join('; ')}) — по высоте: ${parts.join(' + ')} = ${mFmt(r.narrowWalls)} пог. м${noH ? ' · укажите высоту стен' : ''}`;
+}
 const common = wallList.filter(w => !w.h);
 const own = wallList.filter(w => w.h);
 r.wallsGross = (H > 0 ? common.reduce((a, w) => a + w.l, 0) * H : 0) + own.reduce((a, w) => a + w.l * w.h, 0);
@@ -110,8 +131,8 @@ if (common.length && H > 0) partsText.push(common.length > 1 ? `(${common.map(w 
 own.forEach(w => partsText.push(`${mFmt(w.l)} × ${mFmt(w.h)}`));
 if (partsText.length && (!common.length || H > 0)) {
 r.lines.walls = `Стены: ${partsText.join(' + ')} = ${mFmt(r.wallsGross)} м²`;
-} else if (wallList.length) {
-r.lines.walls = `Периметр: ${wallList.map(w => mFmt(w.l)).join(' + ')} = ${mFmt(perim)} м · укажите высоту стен`;
+} else if (allWalls.length) {
+r.lines.walls = `Периметр: ${allWalls.map(w => mFmt(w.l)).join(' + ')} = ${mFmt(perim)} м · укажите высоту стен`;
 }
 
 const ops = m.openings.map(o => ({ type: o.type, w: mNum(o.w), h: winH(o), dw: mNum(o.dw), dh: mNum(o.dh), n: mCount(o.n), slopes: o.slopes !== false }))
@@ -188,9 +209,12 @@ r.lines.ceiling = `Потолок по контуру стен = ${mFmt(area)} �
 }
 
 const nar = m.narrow.map(mNum).filter(v => v > 0);
-r.narrow = nar.reduce((a, v) => a + minLen(v), 0);
+r.narrowManual = nar.reduce((a, v) => a + minLen(v), 0);
+// узкие стены из замера стен — туда же
+r.narrow = r.narrowManual + (r.narrowWalls || 0);
 const narHasMin = nar.some(v => v < 1);
-if (nar.length) r.lines.narrow = `Узкие поверхности: ${nar.map(fmtMin).join(' + ')} = ${mFmt(r.narrow)} пог. м${narHasMin ? MIN_NOTE : ''}`;
+if (nar.length) r.lines.narrow = `Узкие поверхности: ${nar.map(fmtMin).join(' + ')} = ${mFmt(r.narrowManual)} пог. м${narHasMin ? MIN_NOTE : ''}`;
+if (nar.length && r.narrowWalls > 0) r.lines.narrowTotal = `Узкие всего: ${mFmt(r.narrowManual)} + ${mFmt(r.narrowWalls)} = ${mFmt(r.narrow)} пог. м`;
 return r;
 }
 
@@ -208,7 +232,7 @@ text: [r.lines.walls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wall
 }
 if (tab === 'ceiling') return { value: r.ceiling, unit: 'м²', label: 'Потолок', text: r.lines.ceiling || '' };
 if (tab === 'slopes') return { value: r.slopesLen, unit: 'пог. м', label: 'Откосы', text: r.lines.slopesLen || '' };
-if (tab === 'narrow') return { value: r.narrow, unit: 'пог. м', label: 'Узкие поверхности', text: r.lines.narrow || '' };
+if (tab === 'narrow') return { value: r.narrow, unit: 'пог. м', label: 'Узкие поверхности', text: [r.lines.narrowWalls, r.lines.narrow, r.lines.narrowTotal].filter(Boolean).join('\n') };
 return { value: 0, unit: '', label: '', text: '' };
 }
 
@@ -216,7 +240,7 @@ return { value: 0, unit: '', label: '', text: '' };
 function measureDraftKey() { return 'measureDraft:' + (currentUser || ''); }
 function saveMeasureDraft() {
 measureDirty = true;
-if (measureTarget.kind === 'room') return;
+if (measureTarget.kind === 'room') { if (typeof updateRoomSaveBtn === 'function') updateRoomSaveBtn(); return; }
 try { localStorage.setItem(measureDraftKey(), JSON.stringify({ measure, measureTab, measureDirty })); } catch (e) { /* пусто */ }
 }
 function loadMeasureDraft() {
@@ -240,6 +264,7 @@ measureTarget = target || { kind: 'none' };
 const roomMode = measureTarget.kind === 'room';
 document.getElementById('mpNewBtn').style.display = roomMode ? 'none' : '';
 document.getElementById('mpSaveBtn').style.display = roomMode ? 'none' : '';
+document.getElementById('mpRoomSaveBtn').style.display = roomMode ? '' : 'none';
 // у помещения объект берётся из счёта — отдельный выбор не нужен
 document.getElementById('mpObject').style.display = roomMode ? 'none' : '';
 if (roomMode) {
@@ -252,6 +277,9 @@ document.getElementById('measurePanel').classList.add('open');
 document.body.classList.add('measure-open');
 fillMeasureObjectSelect();
 document.getElementById('mpRoom').value = measure.room || '';
+// у существующего помещения стартовое состояние — «сохранено»
+roomSavedJson = room ? roomStateJson() : null;
+updateRoomSaveBtn();
 renderMeasure();
 if (!room) setTimeout(() => document.getElementById('mpRoom').focus(), 50);
 return;
@@ -403,7 +431,10 @@ ${m.ceiling.map((c, i) => `<div class="mp-row">${mIn(`ceiling.${i}.l`, c.l, 'д�
 <div class="mp-calc" id="mpCalcCeiling"></div>
 </section>`;
 } else if (measureTab === 'slopes') {
-const valid = m.openings.map((o, i) => ({ o, i })).filter(({ o }) => mNum(o.w) > 0 && mNum(o.h) > 0);
+// проём годится, если у него есть размеры; у балконного блока высота окна может считаться из подоконника
+const valid = m.openings.map((o, i) => ({ o, i })).filter(({ o }) => o.type === 'balcony'
+? mNum(o.w) > 0 && winH(o) > 0 && mNum(o.dw) > 0 && mNum(o.dh) > 0
+: mNum(o.w) > 0 && mNum(o.h) > 0);
 if (!valid.length) {
 html += `<section class="mp-sec"><div class="mp-empty">Откосы считаются по окнам и дверям.<br>Сначала добавьте их на вкладке «Стены».</div>
 <button type="button" class="mp-link-btn" onclick="setMeasureTab('walls')">← К окнам и дверям</button></section>`;
@@ -411,9 +442,24 @@ html += `<section class="mp-sec"><div class="mp-empty">Откосы считаю
 html += `<section class="mp-sec">
 <div class="mp-sec-title">Какие проёмы с откосами</div>
 <div class="mp-hint">Каждый откос отдельно: левый + правый + верх. Откос короче метра считается за 1 пог. м.</div>
-${valid.map(({ o, i }) => `<label class="mp-check"><input type="checkbox" ${o.slopes !== false ? 'checked' : ''} onchange="setOpeningSlopes(${i}, this.checked)">
-<span>${o.type === 'door' ? 'Дверь' : 'Окно'} ширина ${mFmt(mNum(o.w))}, высота ${mFmt(mNum(o.h))}${mCount(o.n) !== 1 ? `, ${mFmt(mCount(o.n))} шт.` : ''}<br>
-откосы: ${slopeSidesText(mNum(o.h), mNum(o.w))}${mCount(o.n) !== 1 ? ` × ${mFmt(mCount(o.n))}` : ''} = <b>${mFmt((2 * minLen(mNum(o.h)) + minLen(mNum(o.w))) * mCount(o.n))} пог. м</b></span></label>`).join('')}
+${valid.map(({ o, i }) => {
+const n = mCount(o.n);
+let title, pieces;
+if (o.type === 'balcony') {
+const h = winH(o), dw = mNum(o.dw), dh = mNum(o.dh), w = mNum(o.w);
+title = `Балконный блок: окно ${mFmt(w)}×${mFmt(h)} + дверь ${mFmt(dw)}×${mFmt(dh)}`;
+// откосы общие: стойка у двери, стойка у окна, кусок под окном до пола, общий верх
+pieces = [dh, h, Math.max(0, dh - h), w + dw].filter(v => v > 0.0005);
+} else {
+title = `${o.type === 'door' ? 'Дверь' : 'Окно'} ширина ${mFmt(mNum(o.w))}, высота ${mFmt(mNum(o.h))}`;
+pieces = [mNum(o.h), mNum(o.h), mNum(o.w)];
+}
+const text = pieces.map(v => v < 1 ? '1*' : mFmt(v)).join(' + ');
+const sum = pieces.reduce((a, v) => a + minLen(v), 0) * n;
+return `<label class="mp-check"><input type="checkbox" ${o.slopes !== false ? 'checked' : ''} onchange="setOpeningSlopes(${i}, this.checked)">
+<span>${title}${n !== 1 ? `, ${mFmt(n)} шт.` : ''}<br>
+откосы: ${text}${n !== 1 ? ` × ${mFmt(n)}` : ''} = <b>${mFmt(sum)} пог. м</b></span></label>`;
+}).join('')}
 <div class="mp-calc" id="mpCalcSlopes"></div>
 </section>`;
 }
@@ -436,7 +482,7 @@ function updateMeasureOutputs() {
 if (typeof renderRulerSketch === 'function' && measureTab === 'walls') renderRulerSketch();
 const r = computeMeasure(measure);
 const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerHTML = v; };
-set('mpCalcWalls', r.lines.walls ? escapeHtml(r.lines.walls) : '');
+set('mpCalcWalls', [r.lines.walls, r.lines.narrowWalls].filter(Boolean).map(escapeHtml).join('<br>'));
 set('mpCalcOpenings', [r.lines.openings, r.lines.net].filter(Boolean).map(escapeHtml).join('<br>'));
 set('mpCalcCeiling', r.lines.ceiling ? escapeHtml(r.lines.ceiling) : '');
 set('mpCeilAuto', r.ceilingAuto
@@ -448,10 +494,12 @@ const l = mNum(pt.l), h = mNum(pt.h);
 set('mpPartArea' + i, l && h ? `${mFmt(l * h)} м²` : '');
 });
 set('mpCalcSlopes', r.lines.slopesLen ? escapeHtml(r.lines.slopesLen) : '');
-set('mpCalcNarrow', r.lines.narrow ? escapeHtml(r.lines.narrow) : '');
+set('mpCalcNarrow', [r.lines.narrowWalls, r.lines.narrow, r.lines.narrowTotal].filter(Boolean).map(escapeHtml).join('<br>'));
 measure.openings.forEach((o, i) => {
-const w = mNum(o.w), h = mNum(o.h), n = mCount(o.n);
-set('mpOpenArea' + i, w && h && n ? `${mFmt(w * h * n)} м²` : '');
+const w = mNum(o.w), n = mCount(o.n);
+// у балконного блока площадь — окно + дверь
+const area = o.type === 'balcony' ? w * winH(o) + mNum(o.dw) * mNum(o.dh) : w * mNum(o.h);
+set('mpOpenArea' + i, area > 0 && n ? `${mFmt(area * n)} м²` : '');
 });
 measure.ceiling.forEach((c, i) => {
 const l = mNum(c.l), w = mNum(c.w);
@@ -635,7 +683,7 @@ return list.sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedA
 
 function measureSummaryLines(m) {
 const r = computeMeasure(m);
-return [r.lines.walls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts, r.lines.ceiling, r.lines.slopesLen, r.lines.narrow].filter(Boolean);
+return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts, r.lines.ceiling, r.lines.slopesLen, r.lines.narrow].filter(Boolean);
 }
 
 function measurePills(m) {
