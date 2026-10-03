@@ -786,6 +786,12 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .ai-info { flex: 1; min-width: 0; font-size: 13px; }
 .ai-info .mp-name-in { width: 100%; margin-bottom: 4px; }
 .ai-meta { color: var(--s-ink2); margin-bottom: 2px; }
+
+.rl-ophint { font-size: 12.5px; color: var(--s-ink2); margin-top: 6px; line-height: 1.4; }
+.rl-ophint b { display: inline-block; width: 20px; height: 20px; line-height: 18px; text-align: center; border: 1.2px solid var(--s-ink); border-radius: 50%; background: #ffffff; color: var(--s-ink); font-size: 11px; margin-right: 4px; }
+
+.mp-ceil-auto { font-size: 13.5px; line-height: 1.45; color: var(--s-ink); background: var(--tape-l); border-left: 3px solid var(--tape-d); padding: 8px 10px; margin-bottom: 10px; border-radius: 4px; }
+.mp-ceil-auto:empty { display: none; }
 </style>
 </head>
 <body>
@@ -4219,7 +4225,26 @@ r.lines.wallsMinusParts = `Стены без участков: ${mFmt(wallsBase)
 
 const ceil = m.ceiling.map(c => ({ l: mNum(c.l), w: mNum(c.w) })).filter(c => c.l > 0 && c.w > 0);
 r.ceiling = ceil.reduce((a, c) => a + c.l * c.w, 0);
+r.ceilingAuto = false;
 if (ceil.length) r.lines.ceiling = `Потолок: ${ceil.map(c => `${mFmt(c.l)}×${mFmt(c.w)}`).join(' + ')} = ${mFmt(r.ceiling)} м²`;
+// Участки потолка не введены, а комната сошлась — потолок по контуру стен
+// (равен площади пола). Введённые вручную участки всегда главнее.
+if (!ceil.length && typeof rulerGeometry === 'function' && Array.isArray(m.walls) && m.walls.length >= 3) {
+try {
+const g = rulerGeometry(m);
+if (g.closed) {
+const pts = [[0, 0], ...g.segs.map(q => [q.x2, q.y2])];
+let a2 = 0;
+for (let i = 0; i < pts.length - 1; i++) a2 += pts[i][0] * pts[i + 1][1] - pts[i + 1][0] * pts[i][1];
+const area = Math.abs(a2) / 2;
+if (area > 0.01) {
+r.ceiling = area;
+r.ceilingAuto = true;
+r.lines.ceiling = `Потолок по контуру стен = ${mFmt(area)} м²`;
+}
+}
+} catch (e) { /* без чертежа — только ручной ввод */ }
+}
 
 const nar = m.narrow.map(mNum).filter(v => v > 0);
 r.narrow = nar.reduce((a, v) => a + minLen(v), 0);
@@ -4427,6 +4452,7 @@ ${(m.parts || []).map((pt, i) => `<div class="mp-open">
 } else if (measureTab === 'ceiling') {
 html += `<section class="mp-sec">
 <div class="mp-sec-title">Потолок</div>
+<div class="mp-ceil-auto" id="mpCeilAuto"></div>
 <div class="mp-hint">Сложный потолок — каждый прямоугольный участок отдельной строкой.</div>
 ${m.ceiling.map((c, i) => `<div class="mp-row">${mIn(`ceiling.${i}.l`, c.l, 'длина')}<span class="mp-x">×</span>${mIn(`ceiling.${i}.w`, c.w, 'ширина')}<span class="mp-row-res" id="mpCeilRes${i}"></span>${m.ceiling.length > 1 ? `<button type="button" class="mp-del" onclick="removeMeasureRow('ceiling', ${i})" aria-label="Убрать участок">✕</button>` : ''}</div>`).join('')}
 <div class="mp-add-row"><button type="button" class="mp-add" onclick="addMeasureRow('ceiling')">+ Участок</button></div>
@@ -4469,6 +4495,9 @@ const set = (id, v) => { const el = document.getElementById(id); if (el) el.inne
 set('mpCalcWalls', r.lines.walls ? escapeHtml(r.lines.walls) : '');
 set('mpCalcOpenings', [r.lines.openings, r.lines.net].filter(Boolean).map(escapeHtml).join('<br>'));
 set('mpCalcCeiling', r.lines.ceiling ? escapeHtml(r.lines.ceiling) : '');
+set('mpCeilAuto', r.ceilingAuto
+? `Комната сошлась — площадь потолка посчитана по контуру стен: <b>${mFmt(r.ceiling)} м²</b>. Если потолок сложный (короба, уровни), введите участки ниже — тогда посчитается по ним.`
+: '');
 set('mpCalcParts', [r.lines.parts, r.lines.wallsMinusParts].filter(Boolean).map(escapeHtml).join('<br>'));
 (measure.parts || []).forEach((pt, i) => {
 const l = mNum(pt.l), h = mNum(pt.h);
@@ -5420,7 +5449,22 @@ const mx = (X(s.x1) + X(s.x2)) / 2, my = (Y(s.y1) + Y(s.y2)) / 2;
 const own = mNum(wh[s.i]);
 const label = s.empty ? '' : mFmt(s.len) + (own ? ` ↕${mFmt(own)}` : '');
 if (label) out += `<text x="${mx + s.dy * 18 * o2}" y="${my - s.dx * 18 * o2 + 4}" text-anchor="middle" font-size="13.5" font-weight="${on ? 700 : 500}" fill="#14181f">${escapeHtml(label)}</text>`;
-const bx = mx - s.dy * 16 * o2, by = my + s.dx * 16 * o2;
+// номер стены: если середину стены занимает окно или дверь — сдвигаем к краю
+let bf = 0.5;
+const wlb = s.len > 0 ? s.len : Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+(m.openings || []).forEach(op => {
+if (op.wall !== s.i) return;
+const [p0, p1] = openingSpan(op, wlb);
+if (p0 <= wlb * 0.5 + 0.25 && p1 >= wlb * 0.5 - 0.25) {
+// в свободный промежуток; если проём выбран — с той стороны, где нет размера отступа
+const before = p0, after = wlb - p1;
+let side = before >= after ? 'before' : 'after';
+if (opSel === op) side = op.from === 'end' ? 'before' : 'after';
+bf = side === 'before' ? (p0 / 2) / wlb : (p1 + after / 2) / wlb;
+}
+});
+const bmx = X(s.x1 + (s.x2 - s.x1) * bf), bmy = Y(s.y1 + (s.y2 - s.y1) * bf);
+const bx = bmx - s.dy * 16 * o2, by = bmy + s.dx * 16 * o2;
 out += `<circle cx="${bx}" cy="${by}" r="9" fill="${on ? '#14181f' : '#ffffff'}" stroke="#14181f" stroke-width="1.2"/>`;
 out += `<text x="${bx}" y="${by + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="${on ? '#ffc83d' : '#14181f'}">${s.i + 1}</text>`;
 });
@@ -5451,9 +5495,14 @@ if (picked) out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#ffc83d" stroke-w
 out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#ffffff" stroke-width="9"/>`;
 // зона касания проёма — поверх стен
 opHits += `<path data-op="${oi}" d="M${ax} ${ay}L${bx} ${by}" stroke="transparent" stroke-width="28" stroke-linecap="round" style="cursor:grab" onclick="rulerOpTap(${oi})"><title>${o.type === 'door' ? 'Дверь' : o.type === 'balcony' ? 'Балконный блок' : 'Окно'} — коснитесь, чтобы изменить, тащите вдоль стены</title></path>`;
-if (picked) {
-const mx2 = (ax + bx) / 2, my2 = (ay + by) / 2, ix = -s.dy * 22 * o2, iy = s.dx * 22 * o2;
-out += `<text x="${mx2 + ix}" y="${my2 + iy + 5}" text-anchor="middle" font-size="15" font-weight="700" fill="#14181f">⇆</text>`;
+{
+// ручка прямо на проёме: видно, что его можно взять и потянуть
+// (не внутри комнаты — там она садилась на кружок с номером стены)
+const mx2 = (ax + bx) / 2, my2 = (ay + by) / 2, ix = 0, iy = 0;
+out += `<circle cx="${mx2 + ix}" cy="${my2 + iy}" r="11" fill="${picked ? '#ffc83d' : '#ffffff'}" stroke="#14181f" stroke-width="1.3"/>`;
+out += `<text x="${mx2 + ix}" y="${my2 + iy + 4.5}" text-anchor="middle" font-size="13" font-weight="700" fill="#14181f">⇆</text>`;
+// ручку тоже можно взять пальцем
+opHits += `<circle data-op="${oi}" cx="${mx2 + ix}" cy="${my2 + iy}" r="18" fill="transparent" style="cursor:grab" onclick="rulerOpTap(${oi})"/>`;
 }
 const part = (r0, r1, door) => {
 const [px, py] = P2(r0), [qx, qy] = P2(r1);
@@ -5537,6 +5586,14 @@ function rulerOpTap(i) {
 if (rlDragged) { rlDragged = false; return; }
 rulerEdit('op', i, 'w');
 }
+function rulerMoveOpening() {
+const t = rulerTarget; if (!t || t.kind !== 'op') return;
+rulerPick = { move: t.idx, type: measure.openings[t.idx].type };
+rulerTarget = null;
+document.getElementById('measurePanel').classList.remove('ruler-open');
+renderMeasure();
+}
+
 function rulerRemoveOpening() {
 const t = rulerTarget; if (!t || t.kind !== 'op') return;
 rulerSnapshot();
@@ -5720,9 +5777,10 @@ ${shape ? `<button type="button" class="rl-chip rl-shape-chip" onclick="rulerCha
 ${shape ? `<div class="rl-walls">${chips}</div>` : ''}
 ${shape ? underlayBarHtml() : ''}
 ${shape ? (rulerPick
-? `<div class="rl-pick"><span>Коснитесь стены, где ${rulerPick.type === 'door' ? 'дверь' : rulerPick.type === 'balcony' ? 'балконный блок' : 'окно'}, или выберите номер:</span> <button type="button" onclick="rulerCancelPick()">Отмена</button></div>
+? `<div class="rl-pick"><span>${rulerPick.move !== undefined ? 'Куда перенести? Коснитесь стены' : `Коснитесь стены, где ${rulerPick.type === 'door' ? 'дверь' : rulerPick.type === 'balcony' ? 'балконный блок' : 'окно'}`}, или выберите номер:</span> <button type="button" onclick="rulerCancelPick()">Отмена</button></div>
 <div class="rl-walls">${m.walls.map((w, i) => `<button type="button" class="rl-chip" onclick="rulerEdit('wall', ${i})">Стена ${i + 1}</button>`).join('')}</div>`
-: `<div class="rl-opbtns"><button type="button" onclick="rulerStartOpening('window')">+ Окно</button><button type="button" onclick="rulerStartOpening('door')">+ Дверь</button><button type="button" onclick="rulerStartOpening('balcony')">+ Балк. блок</button></div>`) : ''}
+: `<div class="rl-opbtns"><button type="button" onclick="rulerStartOpening('window')">+ Окно</button><button type="button" onclick="rulerStartOpening('door')">+ Дверь</button><button type="button" onclick="rulerStartOpening('balcony')">+ Балк. блок</button></div>
+${(m.openings || []).some(o => typeof o.wall === 'number') ? '<div class="rl-ophint"><b>⇆</b> Окно или дверь на чертеже: коснитесь — изменить размеры, потяните за ручку вдоль стены — сдвинуть.</div>' : ''}`) : ''}
 <div class="mp-calc" id="mpCalcWalls"></div>
 </section>`;
 }
@@ -5765,6 +5823,16 @@ renderMeasure();
 
 function rulerEdit(kind, idx, field) {
 // ждали касания стены, чтобы поставить окно или дверь
+if (rulerPick && kind === 'wall' && idx < measure.walls.length && rulerPick.move !== undefined) {
+const oi = rulerPick.move;
+rulerPick = null;
+rulerSnapshot();
+measure.openings[oi].wall = idx;
+measure.openings[oi].off = '';
+saveMeasureDraft();
+rulerEdit('op', oi, 'off');
+return;
+}
 if (rulerPick && kind === 'wall' && idx < measure.walls.length) {
 const type = rulerPick.type;
 rulerPick = null;
@@ -5871,6 +5939,7 @@ tools += `<span class="rl-turn-label">Дверь у:</span>
 <button type="button" class="rl-tool rl-turn${o.side !== 'end' ? ' on' : ''}" onclick="rulerSetOpSide('start')">угла А</button>
 <button type="button" class="rl-tool rl-turn${o.side === 'end' ? ' on' : ''}" onclick="rulerSetOpSide('end')">угла Б</button>`;
 }
+if (typeof o.wall === 'number') tools += `<button type="button" class="rl-tool" onclick="rulerMoveOpening()">На другую стену</button>`;
 tools += `<button type="button" class="rl-tool rl-tool-del" onclick="rulerRemoveOpening()">Убрать проём</button>`;
 }
 const toolsEl = document.getElementById('rlPadTools');
@@ -6032,6 +6101,13 @@ if (t.kind === 'op') {
 const f = rulerOpFields(measure.openings[t.idx]);
 const i = f.indexOf(t.field);
 if (i >= 0 && i < f.length - 1) { rulerEdit('op', t.idx, f[i + 1]); return; }
+// первый поставленный проём — подсказываем, как его менять
+try {
+if (!localStorage.getItem('hintOpDrag')) {
+localStorage.setItem('hintOpDrag', '1');
+setTimeout(() => showAddToast('Чтобы изменить — коснитесь проёма, чтобы сдвинуть — потяните за ручку ⇆'), 300);
+}
+} catch (e) { /* пусто */ }
 }
 if (t.kind === 'angle') { rulerEdit('wall', t.idx + 1); return; }
 if (t.kind === 'wallH') { rulerEdit('wall', t.idx); return; }
