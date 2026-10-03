@@ -5,9 +5,17 @@
 //
 // При каждом заметном обновлении сайта меняйте номер версии ниже —
 // старый кэш удалится, и у всех подтянутся новые файлы.
-const CACHE_NAME = 'prise-shell-v5';
+const CACHE_NAME = 'prise-shell-v6';
 const SHELL_FILES = [
   './calc.html',
+  './calc.css',
+  './calc-app.js',
+  './calc-measure.js',
+  './calc-rooms.js',
+  './calc-ruler.js',
+  './calc-plan.js',
+  './calc-import.js',
+  './calc-extras.js',
   './index.html',
   './view.html',
   './manifest.json',
@@ -52,7 +60,10 @@ self.addEventListener('fetch', (event) => {
   // Request с другими настройками — браузер выбрасывает ошибку. Поэтому для
   // страниц делаем обычный запрос по адресу с cache: 'no-cache'.
   const isPage = req.mode === 'navigate';
-  const doFetch = isPage
+  // Свои файлы сайта (страницы и части calc-*.js / calc.css) всегда сверяем
+  // с сервером — иначе новая страница могла бы взять старый кусок скрипта.
+  const own = url.origin === self.location.origin;
+  const doFetch = isPage || own
     ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
     : fetch(req);
 
@@ -67,7 +78,7 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() =>
-        caches.match(req, { ignoreSearch: isPage }).then((cached) => cached || Response.error())
+        caches.match(req, { ignoreSearch: isPage || own }).then((cached) => cached || Response.error())
       )
   );
 });
