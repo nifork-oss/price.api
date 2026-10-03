@@ -23,6 +23,11 @@
  *                     хранилище фото/файлов отчётов (cloudinary.com).
  *   Если Cloudinary не настроен, загрузка файлов вернёт понятную ошибку,
  *   а остальной сайт продолжит работать.
+ *   ANTHROPIC_API_KEY — необязательно: ключ API Anthropic (console.anthropic.com)
+ *                     для платного распознавания обмерных планов по фото.
+ *                     Без ключа кнопка «Распознать план» сообщит, что
+ *                     функция не настроена. Модель можно сменить
+ *                     переменной ANTHROPIC_MODEL.
  *
  * BIN_ID и разрешённые адреса сайта ниже захардкожены.
  */
@@ -624,6 +629,26 @@ const handler = {
       const auth = await getAuthUser(request, env);
       if (!auth) return json({ error: "Требуется вход" }, 401);
 
+      // Распознавание обмерного плана по картинке (платно, через Anthropic API)
+      if (path === "/recognize-plan" && request.method === "POST") {
+        if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
+        if (!env.ANTHROPIC_API_KEY) {
+          return json({ error: "Распознавание не настроено: добавьте в воркер секрет ANTHROPIC_API_KEY.", notConfigured: true }, 501);
+        }
+        if (await isRateLimited(env.AUTH_LIMITER, "ai:" + auth.login)) return tooManyRequests();
+        let body;
+        try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        const image = String((body && body.image) || "");
+        const mediaType = ["image/jpeg", "image/png", "image/webp"].includes(body && body.mediaType) ? body.mediaType : "image/jpeg";
+        if (!image || image.length > 7 * 1024 * 1024) return json({ error: "Картинка не передана или слишком большая" }, 400);
+        try {
+          const result = await recognizePlan(env, image, mediaType);
+          return json(result);
+        } catch (e) {
+          return json({ error: "Не удалось распознать план: " + (e && e.message ? e.message : e) }, 502);
+        }
+      }
+
       // Загрузка файла отчёта (фото/документ) в Cloudinary. Заказчику —
       // только просмотр, загружать и удалять файлы может мастер или админ.
       if (path === "/upload" && request.method === "POST") {
@@ -988,6 +1013,76 @@ const handler = {
   },
 };
 
+/* ============== распознавание обмерного плана ============== */
+
+const PLAN_PROMPT = `Это обмерный план квартиры или дома (чертёж, скриншот или фото).
+Нужно восстановить каждое помещение как замкнутый контур стен.
+
+Для каждого помещения:
+- обходи стены по часовой стрелке, начиная с верхнего левого угла; первая стена идёт вправо;
+- длина каждой стены — в метрах (на чертежах размеры обычно в миллиметрах: 3200 → 3.2);
+- после каждой стены укажи поворот к следующей: "R" — направо (по часовой), "L" — налево;
+- если угол между стенами явно не прямой — укажи внутренний угол в градусах в angle_deg, иначе null;
+- окна, двери и балконные блоки (окно с дверью в одном проёме) привяжи к стене по её номеру
+  в твоём порядке обхода (с нуля), с шириной, высотой (если указана) и отступом от начала стены (если указан).
+
+Если размер не подписан — оцени по масштабу и добавь предупреждение. Не выдумывай помещения, которых нет.
+
+Ответ — только JSON без пояснений и без markdown, строго такой формы:
+{"rooms":[{"name":"Гостиная","height_m":null,"walls":[{"length_m":4.6,"turn_after":"R","angle_deg":null}],
+"openings":[{"type":"window","wall_index":0,"width_m":1.4,"height_m":1.5,"door_width_m":null,"door_height_m":null,"offset_m":null}]}],
+"warnings":["..."]}
+type — одно из: "window", "door", "balcony" (для balcony width_m/height_m — окно, door_width_m/door_height_m — дверь).`;
+
+async function recognizePlan(env, image, mediaType) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
+      max_tokens: 4000,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
+          { type: "text", text: PLAN_PROMPT },
+        ],
+      }],
+    }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.error && data.error.message) || "сервис ответил " + res.status);
+  const text = (data.content || []).map((c) => (c.type === "text" ? c.text : "")).join("");
+  const clean = text.replace(/```json|```/g, "").trim();
+  const start = clean.indexOf("{"), end = clean.lastIndexOf("}");
+  if (start < 0 || end < 0) throw new Error("нейросеть не вернула данные");
+  return sanitizePlan(JSON.parse(clean.slice(start, end + 1)));
+}
+
+// Приводим ответ к строгому виду: только числа в разумных пределах
+function sanitizePlan(raw) {
+  const num = (v, min, max) => { const n = Number(v); return Number.isFinite(n) && n >= min && n <= max ? Math.round(n * 1000) / 1000 : null; };
+  const rooms = (Array.isArray(raw && raw.rooms) ? raw.rooms : []).slice(0, 40).map((r, i) => {
+    const walls = (Array.isArray(r && r.walls) ? r.walls : []).slice(0, 60)
+      .map((w) => ({ length_m: num(w && w.length_m, 0.01, 100), turn_after: w && w.turn_after === "L" ? "L" : "R", angle_deg: num(w && w.angle_deg, 1, 359) }))
+      .filter((w) => w.length_m);
+    const openings = (Array.isArray(r && r.openings) ? r.openings : []).slice(0, 60).map((o) => ({
+      type: ["window", "door", "balcony"].includes(o && o.type) ? o.type : "window",
+      wall_index: Number.isInteger(o && o.wall_index) && o.wall_index >= 0 && o.wall_index < walls.length ? o.wall_index : null,
+      width_m: num(o && o.width_m, 0.1, 20), height_m: num(o && o.height_m, 0.1, 10),
+      door_width_m: num(o && o.door_width_m, 0.1, 5), door_height_m: num(o && o.door_height_m, 0.1, 5),
+      offset_m: num(o && o.offset_m, 0, 100),
+    })).filter((o) => o.width_m);
+    return { name: String((r && r.name) || "Помещение " + (i + 1)).slice(0, 80), height_m: num(r && r.height_m, 1, 20), walls, openings };
+  }).filter((r) => r.walls.length >= 3);
+  const warnings = (Array.isArray(raw && raw.warnings) ? raw.warnings : []).map((w) => String(w).slice(0, 300)).slice(0, 20);
+  return { rooms, warnings };
+}
+
 /* ============== хранилище: Durable Object ============== */
 
 // Один экземпляр на весь сайт. Все запросы к данным проходят через него
@@ -1019,7 +1114,7 @@ export class Store {
 function needsStorage(request) {
   if (request.method === "OPTIONS") return false;
   const path = new URL(request.url).pathname;
-  return path !== "/upload" && path !== "/file";
+  return path !== "/upload" && path !== "/file" && path !== "/recognize-plan";
 }
 
 export default {

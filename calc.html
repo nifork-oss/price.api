@@ -772,6 +772,20 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .rl-zoom button { width: 34px; height: 34px; border: 1px solid var(--s-ink); border-radius: 6px; background: #ffffff; font-size: 18px; font-weight: 700; line-height: 1; color: var(--s-ink); cursor: pointer; }
 .rl-opbtns button { font-size: 14px; }
 .rl-pick span { flex: 1; }
+/* ===== подложка и распознавание ===== */
+.rl-ul-add { width: 100%; min-height: 40px; margin-top: 8px; border: 1px dashed var(--s-ink3); border-radius: 8px; background: #ffffff; font: 600 14px inherit; font-family: inherit; color: var(--s-ink2); cursor: pointer; }
+.rl-ul-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.rl-ul-panel { margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--tape-l); border: 1px solid var(--tape-d); }
+.rl-ul-hint { font-size: 13px; font-weight: 600; color: var(--s-ink); }
+.ai-btn { background: #ffffff; border: 1px dashed var(--s-ink3) !important; color: var(--s-ink2) !important; }
+.ai-warn { padding: 10px 12px; border-radius: 8px; background: #fff1ee; color: #7a2617; font-size: 13px; margin-bottom: 10px; line-height: 1.45; }
+.ai-hint { font-size: 13px; color: var(--s-ink2); margin-bottom: 10px; }
+.ai-room { display: flex; align-items: center; gap: 10px; padding: 10px; margin-bottom: 8px; border: 1px solid var(--s-line); border-radius: 8px; background: #ffffff; cursor: pointer; }
+.ai-room > input { width: 22px; height: 22px; accent-color: var(--s-ink); flex-shrink: 0; }
+.ai-sketch { flex-shrink: 0; background: #ffffff; border: 1px solid #eef1f4; border-radius: 4px; }
+.ai-info { flex: 1; min-width: 0; font-size: 13px; }
+.ai-info .mp-name-in { width: 100%; margin-bottom: 4px; }
+.ai-meta { color: var(--s-ink2); margin-bottom: 2px; }
 </style>
 </head>
 <body>
@@ -924,6 +938,24 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 </div></div>
 </div>
 
+<input type="file" id="ulFile" accept="image/*,application/pdf" style="display:none" onchange="handleUnderlayFile(this)">
+<input type="file" id="aiFile" accept="image/*,application/pdf" style="display:none" onchange="handleAiFile(this)">
+<div class="measure-panel" id="aiPanel" role="dialog" aria-modal="true" aria-label="Распознанный план">
+<div class="mp-head"><div class="mp-head-inner">
+<div class="mp-head-row">
+<div class="mp-title">Распознанный план</div>
+<button type="button" class="mp-head-btn mp-close" onclick="closeAiReview()" aria-label="Закрыть">✕</button>
+</div>
+</div></div>
+<div class="mp-body" id="aiBody"></div>
+<div class="mp-foot"><div class="mp-foot-inner">
+<div class="mp-actions" style="margin-top:0;">
+<button type="button" class="mp-btn" onclick="closeAiReview()">Отмена</button>
+<button type="button" class="mp-btn mp-btn-primary" onclick="applyAiRooms()">Добавить выбранные</button>
+</div>
+</div></div>
+</div>
+
 <div class="measure-panel" id="workPicker" role="dialog" aria-modal="true" aria-labelledby="wpTitle">
 <div class="mp-head"><div class="mp-head-inner">
 <div class="mp-head-row">
@@ -1035,6 +1067,7 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 <button type="button" class="measure-open-btn" id="addRoomBtn" onclick="addRoom()">+ Помещение</button>
 <button type="button" class="measure-open-btn plan-link" id="planBtn" onclick="const o = calcObject(); if (o) openPlanActions(o.id);" style="display:none;">Обмерный план</button>
 </div>
+<button type="button" class="measure-open-btn ai-btn" id="aiBtn" onclick="startPlanRecognition()" style="display:none;">Распознать план по фото (платно)</button>
 </section>
 <h2>Услуги без помещения</h2>
 <input type="text" id="searchCalcInput" class="search-box" placeholder="Поиск услуги для счета..." oninput="renderServices()">
@@ -4276,7 +4309,7 @@ renderMeasure();
 }
 
 function closeMeasure() {
-if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; rulerPick = null; rlZoom = 1; rlPan = { x: 0, y: 0 }; }
+if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; rulerPick = null; rlZoom = 1; rlPan = { x: 0, y: 0 }; rlUnderlayAdjust = false; rlLastFit = null; }
 document.getElementById('measurePanel').classList.remove('ruler-open');
 document.getElementById('measurePanel').classList.remove('open');
 document.body.classList.remove('measure-open');
@@ -4899,12 +4932,16 @@ list.innerHTML = '<div class="rooms-hint">Выберите объект выше
 if (addBtn) addBtn.style.display = 'none';
 const planBtnHide = document.getElementById('planBtn');
 if (planBtnHide) planBtnHide.style.display = 'none';
+const aiBtnHide = document.getElementById('aiBtn');
+if (aiBtnHide) aiBtnHide.style.display = 'none';
 return;
 }
 if (addBtn) addBtn.style.display = '';
 const rooms = objectRooms(obj);
 const planBtn = document.getElementById('planBtn');
 if (planBtn) planBtn.style.display = rooms.length ? '' : 'none';
+const aiBtnEl = document.getElementById('aiBtn');
+if (aiBtnEl) aiBtnEl.style.display = '';
 // убираем отметки с удалённых помещений
 selectedRoomIds = new Set([...selectedRoomIds].filter(id => rooms.some(r => r.id === id)));
 if (!rooms.length) {
@@ -5191,7 +5228,8 @@ ${canEdit ? `<button type="button" class="hc-btn hc-btn-more" style="flex:0 0 44
 return `<h2 style="margin-top:18px;">Помещения${rooms.length ? ` (${rooms.length})` : ''}</h2>
 ${list}
 ${canEdit ? `<button type="button" class="measure-open-btn" onclick="addRoom('${obj.id}')">+ Помещение</button>` : ''}
-${rooms.length ? `<button type="button" class="btn btn-primary plan-btn" onclick="openPlanActions('${obj.id}')">Обмерный план (PDF)</button>` : ''}`;
+${rooms.length ? `<button type="button" class="btn btn-primary plan-btn" onclick="openPlanActions('${obj.id}')">Обмерный план (PDF)</button>` : ''}
+${canEdit ? `<button type="button" class="measure-open-btn ai-btn" onclick="startPlanRecognition('${obj.id}')">Распознать план по фото (платно)</button>` : ''}`;
 }
 </script>
 
@@ -5333,9 +5371,16 @@ const gl = Math.max(g.avg * 0.45, 0.6);
 ghost = { x1: g.lastX, y1: g.lastY, x2: g.lastX + g.nextDir[0] * gl, y2: g.lastY + g.nextDir[1] * gl };
 xs.push(ghost.x2); ys.push(ghost.y2);
 }
+const ul = typeof getUnderlay === 'function' ? getUnderlay(m.id) : null;
+// подложку вписываем целиком только при подстройке (или пока стен нет);
+// в обычном режиме чертёж вписан по стенам, подложка — фоном
+if (ul && !ul.hidden && (rlUnderlayAdjust || !g.realCount)) underlayCorners(ul).forEach(([px, py]) => { xs.push(px); ys.push(py); });
 const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-const k = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
-const ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
+let k = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
+let ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
+// пока подстраиваем подложку, масштаб чертежа замираем — иначе она «плывёт» под пальцем
+if (rlUnderlayAdjust && rlLastFit) ({ k, ox, oy } = rlLastFit);
+rlLastFit = { k, ox, oy };
 // Приближение растягивает только саму комнату: цифры, номера и толщина
 // линий остаются обычного размера, поэтому в тесных местах подписи расходятся
 const z = rlZoom;
@@ -5356,6 +5401,13 @@ const gx0 = ((-vx * z) % step + step) % step, gy0 = ((-vy * z) % step + step) % 
 for (let gx = gx0; gx <= W; gx += step) grid += `M${gx} 0V${H}`;
 for (let gy = gy0; gy <= H; gy += step) grid += `M0 ${gy}H${W}`;
 out += `<path d="${grid}" stroke="#eff1f4" stroke-width="1"/>`;
+// подложка — фото плана под чертежом
+if (ul && !ul.hidden) {
+const uh = ul.w * ul.ar, ucx = ul.x + ul.w / 2, ucy = ul.y + uh / 2;
+const tr = `rotate(${ul.rot || 0} ${X(ucx)} ${Y(ucy)})`;
+out += `<image href="${underlayHref(m.id, ul.src)}" x="${X(ul.x)}" y="${Y(ul.y)}" width="${ul.w * k * z}" height="${uh * k * z}" preserveAspectRatio="none" opacity="${ul.op || 0.45}" transform="${tr}"/>`;
+if (rlUnderlayAdjust) out += `<rect x="${X(ul.x)}" y="${Y(ul.y)}" width="${ul.w * k * z}" height="${uh * k * z}" fill="none" stroke="#e8a900" stroke-width="2" stroke-dasharray="6 4" transform="${tr}"/>`;
+}
 if (shape === 'free' && g.segs.length >= 2 && g.filled === g.segs.length && !g.checkClosed && g.checkGap > 0.02 && !ghost) {
 out += `<path d="M${X(g.endX)} ${Y(g.endY)}L${X(0)} ${Y(0)}" stroke="#c2361f" stroke-width="1.5" stroke-dasharray="4 4"/>`;
 }
@@ -5479,6 +5531,10 @@ let start = null;
 const snapshot = () => ({ pan: { ...rlPan }, zoom: rlZoom, pts: new Map(pts), moved: start ? start.moved : false });
 box.addEventListener('pointerdown', (e) => {
 if (e.target.closest('.rl-zoom')) return;
+if (typeof rlUnderlayAdjust !== 'undefined' && rlUnderlayAdjust) {
+const u = getUnderlay(measure.id);
+box._ul = u ? { x: u.x, y: u.y, w: u.w, ar: u.ar } : null;
+}
 // Новое касание (первый палец) — жест начинается с чистого листа.
 // Иначе «застрявший» палец от прошлого жеста превращал перетаскивание в масштаб.
 if (e.isPrimary) pts.clear();
@@ -5496,6 +5552,14 @@ const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
 if (!start.moved && Math.hypot(dx, dy) < 6) return;
 if (!start.moved) { try { box.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ } }
 start.moved = true; rlDragged = true;
+if (rlUnderlayAdjust && box._ul && rlLastFit) {
+// двигаем подложку в метрах комнаты
+const mpp = (320 / (box.clientWidth || 320)) / (rlLastFit.k * rlZoom);
+const u = getUnderlay(measure.id);
+if (u) { u.x = box._ul.x + dx * mpp; u.y = box._ul.y + dy * mpp; saveUnderlayView(measure.id, u); }
+renderRulerSketch();
+return;
+}
 rlPan = { x: start.pan.x - dx * unit, y: start.pan.y - dy * unit };
 renderRulerSketch();
 } else if (pts.size === 2) {
@@ -5503,6 +5567,19 @@ renderRulerSketch();
 if (start.pts.size !== 2) { start = { ...snapshot(), moved: true }; return; }
 const a = [...pts.values()], b = [...start.pts.values()];
 const d1 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), d0 = Math.hypot(b[0].x - b[1].x, b[0].y - b[1].y) || 1;
+if (rlUnderlayAdjust && box._ul) {
+// щипок меняет размер подложки, центр остаётся на месте
+const u = getUnderlay(measure.id);
+if (u) {
+const w0 = box._ul.w, h0 = w0 * box._ul.ar, cx = box._ul.x + w0 / 2, cy = box._ul.y + h0 / 2;
+u.w = Math.max(0.5, Math.min(200, w0 * d1 / d0));
+u.x = cx - u.w / 2; u.y = cy - u.w * u.ar / 2;
+saveUnderlayView(measure.id, u);
+}
+start.moved = true; rlDragged = true;
+renderRulerSketch();
+return;
+}
 rlZoom = Math.min(5, Math.max(0.5, start.zoom * d1 / d0));
 start.moved = true; rlDragged = true;
 renderRulerSketch();
@@ -5584,6 +5661,7 @@ ${shape ? `<button type="button" class="rl-chip rl-shape-chip" onclick="rulerCha
 </div>
 <div class="rl-sketch" id="rlSketch"></div>
 ${shape ? `<div class="rl-walls">${chips}</div>` : ''}
+${shape ? underlayBarHtml() : ''}
 ${shape ? (rulerPick
 ? `<div class="rl-pick"><span>Коснитесь стены, где ${rulerPick.type === 'door' ? 'дверь' : rulerPick.type === 'balcony' ? 'балконный блок' : 'окно'}, или выберите номер:</span> <button type="button" onclick="rulerCancelPick()">Отмена</button></div>
 <div class="rl-walls">${m.walls.map((w, i) => `<button type="button" class="rl-chip" onclick="rulerEdit('wall', ${i})">Стена ${i + 1}</button>`).join('')}</div>`
@@ -6403,6 +6481,300 @@ if (err && err.name === 'AbortError') return;
 console.error('Обмерный план:', err);
 alert('Не удалось собрать обмерный план: ' + (err && err.message ? err.message : err));
 }
+}
+</script>
+
+<script>
+/* ===================== ПЛАН ПО КАРТИНКЕ ===================== */
+// 1) Подложка: фото, скриншот или PDF обмерного плана лежит полупрозрачно
+//    под чертежом рулетки — по нему удобно вводить размеры. Хранится
+//    только на этом телефоне (картинка тяжёлая), привязана к метрам комнаты.
+// 2) Распознавание (платно, через воркер и нейросеть): из картинки сразу
+//    строятся помещения, дальше их можно править как обычный замер.
+
+const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+let pdfJsLoading = null;
+function loadPdfJs() {
+if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+if (!pdfJsLoading) pdfJsLoading = new Promise((resolve, reject) => {
+const sc = document.createElement('script');
+sc.src = PDFJS_URL;
+sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; resolve(window.pdfjsLib); };
+sc.onerror = () => { pdfJsLoading = null; reject(new Error('не удалось загрузить чтение PDF — нужен интернет')); };
+document.head.appendChild(sc);
+});
+return pdfJsLoading;
+}
+
+// Картинка или первая страница PDF → JPEG не больше maxSide точек по длинной стороне
+async function fileToJpeg(file, maxSide = 1800) {
+let source, w, h;
+if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
+const pdfjs = await loadPdfJs();
+const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+const page = await pdf.getPage(1);
+const vp0 = page.getViewport({ scale: 1 });
+const scale = maxSide / Math.max(vp0.width, vp0.height);
+const vp = page.getViewport({ scale });
+const c = document.createElement('canvas');
+c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+const ctx = c.getContext('2d');
+ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+await page.render({ canvasContext: ctx, viewport: vp }).promise;
+return { dataUrl: c.toDataURL('image/jpeg', 0.85), w: c.width, h: c.height };
+}
+const url = URL.createObjectURL(file);
+try {
+const img = new Image();
+img.src = url;
+await img.decode();
+source = img; w = img.naturalWidth; h = img.naturalHeight;
+} finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+const k = Math.min(1, maxSide / Math.max(w, h));
+const c = document.createElement('canvas');
+c.width = Math.round(w * k); c.height = Math.round(h * k);
+const ctx = c.getContext('2d');
+ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+ctx.drawImage(source, 0, 0, c.width, c.height);
+return { dataUrl: c.toDataURL('image/jpeg', 0.85), w: c.width, h: c.height };
+}
+
+/* ---------- подложка ---------- */
+let rlUnderlayAdjust = false;
+let rlLastFit = null;     // { k, ox, oy } — масштаб чертежа на момент подстройки
+const ulCache = {};
+const ulBlobUrls = {};
+function underlayHref(id, dataUrl) {
+if (ulBlobUrls[id] && ulBlobUrls[id].src === dataUrl) return ulBlobUrls[id].url;
+try {
+const [head, b64] = dataUrl.split(',');
+const bin = atob(b64); const arr = new Uint8Array(bin.length);
+for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+const url = URL.createObjectURL(new Blob([arr], { type: (head.match(/data:([^;]+)/) || [])[1] || 'image/jpeg' }));
+if (ulBlobUrls[id]) URL.revokeObjectURL(ulBlobUrls[id].url);
+ulBlobUrls[id] = { src: dataUrl, url };
+return url;
+} catch (e) { return dataUrl; }
+}
+function ulImgKey(id) { return 'underlayImg:' + id; }
+function ulViewKey(id) { return 'underlayView:' + id; }
+function getUnderlay(id) {
+if (!id) return null;
+try {
+const view = JSON.parse(localStorage.getItem(ulViewKey(id)) || 'null');
+if (!view) return null;
+if (!(id in ulCache)) ulCache[id] = localStorage.getItem(ulImgKey(id));
+return ulCache[id] ? { ...view, src: ulCache[id] } : null;
+} catch (e) { return null; }
+}
+function saveUnderlayView(id, view) {
+const { src, ...rest } = view;
+try { localStorage.setItem(ulViewKey(id), JSON.stringify(rest)); } catch (e) { /* пусто */ }
+}
+function removeUnderlay(id) {
+try { localStorage.removeItem(ulImgKey(id)); localStorage.removeItem(ulViewKey(id)); } catch (e) { /* пусто */ }
+delete ulCache[id];
+}
+
+function pickUnderlayFile() {
+document.getElementById('ulFile').click();
+}
+
+async function handleUnderlayFile(input) {
+const file = input.files && input.files[0];
+input.value = '';
+if (!file) return;
+showAddToast('Готовлю подложку…');
+try {
+const img = await fileToJpeg(file, 1600);
+const id = measure.id;
+try { localStorage.setItem(ulImgKey(id), img.dataUrl); }
+catch (e) { alert('Не хватает места на телефоне для подложки. Удалите подложки у других комнат.'); return; }
+ulCache[id] = img.dataUrl;
+// по умолчанию — поверх уже введённых стен, иначе 8 м шириной
+const g = rulerGeometry(measure);
+const xs = [0, ...g.segs.map(s => s.x2)], ys = [0, ...g.segs.map(s => s.y2)];
+const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
+const ar = img.h / img.w;
+const wM = g.realCount ? Math.max(bw, bh / ar) * 1.15 : 8;
+const view = { x: (Math.min(...xs) + Math.max(...xs)) / 2 - wM / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 - wM * ar / 2, w: wM, ar, rot: 0, op: 0.45, hidden: false };
+saveUnderlayView(id, view);
+rlUnderlayAdjust = true;
+rlLastFit = null;
+renderMeasure();
+showAddToast('Подложка добавлена — совместите её со стенами');
+} catch (err) {
+alert('Не удалось открыть файл: ' + (err && err.message ? err.message : err));
+}
+}
+
+function underlayAction(act) {
+const id = measure.id;
+const u = getUnderlay(id);
+if (act === 'add') { pickUnderlayFile(); return; }
+if (!u) return;
+if (act === 'adjust') { rlUnderlayAdjust = !rlUnderlayAdjust; rlLastFit = null; if (rlUnderlayAdjust) u.hidden = false; saveUnderlayView(id, u); renderMeasure(); return; }
+if (act === 'done') { rlUnderlayAdjust = false; rlLastFit = null; renderMeasure(); return; }
+if (act === 'rotate') u.rot = ((u.rot || 0) + 90) % 360;
+if (act === 'lighter') u.op = Math.max(0.12, (u.op || 0.45) - 0.12);
+if (act === 'darker') u.op = Math.min(0.9, (u.op || 0.45) + 0.12);
+if (act === 'toggle') u.hidden = !u.hidden;
+if (act === 'remove') {
+if (!confirm('Убрать подложку у этого помещения?')) return;
+removeUnderlay(id); rlUnderlayAdjust = false; rlLastFit = null; renderMeasure(); return;
+}
+saveUnderlayView(id, u);
+renderRulerSketch();
+}
+
+function underlayBarHtml() {
+const u = measure && getUnderlay(measure.id);
+if (!u) return `<button type="button" class="rl-ul-add" onclick="underlayAction('add')">Подложка: фото плана</button>`;
+if (!rlUnderlayAdjust) {
+return `<div class="rl-ul-row">
+<button type="button" class="rl-tool" onclick="underlayAction('adjust')">Подложка: подстроить</button>
+<button type="button" class="rl-tool" onclick="underlayAction('toggle')">${u.hidden ? 'Показать' : 'Скрыть'}</button>
+</div>`;
+}
+return `<div class="rl-ul-panel">
+<div class="rl-ul-hint">Двигайте подложку пальцем, щипком — размер. Совместите её со стенами.</div>
+<div class="rl-ul-row">
+<button type="button" class="rl-tool" onclick="underlayAction('rotate')">↻ Повернуть</button>
+<button type="button" class="rl-tool" onclick="underlayAction('lighter')">Светлее</button>
+<button type="button" class="rl-tool" onclick="underlayAction('darker')">Темнее</button>
+<button type="button" class="rl-tool" onclick="underlayAction('add')">Заменить</button>
+<button type="button" class="rl-tool rl-tool-del" onclick="underlayAction('remove')">Убрать</button>
+<button type="button" class="rl-tool rl-tool-close" onclick="underlayAction('done')">Готово</button>
+</div>
+</div>`;
+}
+
+// Углы подложки (в метрах) — чтобы чертёж вписывал и её
+function underlayCorners(u) {
+const h = u.w * u.ar, cx = u.x + u.w / 2, cy = u.y + h / 2;
+const r = (u.rot || 0) * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+return [[-u.w / 2, -h / 2], [u.w / 2, -h / 2], [u.w / 2, h / 2], [-u.w / 2, h / 2]].map(([px, py]) => [cx + px * c - py * s, cy + px * s + py * c]);
+}
+
+/* ---------- распознавание ---------- */
+let aiTarget = null;   // { objectId, result }
+
+function startPlanRecognition(objectId) {
+const obj = objectId ? (cloudData.objects || []).find(o => o.id === objectId) : calcObject();
+if (!obj) { alert('Сначала выберите объект.'); return; }
+aiTarget = { objectId: obj.id };
+document.getElementById('aiFile').click();
+}
+
+async function handleAiFile(input) {
+const file = input.files && input.files[0];
+input.value = '';
+if (!file || !aiTarget) return;
+if (!confirm('Распознать план с помощью нейросети?\n\nЭто платная функция: картинка будет отправлена в сторонний сервис, каждое распознавание стоит денег по тарифу ключа API. Результат — черновик, его нужно проверить.')) return;
+showAddToast('Распознаю план… обычно до минуты');
+try {
+const img = await fileToJpeg(file, 1568);
+const res = await fetch(`${WORKER_URL}/recognize-plan`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+body: JSON.stringify({ image: img.dataUrl.split(',')[1], mediaType: 'image/jpeg' })
+});
+const data = await res.json().catch(() => null);
+if (res.status === 501) {
+alert('Распознавание пока не подключено.\n\nЧтобы включить: получите ключ API на console.anthropic.com и добавьте его в Cloudflare → ваш воркер → Settings → Variables and Secrets как секрет ANTHROPIC_API_KEY. Пока можно пользоваться подложкой — это бесплатно.');
+return;
+}
+if (!res.ok || !data) { alert((data && data.error) || 'Не удалось распознать план'); return; }
+if (!data.rooms || !data.rooms.length) { alert('Помещения на картинке не найдены. Попробуйте более чёткое фото или скриншот.'); return; }
+aiTarget.result = data;
+openAiReview();
+} catch (err) {
+alert('Ошибка: ' + (err && err.message ? err.message : err));
+}
+}
+
+// Ответ нейросети → обычный замер «своей формы»
+function aiRoomToMeasure(r, objectId) {
+const fmt = v => (v == null ? '' : String(Math.round(v * 1000) / 1000).replace('.', ','));
+const m = newMeasure(objectId);
+m.room = r.name;
+m.height = fmt(r.height_m);
+m.shape = 'free';
+m.walls = r.walls.map(w => fmt(w.length_m));
+m.wallHeights = r.walls.map(() => '');
+m.turns = r.walls.map(w => w.turn_after === 'L' ? 'L' : 'R');
+m.angles = r.walls.map(w => (w.angle_deg && Math.abs(w.angle_deg - 90) > 0.5 ? fmt(w.angle_deg) : ''));
+m.openings = (r.openings || []).map(o => {
+const base = { type: o.type, w: fmt(o.width_m), h: fmt(o.height_m), n: '1', slopes: true };
+if (o.type === 'balcony') Object.assign(base, { dw: fmt(o.door_width_m), dh: fmt(o.door_height_m), side: 'start' });
+if (o.wall_index != null) Object.assign(base, { wall: o.wall_index, off: fmt(o.offset_m), from: 'start' });
+return base;
+});
+return m;
+}
+
+function miniSketchSvg(m, W = 150, H = 100) {
+const g = rulerGeometry(m);
+const xs = [0, ...g.segs.map(s => s.x2)], ys = [0, ...g.segs.map(s => s.y2)];
+const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+const k = Math.min((W - 16) / Math.max(maxX - minX, 0.5), (H - 16) / Math.max(maxY - minY, 0.5));
+const ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
+const pts = [[0, 0], ...g.segs.map(s => [s.x2, s.y2])].map(([x, y]) => `${ox + x * k} ${oy + y * k}`);
+return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">
+<path d="M${pts.join('L')}${g.closed ? 'Z' : ''}" fill="${g.closed ? '#fff4d1' : 'none'}" stroke="#14181f" stroke-width="2.5" stroke-linejoin="miter"/>
+${g.closed ? '' : `<path d="M${pts[pts.length - 1]}L${pts[0]}" stroke="#c2361f" stroke-width="1.5" stroke-dasharray="3 3"/>`}
+</svg>`;
+}
+
+function openAiReview() {
+const res = aiTarget.result;
+const body = document.getElementById('aiBody');
+const ms = res.rooms.map(r => aiRoomToMeasure(r, aiTarget.objectId));
+aiTarget.measures = ms;
+body.innerHTML = `<div class="mp-body-inner">
+${res.warnings && res.warnings.length ? `<div class="ai-warn"><b>Нейросеть предупреждает:</b><br>${res.warnings.map(escapeHtml).join('<br>')}</div>` : ''}
+<div class="ai-hint">Это черновик. Отметьте нужные помещения и проверьте размеры — после добавления каждое правится в замере, как обычно.</div>
+${ms.map((m, i) => {
+const g = rulerGeometry(m);
+const ops = m.openings.length;
+return `<label class="ai-room">
+<input type="checkbox" checked data-ai="${i}">
+<div class="ai-sketch">${miniSketchSvg(m)}</div>
+<div class="ai-info">
+<input type="text" class="mp-name-in" value="${escapeHtml(m.room)}" data-ai-name="${i}" aria-label="Название помещения">
+<div class="ai-meta">${m.walls.length} ${pluralRu(m.walls.length, 'стена', 'стены', 'стен')}${ops ? ` · проёмов ${ops}` : ''}${mNum(m.height) ? ` · h ${mFmt(mNum(m.height))}` : ''}</div>
+<div class="${g.closed ? 'rl-ok' : 'rl-bad'}">${g.closed ? 'Комната сошлась' : `Не сходится на ${mFmt(g.gap)} м — поправите в замере`}</div>
+</div>
+</label>`;
+}).join('')}
+</div>`;
+document.getElementById('aiPanel').classList.add('open');
+document.body.classList.add('measure-open');
+}
+
+function closeAiReview() {
+document.getElementById('aiPanel').classList.remove('open');
+document.body.classList.remove('measure-open');
+}
+
+async function applyAiRooms() {
+const obj = (cloudData.objects || []).find(o => o.id === aiTarget.objectId);
+if (!obj) return;
+const picked = [...document.querySelectorAll('#aiBody input[data-ai]')].filter(c => c.checked).map(c => Number(c.dataset.ai));
+if (!picked.length) { alert('Не выбрано ни одного помещения.'); return; }
+if (!Array.isArray(obj.rooms)) obj.rooms = [];
+picked.forEach(i => {
+const m = aiTarget.measures[i];
+const nameEl = document.querySelector(`#aiBody input[data-ai-name="${i}"]`);
+if (nameEl && nameEl.value.trim()) m.room = nameEl.value.trim();
+obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: m });
+});
+closeAiReview();
+await saveCloudData();
+renderInvoice();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === obj.id) renderObjectDetail();
+showAddToast(`Добавлено помещений: ${picked.length} — проверьте замеры`);
 }
 </script>
 
