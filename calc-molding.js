@@ -80,13 +80,18 @@ return [ax + q1.dx * t, ay + q1.dy * t];
 };
 const pts = g.segs.map((q, k) => cross(g.segs[(k - 1 + n) % n], q));
 let len = 0;
+const edges = [];
 for (let k = 0; k < n; k++) {
 const a = pts[k], b = pts[(k + 1) % n], q = g.segs[k];
 const ex = b[0] - a[0], ey = b[1] - a[1];
 if (ex * q.dx + ey * q.dy <= 0.001) return null;   // отступ больше, чем позволяет стена
-len += Math.hypot(ex, ey);
+const e = Math.hypot(ex, ey);
+// стена на одной прямой со следующей — сторона рамки продолжается, не отдельный кусок
+if (edges.length && Math.abs(g.segs[(k - 1 + n) % n].dx * q.dy - g.segs[(k - 1 + n) % n].dy * q.dx) < 0.02 && k > 0) edges[edges.length - 1] += e;
+else edges.push(e);
+len += e;
 }
-return { pts, len };
+return { pts, len, edges };
 }
 
 // Раскладка молдингов на стене: рамки обходят проёмы, линии разрываются на них
@@ -136,60 +141,101 @@ res.frames.push({ ri, x0, x1: x0 + w, y0: yb, y1: yt });
 return res;
 }
 
+// Плинтус по стенам: куски между дверями и углами, обрывы (края дверей и концы
+// у стен, где плинтус не продолжается) — заглушка или конверт.
+// plinth.env = { on, skip: [ключи обрывов без конверта] }; ключ: 'd<проём>a|b' или 'w<стена>a|b'.
+function molPlinthPlan(m, g, pl) {
+const lens = molWallLens(m);
+const walls = molWalls(pl.walls, m);
+const set = new Set(walls);
+const n = lens.length;
+const res = { walls, pieces: [], ends: [], caps: [], env: [], looseW: 0 };
+const nb = (i, step) => { const j = i + step; if (g && g.closed) return (j + n) % n; return j >= 0 && j < n ? j : -1; };
+walls.forEach(i => {
+const L = lens[i];
+const doors = typeof openingSpan === 'function'
+? (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => o.wall === i && (o.type === 'door' || o.type === 'balcony') && openingWidth(o) > 0)
+.map(({ o, oi }) => { const [a0, a1] = openingSpan(o, L); const sp = o.type === 'balcony' ? balconyParts(o, a0, a1).door : [a0, a1]; return { oi, code: opCode(o, oi), a0: sp[0], a1: sp[1] }; }).sort((a, b) => a.a0 - b.a0)
+: [];
+let x = 0;
+doors.forEach(dr => { if (dr.a0 - x > 0.005) res.pieces.push(dr.a0 - x); x = Math.max(x, dr.a1); });
+if (L - x > 0.005) res.pieces.push(L - x);
+doors.forEach(dr => {
+if (dr.a0 > 0.005) res.ends.push({ key: `d${dr.oi}a`, label: `${dr.code} к углу А`, door: dr.oi });
+if (dr.a1 < L - 0.005) res.ends.push({ key: `d${dr.oi}b`, label: `${dr.code} к углу Б`, door: dr.oi });
+});
+// концы у стен: соседняя стена без плинтуса — обрыв
+const pv = nb(i, -1), nx = nb(i, 1);
+if (pv < 0 || !set.has(pv)) res.ends.push({ key: `w${i}a`, label: `стена ${i + 1}, угол А` });
+if (nx < 0 || !set.has(nx)) res.ends.push({ key: `w${i}b`, label: `стена ${i + 1}, угол Б` });
+});
+// двери, не поставленные на стену, — вычитаем из общей длины, по две заглушки
+const loose = (m.openings || []).filter(o => (o.type === 'door' || o.type === 'balcony') && typeof o.wall !== 'number');
+res.looseW = walls.length ? loose.reduce((a, o) => a + (o.type === 'balcony' ? mNum(o.dw) : mNum(o.w)) * mCount(o.n), 0) : 0;
+if (res.looseW > 0) { let left = res.looseW; for (let k = res.pieces.length - 1; k >= 0 && left > 0; k--) { const cut = Math.min(res.pieces[k], left); res.pieces[k] -= cut; left -= cut; } res.pieces = res.pieces.filter(v => v > 0.005); }
+const looseEnds = walls.length ? loose.reduce((a, o) => a + 2 * Math.max(1, Math.round(mCount(o.n))), 0) : 0;
+const env = pl.env && pl.env.on;
+const skip = new Set(env && Array.isArray(pl.env.skip) ? pl.env.skip : []);
+res.ends.forEach(e => { e.env = !!env && !skip.has(e.key); (e.env ? res.env : res.caps).push(e); });
+for (let k = 0; k < looseEnds; k++) (env ? res.env : res.caps).push({ key: 'loose' + k, label: 'дверь без места' });
+return res;
+}
+
 function moldingCompute(m) {
 const d = molGet(m);
 const g = molGeom(m);
 const lens = molWallLens(m);
-const out = { cornice: null, plinth: null, ceil: [], ceilLen: 0, wallLen: 0, wallParts: [], lines: {} };
+const out = { cornice: null, plinth: null, ceil: [], ceilLen: 0, wallLen: 0, wallParts: [], lines: {}, min: false };
 const planks = (len, plank) => { const p = mNum(plank); return p > 0 && len > 0 ? Math.ceil(len * 1.1 / p) : 0; };
+// куски: каждый короче метра — за 1 пог. м (как откосы и узкие)
+const sumMin = list => list.reduce((a, v) => a + minLen(v), 0);
+const txtMin = list => list.map(fmtMin).join(' + ');
+const hasMin = list => list.some(v => v > 0 && v < 1);
 if (d.cornice.on) {
 const walls = molWalls(d.cornice.walls, m);
-const len = walls.reduce((a, i) => a + lens[i], 0);
+const pieces = walls.map(i => lens[i]);
+const len = sumMin(pieces);
 const c = molCorners(g, walls);
-out.cornice = { walls, len, corners: c, planks: planks(len, d.cornice.plank) };
-if (len > 0) out.lines.cornice = `Карниз: ${walls.length === lens.filter(v => v > 0).length ? 'по периметру' : 'стены ' + walls.map(i => i + 1).join(', ')} ${walls.map(i => mFmt(lens[i])).join(' + ')} = ${mFmt(len)} пог. м${c.in || c.out ? ` · углы: внутр. ${c.in}, наруж. ${c.out}` : ''}${out.cornice.planks ? ` · планок по ${mFmt(mNum(d.cornice.plank))} м: ${out.cornice.planks} (+10%)` : ''}`;
+if (hasMin(pieces)) out.min = true;
+out.cornice = { walls, len, corners: c, planks: planks(pieces.reduce((a, v) => a + v, 0), d.cornice.plank) };
+if (len > 0) out.lines.cornice = `Карниз: ${walls.length === lens.filter(v => v > 0).length ? 'по периметру' : 'стены ' + walls.map(i => i + 1).join(', ')} ${txtMin(pieces)} = ${mFmt(len)} пог. м${c.in || c.out ? ` · углы: внутр. ${c.in}, наруж. ${c.out}` : ''}${out.cornice.planks ? ` · планок по ${mFmt(mNum(d.cornice.plank))} м: ${out.cornice.planks} (+10%)` : ''}`;
 }
 if (d.plinth.on) {
-const walls = molWalls(d.plinth.walls, m);
-let len = 0, caps = 0;
-const parts = walls.map(i => {
-const doors = typeof openingSpan === 'function' ? molDoorSpans(m, i, lens[i]) : [];
-const cut = doors.reduce((a, [a0, a1]) => a + (a1 - a0), 0);
-caps += doors.length * 2;
-const v = Math.max(0, lens[i] - cut);
-len += v;
-return doors.length ? `${mFmt(lens[i])} − ${doors.map(([a0, a1]) => mFmt(a1 - a0)).join(' − ')}` : mFmt(lens[i]);
-});
-// двери, не поставленные на стену, — вычитаем из общей длины
-const loose = (m.openings || []).filter(o => (o.type === 'door' || o.type === 'balcony') && typeof o.wall !== 'number');
-const looseW = loose.reduce((a, o) => a + (o.type === 'balcony' ? mNum(o.dw) : mNum(o.w)) * mCount(o.n), 0);
-if (looseW > 0 && walls.length) { len = Math.max(0, len - looseW); caps += loose.reduce((a, o) => a + 2 * mCount(o.n), 0); parts.push(`− ${mFmt(looseW)} (двери без места на стене)`); }
-const c = molCorners(g, walls);
-out.plinth = { walls, len, caps, corners: c, planks: planks(len, d.plinth.plank) };
-if (len > 0) out.lines.plinth = `Плинтус: ${parts.join(' + ')} = ${mFmt(len)} пог. м${caps ? ` · заглушек у дверей: ${caps}` : ''}${c.in || c.out ? ` · углы: внутр. ${c.in}, наруж. ${c.out}` : ''}${out.plinth.planks ? ` · планок по ${mFmt(mNum(d.plinth.plank))} м: ${out.plinth.planks} (+10%)` : ''}`;
+const pl = molPlinthPlan(m, g, d.plinth);
+const len = sumMin(pl.pieces) + pl.env.length;     // конверт — 1 пог. м
+if (hasMin(pl.pieces)) out.min = true;
+const c = molCorners(g, pl.walls);
+out.plinth = { walls: pl.walls, len, caps: pl.caps.length, env: pl.env.length, ends: pl.ends, corners: c, planks: planks(pl.pieces.reduce((a, v) => a + v, 0), d.plinth.plank) };
+if (len > 0) out.lines.plinth = `Плинтус: ${txtMin(pl.pieces)}${pl.looseW ? ` − ${mFmt(pl.looseW)} (двери без места на стене)` : ''}${pl.env.length ? ` + конверты ${pl.env.length} × 1` : ''} = ${mFmt(len)} пог. м${pl.caps.length ? ` · заглушек: ${pl.caps.length}` : ''}${c.in || c.out ? ` · углы: внутр. ${c.in}, наруж. ${c.out}` : ''}${out.plinth.planks ? ` · планок по ${mFmt(mNum(d.plinth.plank))} м: ${out.plinth.planks} (+10%)` : ''}`;
 }
 d.ceil.forEach((f, fi) => {
 const dd = mNum(f.d);
 const poly = molOffsetPoly(g, dd);
-out.ceil.push({ fi, d: dd, poly });
-if (poly) out.ceilLen += poly.len;
+const len = poly ? sumMin(poly.edges) : 0;
+if (poly && hasMin(poly.edges)) out.min = true;
+out.ceil.push({ fi, d: dd, poly, len });
+out.ceilLen += len;
 });
 const okCeil = out.ceil.filter(f => f.poly);
-if (okCeil.length) out.lines.ceil = `Молдинг на потолке: ${okCeil.map(f => `рамка в ${mFmt(f.d)} от стен ${mFmt(f.poly.len)}`).join(' + ')} = ${mFmt(out.ceilLen)} пог. м`;
+if (okCeil.length) out.lines.ceil = `Молдинг на потолке: ${okCeil.map(f => `рамка в ${mFmt(f.d)} от стен (${txtMin(f.poly.edges)})`).join(' + ')} = ${mFmt(out.ceilLen)} пог. м`;
 if (d.ceil.length && out.ceil.some(f => f.d > 0 && !f.poly)) out.lines.ceilBad = g && g.closed ? 'Рамка на потолке не помещается — уменьшите отступ' : 'Рамки на потолке считаются, когда комната сошлась на чертеже';
 if (d.wall.length && typeof openingSpan === 'function') {
 lens.forEach((L, wi) => {
 if (!(L > 0)) return;
 const lay = molWallLayout(m, wi);
-const fr = lay.frames.reduce((a, f) => a + 2 * ((f.x1 - f.x0) + (f.y1 - f.y0)), 0);
-const ln = lay.lines.reduce((a, l) => a + (l.x1 - l.x0), 0);
+// у рамки четыре стороны — каждая отдельный кусок
+const sides = lay.frames.flatMap(f => [f.x1 - f.x0, f.x1 - f.x0, f.y1 - f.y0, f.y1 - f.y0]);
+const segs = lay.lines.map(l => l.x1 - l.x0);
+const fr = sumMin(sides), ln = sumMin(segs);
+if (hasMin(sides) || hasMin(segs)) out.min = true;
 if (fr + ln > 0) {
 out.wallLen += fr + ln;
-out.wallParts.push(`стена ${wi + 1}: ${[lay.frames.length ? `${lay.frames.length} рам. ${mFmt(fr)}` : '', ln ? `линия ${mFmt(ln)}` : ''].filter(Boolean).join(' + ')}`);
+out.wallParts.push(`стена ${wi + 1}: ${[lay.frames.length ? `${lay.frames.length} рам. ${mFmt(fr)}` : '', ln ? `линия ${segs.length > 1 ? `(${txtMin(segs)}) ` : ''}${mFmt(ln)}` : ''].filter(Boolean).join(' + ')}`);
 }
 });
 if (out.wallParts.length) out.lines.wall = `Молдинг на стенах: ${out.wallParts.join('; ')} = ${mFmt(out.wallLen)} пог. м`;
 }
+if (out.min) Object.keys(out.lines).forEach(k => { if (k !== 'ceilBad' && /\*/.test(out.lines[k])) out.lines[k] += MIN_NOTE; });
 return out;
 }
 
@@ -259,7 +305,7 @@ s += `<text x="${(xL + xR) / 2}" y="${(Yh(f.y0) + Yh(f.y1)) / 2 + 4}" text-ancho
 s += `<text x="${x0 + L * k / 2}" y="${yF + 18}" text-anchor="middle" font-size="12" font-weight="700" fill="#14181f">${mFmt(L)} м</text>`;
 s += `<text x="${x0 - 10}" y="${(yF + Yh(Hh)) / 2}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14181f" transform="rotate(-90 ${x0 - 10} ${(yF + Yh(Hh)) / 2})">${mFmt(Hh)}</text>`;
 if (lay.frames.length || lay.lines.length) {
-const fr = lay.frames.reduce((a, f) => a + 2 * ((f.x1 - f.x0) + (f.y1 - f.y0)), 0), ln = lay.lines.reduce((a, l) => a + (l.x1 - l.x0), 0);
+const fr = lay.frames.reduce((a, f) => a + 2 * (minLen(f.x1 - f.x0) + minLen(f.y1 - f.y0)), 0), ln = lay.lines.reduce((a, l) => a + minLen(l.x1 - l.x0), 0);
 s += `<text x="${x0 + L * k / 2}" y="${yF + 36}" text-anchor="middle" font-size="11" fill="${MOL_INK}">${lay.frames.length ? `${lay.frames.length} рам. ${mFmt(fr)} пог. м` : ''}${lay.frames.length && ln ? ' · ' : ''}${ln ? `линия ${mFmt(ln)} пог. м` : ''}</text>`;
 }
 return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Развёртка стены ${wi + 1}" font-family="inherit">${s}</svg>`;
@@ -336,7 +382,8 @@ ${d.cornice.on ? `${chips(d.cornice.walls, i => `molWallToggle('cornice', ${i})`
 <div class="mp-sec-title">Плинтус</div>
 ${toggle('plinth', d.plinth.on, 'Плинтус по стенам, без дверных проёмов')}
 ${d.plinth.on ? `${chips(d.plinth.walls, i => `molWallToggle('plinth', ${i})`, "molAllWalls('plinth')")}
-<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Длина планки, м${mIn('molding.plinth.plank', d.plinth.plank, '2,5')}</label><span></span><span class="mp-hint" style="margin:0;align-self:center;">для подсчёта планок</span></div>` : ''}
+<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Длина планки, м${mIn('molding.plinth.plank', d.plinth.plank, '2,5')}</label><span></span><span class="mp-hint" style="margin:0;align-self:center;">для подсчёта планок</span></div>
+${molEnvHtml(m, d)}` : ''}
 <div class="mp-calc" id="mpCalcMolPlinth"></div>
 </section>
 <section class="mp-sec">
@@ -371,6 +418,31 @@ ${row.type === 'line'
 </section>`;
 }
 
+// Конверты на обрывах плинтуса: плинтус зарезан на 45° и уходит в пол
+function molEnvHtml(m, d) {
+const env = d.plinth.env || {};
+const plan = molPlinthPlan(m, molGeom(m), d.plinth);
+return `<label class="mp-check mp-ce-light"><input type="checkbox" ${env.on ? 'checked' : ''} onchange="molEnvSet(this.checked)"><span>Конверты на обрывах — плинтус зарезан на 45° и уходит в пол, каждый по 1 пог. м</span></label>
+${env.on && plan.ends.length ? `<div class="mp-ce-walls mp-cn-row"><span class="mp-ce-walls-label">Где конверт (остальные — заглушки):</span>${plan.ends.map(e => `<button type="button" class="mp-ce-wall${e.env ? ' on' : ''}" onclick="molEnvToggle('${e.key}')" aria-pressed="${e.env}">${escapeHtml(e.label)}</button>`).join('')}</div>` : ''}
+${env.on && !plan.ends.length ? '<div class="mp-hint">Обрывов нет: плинтус идёт по всем стенам без дверей.</div>' : ''}`;
+}
+function molEnvSet(on) {
+const d = molEnsure();
+d.plinth = { ...d.plinth, env: { ...(d.plinth.env || {}), on: !!on } };
+saveMeasureDraft();
+renderMeasure();
+}
+function molEnvToggle(key) {
+const d = molEnsure();
+const env = { ...(d.plinth.env || {}), on: true };
+const skip = new Set(Array.isArray(env.skip) ? env.skip : []);
+if (skip.has(key)) skip.delete(key); else skip.add(key);
+env.skip = [...skip];
+d.plinth = { ...d.plinth, env };
+saveMeasureDraft();
+renderMeasure();
+}
+
 // обновление цифр и рисунков без перерисовки полей
 function updateMoldingOutputs(r) {
 const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerHTML = v; };
@@ -381,14 +453,14 @@ set('mpCalcMolCornice', mo.lines.cornice ? escapeHtml(mo.lines.cornice) : '');
 set('mpCalcMolPlinth', mo.lines.plinth ? escapeHtml(mo.lines.plinth) : '');
 set('mpCalcMolCeil', [mo.lines.ceil, mo.lines.ceilBad].filter(Boolean).map(escapeHtml).join('<br>'));
 set('mpCalcMolWall', mo.lines.wall ? escapeHtml(mo.lines.wall) : '');
-mo.ceil.forEach(f => set('mpMolCeilRes' + f.fi, f.poly ? `= ${mFmt(f.poly.len)}` : ''));
+mo.ceil.forEach(f => set('mpMolCeilRes' + f.fi, f.poly ? `= ${mFmt(f.len)}` : ''));
 molGet(measure).wall.forEach((row, ri) => {
 let len = 0;
 molWallLens(measure).forEach((L, wi) => {
 if (!(L > 0)) return;
 const lay = molWallLayout(measure, wi);
-lay.frames.filter(f => f.ri === ri).forEach(f => { len += 2 * ((f.x1 - f.x0) + (f.y1 - f.y0)); });
-lay.lines.filter(l => l.ri === ri).forEach(l => { len += l.x1 - l.x0; });
+lay.frames.filter(f => f.ri === ri).forEach(f => { len += 2 * (minLen(f.x1 - f.x0) + minLen(f.y1 - f.y0)); });
+lay.lines.filter(l => l.ri === ri).forEach(l => { len += minLen(l.x1 - l.x0); });
 });
 set('mpMolRowRes' + ri, len > 0 ? `${mFmt(len)} пог. м` : '');
 });
