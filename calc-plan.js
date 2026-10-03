@@ -353,7 +353,7 @@ let ly = box.y + box.h - 1 - (loose.length ? 4 : 0) - 4.2 * (ceilList.length - 1
 ceilList.forEach(e => {
 const what = e.type === 'box' ? 'короб' : 'закарнизная ниша';
 const size = `${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
-const extra = e.type === 'box' ? `, низ ${plM2(e.area)}${e.h ? ` + борт ${plM2(e.side)}` : ''} м²` : '';
+const extra = e.fin && e.fin.length ? `; обработка ${[e.finLin ? `${plM2(e.finLin)} пог. м` : '', e.finArea ? `${plM2(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}` : '';
 const where = e.wallsTxt ? ` ${e.wallsTxt === 'по периметру' ? e.wallsTxt : '(' + e.wallsTxt + (e.overOp ? `, вынос ${plMm(e.overOp.ext)}` : '') + (e.partial ? `, от угла ${e.partial.corner} ${plMm(e.partial.off)}` : '') + ')'}` : '';
 const lightTxt = e.light ? `, с подсветкой ${plMm(e.lightLen)}` : '';
 s += T(box.x, ly, `${e.code} — ${what}${where}, ${size}, L = ${plMm(e.len)}${extra}${lightTxt}`, 2.6, 400, 'start', '#222');

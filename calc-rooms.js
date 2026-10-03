@@ -19,7 +19,8 @@ const SURFACES = [
 { key: 'ceilingNet', tab: 'ceilingNet', label: 'Потолок − ниши/короба' },
 { key: 'ceilNiche', tab: 'ceilNiche', label: 'Закарнизные ниши' },
 { key: 'ceilBox', tab: 'ceilBox', label: 'Короба, длина' },
-{ key: 'ceilBoxArea', tab: 'ceilBoxArea', label: 'Короба, площадь' },
+{ key: 'ceilFin', tab: 'ceilFin', label: 'Ниши/короба: обработка' },
+{ key: 'ceilFinArea', tab: 'ceilFinArea', label: 'Ниши/короба: обработка, м²' },
 { key: 'ceilLight', tab: 'ceilLight', label: 'Подсветка' },
 { key: 'slopes', tab: 'slopes', label: 'Откосы' },
 { key: 'narrow', tab: 'narrow', label: 'Узкие' },
@@ -70,6 +71,8 @@ ceilingNet: 'Потолок без ниш и коробов',
 ceilNiche: 'Закарнизные ниши',
 ceilBox: 'Короба',
 ceilBoxArea: 'Короба',
+ceilFin: 'Ниши и короба: обработка',
+ceilFinArea: 'Ниши и короба: обработка',
 ceilLight: 'Подсветка',
 slopes: 'Откосы',
 narrow: 'Узкие поверхности',
@@ -365,8 +368,10 @@ const n = String(srv.name || '').toLowerCase();
 if (/откос/.test(n) && has('slopes')) return 'slopes';
 if (/плитк|кафел|фартук|панел/.test(n) && has('parts')) return 'parts';
 if (/подсвет|светодиод|led|лент/.test(n) && has('ceilLight')) return 'ceilLight';
+// шпаклёвка, покраска и т. п. ниш и коробов — по отмеченным сторонам; монтаж — по длине
+if (/ниш|короб/.test(n) && /шпакл|покра|грунт|обработ|отдел|шлиф/.test(n) && (has('ceilFin') || has('ceilFinArea'))) return srv.unit === 'м²' && has('ceilFinArea') ? 'ceilFinArea' : 'ceilFin';
 if (/ниш/.test(n) && has('ceilNiche')) return 'ceilNiche';
-if (/короб/.test(n) && has('ceilBox')) return srv.unit === 'пог. м' ? 'ceilBox' : 'ceilBoxArea';
+if (/короб/.test(n) && has('ceilBox')) return 'ceilBox';
 if (/натяж/.test(n) && has('ceilingNet')) return 'ceilingNet';
 if (/потол/.test(n) && has('ceiling')) return 'ceiling';
 if (/стен|обо[ий]|плитк|кафел/.test(n) && has('walls')) return 'walls';
