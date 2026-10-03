@@ -802,6 +802,8 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .mp-ce-plan.full .cp-zoom button { width: 44px; height: 44px; font-size: 20px; }
 .cp-caption { position: absolute; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding: 8px 10px; background: rgba(255, 255, 255, 0.92); border: 1px solid #d9dde2; border-radius: 4px; font-size: 13px; color: var(--s-ink); }
 .cp-caption:empty { display: none; }
+.cp-caption { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+.cn-cap-btn { min-width: 32px; min-height: 28px; margin-left: 6px; border: 1px solid var(--s-ink); border-radius: 3px; background: #ffffff; font-size: 16px; font-weight: 700; cursor: pointer; }
 body.cp-full-open { overflow: hidden; }
 /* чертёж стен во весь экран; клавиатура ввода — поверх него */
 .rl-sketch.full { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 120; margin: 0; border: none; border-radius: 0; background: #ffffff; }
