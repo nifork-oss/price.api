@@ -5345,8 +5345,8 @@ const linked = i => shape === 'rect' && sel >= 0 && i % 2 === sel % 2;
 const o2 = g.orient;
 let out = '';
 let grid = '';
-for (let gx = -W; gx <= 2 * W; gx += 16) grid += `M${gx} ${-H}V${2 * H}`;
-for (let gy = -H; gy <= 2 * H; gy += 16) grid += `M${-W} ${gy}H${2 * W}`;
+for (let gx = -2 * W; gx <= 3 * W; gx += 16) grid += `M${gx} ${-2 * H}V${3 * H}`;
+for (let gy = -2 * H; gy <= 3 * H; gy += 16) grid += `M${-2 * W} ${gy}H${3 * W}`;
 out += `<path d="${grid}" stroke="#eff1f4" stroke-width="1"/>`;
 if (shape === 'free' && g.segs.length >= 2 && g.filled === g.segs.length && !g.checkClosed && g.checkGap > 0.02 && !ghost) {
 out += `<path d="M${X(g.endX)} ${Y(g.endY)}L${X(0)} ${Y(0)}" stroke="#c2361f" stroke-width="1.5" stroke-dasharray="4 4"/>`;
@@ -5428,7 +5428,7 @@ box.innerHTML = `<svg viewBox="${vx} ${vy} ${vw} ${vh}" width="100%" role="img" 
 <div class="rl-zoom">
 <button type="button" onclick="rulerZoom(1.6)" aria-label="Приблизить">+</button>
 <button type="button" onclick="rulerZoom(1 / 1.6)" aria-label="Отдалить">−</button>
-${rlZoom > 1.01 ? '<button type="button" onclick="rulerZoomReset()" aria-label="Весь чертёж">⤢</button>' : ''}
+${Math.abs(rlZoom - 1) > 0.01 || Math.abs(rlPan.x) > 1 || Math.abs(rlPan.y) > 1 ? '<button type="button" onclick="rulerZoomReset()" aria-label="Весь чертёж">⤢</button>' : ''}
 </div>`;
 rulerBindPanZoom(box);
 const chk = document.getElementById('rlCheck');
@@ -5444,8 +5444,8 @@ let rlZoom = 1, rlPan = { x: 0, y: 0 }, rlDragged = false, rlWallMids = [];
 function rulerZoom(f) {
 const W = 320, H = 230;
 const before = rlZoom;
-rlZoom = Math.min(5, Math.max(1, rlZoom * f));
-if (rlZoom <= 1.01) { rlZoom = 1; rlPan = { x: 0, y: 0 }; renderRulerSketch(); return; }
+// отдалять можно до половины исходного размера, приближать — до 5 раз
+rlZoom = Math.min(5, Math.max(0.5, rlZoom * f));
 if (f > 1) {
 const t = rulerTarget;
 let idx = -1;
@@ -5456,7 +5456,7 @@ if (!target && rlWallMids.length) {
 const cx = W / 2 + rlPan.x, cy = H / 2 + rlPan.y;
 target = rlWallMids.reduce((best, w) => (Math.hypot(w.x - cx, w.y - cy) < Math.hypot(best.x - cx, best.y - cy) ? w : best));
 }
-if (target && before <= 1.01) rlPan = { x: target.x - W / 2, y: target.y - H / 2 };
+if (target && before <= 1.01 && Math.abs(rlPan.x) < 1 && Math.abs(rlPan.y) < 1) rlPan = { x: target.x - W / 2, y: target.y - H / 2 };
 else if (target) rlPan = { x: rlPan.x + (target.x - (W / 2 + rlPan.x)) * 0.5, y: rlPan.y + (target.y - (H / 2 + rlPan.y)) * 0.5 };
 }
 renderRulerSketch();
@@ -5485,15 +5485,13 @@ if (pts.size === 1 && start.pts.size === 1) {
 const p0 = start.pts.get(e.pointerId); if (!p0) return;
 const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
 if (!start.moved && Math.hypot(dx, dy) < 6) return;
-if (rlZoom <= 1.01) return; // весь чертёж и так виден
 start.moved = true; rlDragged = true;
 rlPan = { x: start.pan.x - dx * unit, y: start.pan.y - dy * unit };
 renderRulerSketch();
 } else if (pts.size === 2 && start.pts.size === 2) {
 const a = [...pts.values()], b = [...start.pts.values()];
 const d1 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), d0 = Math.hypot(b[0].x - b[1].x, b[0].y - b[1].y) || 1;
-rlZoom = Math.min(5, Math.max(1, start.zoom * d1 / d0));
-if (rlZoom <= 1.01) rlPan = { x: 0, y: 0 };
+rlZoom = Math.min(5, Math.max(0.5, start.zoom * d1 / d0));
 start.moved = true; rlDragged = true;
 renderRulerSketch();
 }
