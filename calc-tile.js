@@ -6,7 +6,8 @@
 //   walls: { on, walls: [номера] | null (все), h: высота укладки (пусто — до потолка),
 //            w, l: плитка, мм (ширина вдоль стены × высота), joint: шов, мм,
 //            layout: 'straight' | 'offset' | 'diag' | 'herring', waste: запас, % (пусто — по раскладке),
-//            pack: м² в упаковке },
+//            pack: м² в упаковке,
+//            ax, ay: откуда целая плитка — 'start' | 'end' | 'cjoint' (шов по центру) | 'ctile' (центр плитки) },
 //   floor: { on, w, l, joint, layout, waste, pack }
 // }
 // Площадь стен — за вычетом части проёмов, попавшей в высоту укладки. Плиток —
@@ -19,6 +20,31 @@ const TILE_LAYOUTS = [
 { key: 'herring', label: 'Ёлочка', waste: 20 }
 ];
 const TILE_INK = '#1f7a8c';
+// Откуда идёт целая плитка (подрезка — с другой стороны) или по центру
+const TILE_ALIGN = [
+{ key: 'start', h: 'Слева', vWall: 'Снизу', vFloor: 'Сверху' },
+{ key: 'end', h: 'Справа', vWall: 'Сверху', vFloor: 'Снизу' },
+{ key: 'cjoint', h: 'По центру: шов', vWall: 'По центру: шов', vFloor: 'По центру: шов' },
+{ key: 'ctile', h: 'По центру: плитка', vWall: 'По центру: плитка', vFloor: 'По центру: плитка' }
+];
+const tileAlign = v => TILE_ALIGN.some(x => x.key === v) ? v : 'start';
+// Начало раскладки на отрезке [a, b] при модуле m: край целой плитки
+function tileOriginOn(al, a, b, m) {
+if (al === 'end') return b;
+if (al === 'cjoint') return (a + b) / 2;
+if (al === 'ctile') return (a + b) / 2 - m / 2;
+return a;
+}
+// Крайние куски на отрезке [a, b] (прямая раскладка): у начала и у конца
+function tileEdgePieces(o, a, b, m) {
+if (!(m > 0) || !(b > a)) return null;
+const first = o - Math.floor((o - a) / m + 1e-9) * m;          // первый край не левее a
+const last = o + Math.floor((b - o) / m + 1e-9) * m;           // последний край не правее b
+const p0 = first - a > 0.0005 ? first - a : m;
+const p1 = b - last > 0.0005 ? b - last : m;
+if (first > b - 0.0005) return { a: b - a, b: b - a, one: true };
+return { a: Math.min(p0, b - a), b: Math.min(p1, b - a) };
+}
 let tileElevWall = 0;
 let measureTilePick = 'tileWalls';
 
@@ -127,13 +153,15 @@ return out;
 /* ---------- раскладка: плитки в метрах на плоскости ---------- */
 // Плитки, покрывающие прямоугольник [x0, x1] × [y0, y1] (в метрах), как многоугольники.
 // Начало раскладки — точка (0, 0). Больше max плиток — null (слишком мелко рисовать).
-function tilePolys(s, x0, y0, x1, y1, max = 2500) {
+function tilePolys(s, x0, y0, x1, y1, max = 2500, origin = [0, 0]) {
+const [gx, gy] = origin;
+x0 -= gx; x1 -= gx; y0 -= gy; y1 -= gy;
 const { w, l, j } = tileSize(s);
 if (!(w > 0) || !(l > 0)) return null;
 const lay = tileLayout(s).key;
 const rot = lay === 'diag' || lay === 'herring' ? Math.PI / 4 : 0;
 const c = Math.cos(rot), sn = Math.sin(rot);
-const fwd = (u, v) => [u * c - v * sn, u * sn + v * c];            // местные → общие
+const fwd = (u, v) => [u * c - v * sn + gx, u * sn + v * c + gy];  // местные → общие
 const back = (x, y) => [x * c + y * sn, -x * sn + y * c];          // общие → местные
 const corners = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]].map(([x, y]) => back(x, y));
 const u0 = Math.min(...corners.map(p => p[0])), u1 = Math.max(...corners.map(p => p[0]));
@@ -167,6 +195,36 @@ for (let col = Math.floor((u0 - shift) / mw) - 1; col * mw + shift <= u1; col++)
 return out;
 }
 
+// Начало раскладки на стене (a — вдоль стены от угла А, h — от пола) и крайние куски.
+// «Слева» — как видно на развёртке: при обходе против часовой слева угол Б.
+function tileWallLayout(m, s, wi, L, Ht) {
+let flip = false;
+try { const g = molGeom(m); flip = !!g && (g.orient || 1) < 0; } catch (e) { flip = false; }
+const { w, l } = tileSize(s);
+let ax = tileAlign(s.ax);
+if (flip && (ax === 'start' || ax === 'end')) ax = ax === 'start' ? 'end' : 'start';
+const ox = tileOriginOn(ax, 0, L, w), oy = tileOriginOn(tileAlign(s.ay), 0, Ht, l);
+const straight = ['straight', 'offset'].includes(tileLayout(s).key);
+const ex = straight && tileLayout(s).key === 'straight' ? tileEdgePieces(ox, 0, L, w) : null;
+const ey = straight ? tileEdgePieces(oy, 0, Ht, l) : null;
+// по ширине — слева и справа на экране
+const hx = ex ? (flip ? { left: ex.b, right: ex.a } : { left: ex.a, right: ex.b }) : null;
+return { origin: [ox, oy], hx, ey };
+}
+function tileFloorLayout(s, minX, minY, maxX, maxY) {
+const { w, l } = tileSize(s);
+const ox = tileOriginOn(tileAlign(s.ax), minX, maxX, w), oy = tileOriginOn(tileAlign(s.ay), minY, maxY, l);
+const straight = tileLayout(s).key === 'straight';
+return { origin: [ox, oy], ex: straight ? tileEdgePieces(ox, minX, maxX, w) : null, ey: ['straight', 'offset'].includes(tileLayout(s).key) ? tileEdgePieces(oy, minY, maxY, l) : null };
+}
+const tileMm = v => `${Math.round(v * 1000)}`;
+// «слева 150, справа 150 мм · снизу 600 (целая), сверху 200 мм»
+function tilePiecesTxt(h, hFull, v, vFull, names) {
+const one = (p, full) => `${tileMm(p)}${Math.abs(p - full) < 0.0006 ? ' (целая)' : ''}`;
+const part = (p, full, n0, n1) => !p ? '' : p.one ? `${n0}–${n1}: одна полоса ${tileMm(p.a)} мм` : `${n0} ${one(p.a, full)}, ${n1} ${one(p.b, full)} мм`;
+return [part(h, hFull, names[0], names[1]), part(v, vFull, names[2], names[3])].filter(Boolean).join(' · ');
+}
+
 /* ---------- рисунки ---------- */
 // План: пол с раскладкой плитки по контуру комнаты
 function tilePlanSvg(m, W = 340, H = 240, vw = { z: 1, x: 0, y: 0 }) {
@@ -185,7 +243,8 @@ const pts = [[0, 0], ...g.segs.map(q => [q.x2, q.y2])];
 const path = `M${pts.map(p => `${X(p[0])} ${Y(p[1])}`).join('L')}Z`;
 let s = g.closed ? `<path d="${path}" fill="#f6f7f9"/>` : '';
 if (d.floor.on && g.closed) {
-const tiles = tilePolys(d.floor, minX, minY, maxX, maxY);
+const fl = tileFloorLayout(d.floor, minX, minY, maxX, maxY);
+const tiles = tilePolys(d.floor, minX, minY, maxX, maxY, 2500, fl.origin);
 if (tiles) {
 s += `<clipPath id="tlFloorClip"><path d="${path}"/></clipPath><g clip-path="url(#tlFloorClip)">`;
 s += tiles.map(t => `<path d="M${t.map(([x, y]) => `${X(x).toFixed(1)} ${Y(y).toFixed(1)}`).join('L')}Z" fill="#e3f1f4" stroke="${TILE_INK}" stroke-width=".6"/>`).join('');
@@ -222,7 +281,8 @@ const on = d.walls.on && molWalls(d.walls.walls, m).includes(wi);
 const Ht = on ? tileWallH(m, d.walls, wi) : 0;
 let s = `<rect x="${x0}" y="${Yh(Hh)}" width="${L * k}" height="${Hh * k}" fill="#ffffff" stroke="#14181f" stroke-width="1.6"/>`;
 if (on && Ht > 0) {
-const tiles = tilePolys(d.walls, 0, 0, L, Ht);
+const wl = tileWallLayout(m, d.walls, wi, L, Ht);
+const tiles = tilePolys(d.walls, 0, 0, L, Ht, 2500, wl.origin);
 const xl = Math.min(XA(0), XA(L));
 s += `<clipPath id="tlWallClip"><rect x="${xl}" y="${Yh(Ht)}" width="${L * k}" height="${Ht * k}"/></clipPath>`;
 if (tiles) s += `<g clip-path="url(#tlWallClip)">${tiles.map(t => `<path d="M${t.map(([a, h]) => `${XA(a).toFixed(1)} ${Yh(h).toFixed(1)}`).join('L')}Z" fill="#e3f1f4" stroke="${TILE_INK}" stroke-width=".6"/>`).join('')}</g>`;
@@ -309,6 +369,11 @@ const params = (kind, s, sizeLabels) => `<div class="mp-dims" style="margin-top:
 <label>Шов, мм${mIn(`tile.${kind}.joint`, s.joint, '2')}</label>
 </div>
 <div class="mp-ce-walls" style="margin-top:6px;"><span class="mp-ce-walls-label">Раскладка:</span>${TILE_LAYOUTS.map(x => `<button type="button" class="mp-ce-wall${tileLayout(s).key === x.key ? ' on' : ''}" onclick="tileSetLayout('${kind}', '${x.key}')" aria-pressed="${tileLayout(s).key === x.key}">${x.label}</button>`).join('')}</div>
+${['ax', 'ay'].map(axis => `<div class="mp-ce-walls" style="margin-top:6px;"><span class="mp-ce-walls-label">${axis === 'ax' ? 'Целая плитка ↔' : 'Целая плитка ↕'}:</span>${TILE_ALIGN.map(x => {
+const label = axis === 'ax' ? x.h : (kind === 'walls' ? x.vWall : x.vFloor);
+const on = tileAlign(s[axis]) === x.key;
+return `<button type="button" class="mp-ce-wall${on ? ' on' : ''}" onclick="tileSetAlign('${kind}', '${axis}', '${x.key}')" aria-pressed="${on}">${label}</button>`;
+}).join('')}</div>`).join('')}
 <div class="mp-dims mp-dims-2" style="margin-top:6px;">
 <label>Запас, %${mIn(`tile.${kind}.waste`, s.waste, String(tileLayout(s).waste))}</label><span class="mp-x">·</span>
 <label>В упаковке, м²${mIn(`tile.${kind}.pack`, s.pack, '1,44')}</label>
@@ -326,7 +391,8 @@ ${d.walls.on ? `${hasWalls ? chips() : '<div class="mp-hint">Сначала вв
 <div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Высота укладки ↕${mIn('tile.walls.h', d.walls.h, 'до потолка')}</label><span></span><span class="mp-hint" style="margin:0;align-self:center;">пусто — на всю стену</span></div>
 ${params('walls', d.walls, ['Ширина ↔', 'Высота ↕'])}` : ''}
 ${hasWalls ? `<div class="rl-elev-nav"><button type="button" onclick="tileStep(-1)" aria-label="Предыдущая стена">‹</button><span>Стена ${tileElevWall + 1} из ${n}</span><button type="button" onclick="tileStep(1)" aria-label="Следующая стена">›</button></div>
-<div class="mp-ce-plan rl-sketch${tileFull === 'elev' ? ' full' : ''}" id="mpTileElev"></div>` : ''}
+<div class="mp-ce-plan rl-sketch${tileFull === 'elev' ? ' full' : ''}" id="mpTileElev"></div>
+<div class="mp-hint" id="mpTileWallCuts"></div>` : ''}
 <div class="mp-calc" id="mpCalcTileWalls"></div>
 </section>
 <section class="mp-sec">
@@ -334,6 +400,7 @@ ${hasWalls ? `<div class="rl-elev-nav"><button type="button" onclick="tileStep(-
 ${toggle('floor', d.floor.on, 'Плитка на полу')}
 ${d.floor.on ? params('floor', d.floor, ['Ширина', 'Длина']) : ''}
 <div class="mp-ce-plan rl-sketch${tileFull === 'plan' ? ' full' : ''}" id="mpTilePlan"></div>
+<div class="mp-hint" id="mpTileFloorCuts"></div>
 <div class="mp-hint">Касание стены на плане — её развёртка выше. Обведены стены с плиткой.</div>
 <div class="mp-calc" id="mpCalcTileFloor"></div>
 </section>`;
@@ -344,12 +411,35 @@ const set = (id, v) => { const el = document.getElementById(id); if (el) el.inne
 const t = r.tile || tileCompute(measure, r);
 renderTileViews();
 set('mpCalcTileWalls', t.lines.walls ? escapeHtml(t.lines.walls) : '');
+const d = tileGet(measure);
+// крайние куски: на стене с развёртки и на полу
+const wi = tileElevWall, L = mNum((measure.walls || [])[wi]);
+if (d.walls.on && molWalls(d.walls.walls, measure).includes(wi) && L > 0 && tileSize(d.walls).w > 0 && tileSize(d.walls).l > 0) {
+const Ht = tileWallH(measure, d.walls, wi);
+const wl = tileWallLayout(measure, d.walls, wi, L, Ht);
+const txt = tilePiecesTxt(wl.hx ? { a: wl.hx.left, b: wl.hx.right, one: wl.hx.left >= L - 0.0005 } : null, tileSize(d.walls).w, wl.ey, tileSize(d.walls).l, ['слева', 'справа', 'снизу', 'сверху']);
+set('mpTileWallCuts', txt ? `Крайние куски на стене ${wi + 1}: ${escapeHtml(txt)}` : (tileLayout(d.walls).key !== 'straight' ? 'Крайние куски по ширине считаются для прямой раскладки' : ''));
+} else set('mpTileWallCuts', '');
+let g = null;
+try { g = molGeom(measure); } catch (e) { g = null; }
+if (d.floor.on && g && g.closed && tileSize(d.floor).w > 0 && tileSize(d.floor).l > 0) {
+const xs = [0, ...g.segs.map(q => q.x2)], ys = [0, ...g.segs.map(q => q.y2)];
+const fl = tileFloorLayout(d.floor, Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+const txt = tilePiecesTxt(fl.ex, tileSize(d.floor).w, fl.ey, tileSize(d.floor).l, ['слева', 'справа', 'сверху', 'снизу']);
+set('mpTileFloorCuts', txt ? `Крайние куски на плане: ${escapeHtml(txt)}` : '');
+} else set('mpTileFloorCuts', '');
 set('mpCalcTileFloor', [t.lines.floor, t.lines.floorBad, t.lines.all].filter(Boolean).map(escapeHtml).join('<br>'));
 }
 
 function tileSet(kind, on) {
 const d = tileEnsure();
 d[kind] = { ...d[kind], on: !!on };
+saveMeasureDraft();
+renderMeasure();
+}
+function tileSetAlign(kind, axis, key) {
+const d = tileEnsure();
+d[kind] = { ...d[kind], [axis]: key };
 saveMeasureDraft();
 renderMeasure();
 }
