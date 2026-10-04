@@ -158,7 +158,41 @@ return s;
 }
 
 /* ---------- чертёж комнаты ---------- */
-function plRoomDrawing(room, box) {
+// Строки пояснений под чертежом (каждая не длиннее, чем помещается в ширину листа)
+function plWrap(text, max = 105) {
+const out = [];
+String(text || '').split('\n').forEach(par => {
+let line = '';
+par.split(' ').forEach(w => { if ((line + ' ' + w).trim().length > max && line) { out.push(line); line = w; } else line = (line + ' ' + w).trim(); });
+if (line) out.push(line);
+});
+return out;
+}
+function plLegend(m, r, mode) {
+const ceilLines = (r.ceilEls || []).map(e => {
+const what = e.type === 'box' ? 'короб' : 'закарнизная ниша';
+const size = `${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
+const extra = e.fin && e.fin.length ? `; обработка ${[e.finLin ? `${plM2(e.finLin)} пог. м` : '', e.finArea ? `${plM2(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}` : '';
+const where = e.wallsTxt ? ` ${e.wallsTxt === 'по периметру' ? e.wallsTxt : '(' + e.wallsTxt + (e.overOp ? `, вынос ${plMm(e.overOp.ext)}` : '') + (e.partial ? `, от угла ${e.partial.corner} ${plMm(e.partial.off)}` : '') + ')'}` : '';
+const lightTxt = e.light ? `, с подсветкой ${plMm(e.lightLen)}` : '';
+return `${e.code} — ${what}${where}, ${size}, L = ${plMm(e.len)}${extra}${lightTxt}`;
+});
+if (mode === 'plan') {
+const radLines = (r.radNiches || []).map(e => {
+const extra = e.fin.length ? `; обработка ${[e.finLin ? `${plM2(e.finLin)} пог. м` : '', e.finArea ? `${plM2(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}` : '';
+return `${e.code} — ниша${e.where ? ` (${e.where})` : ''}, ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}${extra}`;
+});
+return [...ceilLines, ...radLines];
+}
+const clean = t => String(t || '').replace(/\n\* .*$/s, '');
+if (mode === 'floor') return [r.lines.tile_floor, r.lines.mol_plinth].filter(Boolean).map(clean).flatMap(t => plWrap(t));
+// потолок: площадь, ниши и короба, рамки молдингов, карниз
+return [r.lines.ceilingNet || r.lines.ceiling, ...ceilLines, r.lines.mol_ceil, r.lines.mol_cornice].filter(Boolean).map(clean).flatMap(t => plWrap(t));
+}
+
+// mode: 'plan' — обмерный план (как раньше), 'floor' — план пола (плинтус, плитка),
+// 'ceiling' — план потолка (ниши, короба, рамки молдингов, карниз, подсветка; без проёмов)
+function plRoomDrawing(room, box, mode = 'plan') {
 const m = room.measure;
 const g = plRoomPolygon(m);
 const r = computeMeasure(m);
@@ -179,9 +213,10 @@ const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), ma
 const wM = maxX - minX, hM = maxY - minY;
 const pad = 16; // место под размерные линии, мм
 // ниши и короба потолка — подписаны под чертежом, место под строки оставляем заранее
-const ceilEls = (r.ceilEls || []).filter(e => e.strips.length);
-const loose0 = (m.openings || []).some(o => typeof o.wall !== 'number' && mNum(o.w));
-const legendN = (r.ceilEls || []).length + (r.radNiches || []).length;
+const ceilEls = mode === 'floor' ? [] : (r.ceilEls || []).filter(e => e.strips.length);
+const loose0 = mode !== 'ceiling' && (m.openings || []).some(o => typeof o.wall !== 'number' && mNum(o.w));
+const legend = plLegend(m, r, mode);
+const legendN = legend.length;
 const legendH = legendN ? 4.2 * legendN + (loose0 ? 4 : 0) : 0;
 const availW = box.w - 2 * pad, availH = box.h - 10 - 2 * pad - legendH;
 let scale = PL_SCALES[PL_SCALES.length - 1];
@@ -193,8 +228,31 @@ const X = v => ox + v * k, Y = v => oy + v * k;
 s += T(box.x + box.w, box.y + 5, `М 1:${scale}`, 3.2, 700, 'end');
 // пол — лёгкая заливка, стены — толстая линия
 const pts = [[0, 0], ...g.segs.map(q => [q.x2, q.y2])];
-if (g.closed) s += `<path d="M${pts.map(p => `${X(p[0])} ${Y(p[1])}`).join('L')}Z" fill="#fff7dc" stroke="none"/>`;
+const roomPath = `M${pts.map(p => `${X(p[0])} ${Y(p[1])}`).join('L')}Z`;
+if (g.closed) s += `<path d="${roomPath}" fill="${mode === 'ceiling' ? '#f2f5fa' : '#fff7dc'}" stroke="none"/>`;
 else s += T(box.x, box.y + 10.5, `Контур не замкнут: разрыв ${plMm(g.gap)} мм — проверьте замер`, 2.9, 700, 'start', '#c2361f');
+// план пола: плитка по раскладке, обрезана контуром комнаты
+if (mode === 'floor' && g.closed && typeof tileGet === 'function') {
+const tf = tileGet(m).floor;
+if (tf.on && tileSize(tf).w > 0 && tileSize(tf).l > 0) {
+const fl = tileFloorLayout(tf, minX, minY, maxX, maxY);
+const tiles = tilePolys(tf, minX, minY, maxX, maxY, 4000, fl.origin);
+if (tiles) {
+const cid = 'plFloorClip' + Math.round(box.y);
+s += `<clipPath id="${cid}"><path d="${roomPath}"/></clipPath><g clip-path="url(#${cid})">`;
+s += tiles.map(t => `<path d="M${t.map(([x, y]) => `${X(x).toFixed(2)} ${Y(y).toFixed(2)}`).join('L')}Z" fill="#e6f2f4" stroke="#1f7a8c" stroke-width="0.15"/>`).join('');
+s += '</g>';
+}
+}
+}
+// план потолка: рамки молдингов (пунктир) и их отступ от стен
+if (mode === 'ceiling' && typeof moldingCompute === 'function') {
+const mo = moldingCompute(m);
+mo.ceil.forEach(f => [f.poly, f.inner].forEach((pp, j) => {
+if (!pp) return;
+s += `<path d="M${pp.pts.map(([x, y]) => `${X(x)} ${Y(y)}`).join('L')}Z" fill="none" stroke="#5b2d86" stroke-width="${j ? 0.25 : 0.35}" stroke-dasharray="1.6 0.8"/>`;
+}));
+}
 // ниши и короба потолка: полоса вдоль стен и штриховая кромка (элемент выше секущей плоскости)
 ceilEls.forEach(e => {
 const isBox = e.type === 'box';
@@ -248,9 +306,23 @@ s += T(X(ox2), Y(oy2), String(plMm(e.partial.off)), 2.2, 400, 'middle', '#333', 
 g.segs.forEach(q => {
 s += `<line x1="${X(q.x1)}" y1="${Y(q.y1)}" x2="${X(q.x2)}" y2="${Y(q.y2)}" stroke="#000" stroke-width="0.9" stroke-linecap="square"/>`;
 });
-// проёмы
 const orient = g.orient || 1;
-(m.openings || []).forEach((o, oi) => {
+// карниз (на плане потолка) и плинтус (на плане пола) — линией вдоль стен внутри комнаты
+if (mode !== 'plan' && typeof molGet === 'function') {
+const md = molGet(m);
+const kind = mode === 'ceiling' ? md.cornice : md.plinth;
+if (kind.on) molWalls(kind.walls, m).forEach(i => {
+const q = g.segs[i]; if (!q || !(q.len > 0)) return;
+const nx = -q.dy * orient, ny = q.dx * orient, d = 1.1 / k;
+const seg = (a, b) => b - a > 0.005 ? `<line x1="${X(q.x1 + q.dx * a + nx * d)}" y1="${Y(q.y1 + q.dy * a + ny * d)}" x2="${X(q.x1 + q.dx * b + nx * d)}" y2="${Y(q.y1 + q.dy * b + ny * d)}" stroke="${mode === 'ceiling' ? '#5b2d86' : '#7a5230'}" stroke-width="0.6"/>` : '';
+if (mode === 'ceiling') { s += seg(0, q.len); return; }
+let x = 0;
+molDoorSpans(m, i, q.len).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { s += seg(x, a0); x = Math.max(x, a1); });
+s += seg(x, q.len);
+});
+}
+// проёмы (на плане потолка их нет)
+(mode === 'ceiling' ? [] : (m.openings || [])).forEach((o, oi) => {
 if (typeof o.wall !== 'number' || !g.segs[o.wall]) return;
 const q = g.segs[o.wall];
 const [a0, a1] = openingSpan(o, q.len);
@@ -343,31 +415,13 @@ const area = plFloorArea(g);
 const { cx, cy } = plLabelPoint(g, minX, maxX, minY, maxY);
 if (g.closed) {
 s += T(X(cx), Y(cy) - 2, name, 3.4, 700);
-s += T(X(cx), Y(cy) + 3, `S = ${plM2(area)} м²`, 3, 400);
+s += T(X(cx), Y(cy) + 3, mode === 'ceiling' ? `S потолка = ${plM2(r.ceilingNet > 0 ? r.ceilingNet : (r.ceiling || area))} м²` : `S = ${plM2(area)} м²`, 3, 400);
 if (mNum(m.height)) s += T(X(cx), Y(cy) + 7.5, `h = ${plMm(mNum(m.height))}`, 2.7, 400, 'middle', '#333');
 }
-const loose = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => typeof o.wall !== 'number' && mNum(o.w) && (o.type === 'balcony' ? winH(o) : mNum(o.h)));
-// ниши и короба — строками под чертежом
-const ceilList = r.ceilEls || [];
-const radList = r.radNiches || [];
-let ly = box.y + box.h - 1 - (loose.length ? 4 : 0) - 4.2 * (ceilList.length + radList.length - 1);
-if (ceilList.length) {
-ceilList.forEach(e => {
-const what = e.type === 'box' ? 'короб' : 'закарнизная ниша';
-const size = `${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
-const extra = e.fin && e.fin.length ? `; обработка ${[e.finLin ? `${plM2(e.finLin)} пог. м` : '', e.finArea ? `${plM2(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}` : '';
-const where = e.wallsTxt ? ` ${e.wallsTxt === 'по периметру' ? e.wallsTxt : '(' + e.wallsTxt + (e.overOp ? `, вынос ${plMm(e.overOp.ext)}` : '') + (e.partial ? `, от угла ${e.partial.corner} ${plMm(e.partial.off)}` : '') + ')'}` : '';
-const lightTxt = e.light ? `, с подсветкой ${plMm(e.lightLen)}` : '';
-s += T(box.x, ly, `${e.code} — ${what}${where}, ${size}, L = ${plMm(e.len)}${extra}${lightTxt}`, 2.6, 400, 'start', '#222');
-ly += 4.2;
-});
-}
-// ниши в стенах — там же, строками
-radList.forEach(e => {
-const extra = e.fin.length ? `; обработка ${[e.finLin ? `${plM2(e.finLin)} пог. м` : '', e.finArea ? `${plM2(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}` : '';
-s += T(box.x, ly, `${e.code} — ниша${e.where ? ` (${e.where})` : ''}, ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}${extra}`, 2.6, 400, 'start', '#222');
-ly += 4.2;
-});
+const loose = mode === 'ceiling' ? [] : (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => typeof o.wall !== 'number' && mNum(o.w) && (o.type === 'balcony' ? winH(o) : mNum(o.h)));
+// пояснения — строками под чертежом
+let ly = box.y + box.h - 1 - (loose.length ? 4 : 0) - 4.2 * (legend.length - 1);
+legend.forEach(line => { s += T(box.x, ly, line, 2.6, 400, 'start', '#222'); ly += 4.2; });
 if (loose.length) {
 s += T(box.x, box.y + box.h - 1, 'Без привязки к стене: ' + loose.map(({ o, oi }) =>
 (o.type === 'balcony'
@@ -377,21 +431,21 @@ s += T(box.x, box.y + box.h - 1, 'Без привязки к стене: ' + loo
 return { svg: s, scale };
 }
 
-function plRoomPage(rooms, info, sheetNo, sheetCount) {
+function plRoomPage(rooms, info, sheetNo, sheetCount, mode = 'plan', docTitle = 'Обмерный план') {
 const frameInnerTop = 10, bottomLimit = PL_H - 5 - 40 - 6;
 const boxH = rooms.length === 1 ? bottomLimit - frameInnerTop : (bottomLimit - frameInnerTop - 6) / 2;
 let s = '';
 const scales = [];
 rooms.forEach((room, i) => {
 const box = { x: 27, y: frameInnerTop + i * (boxH + 6), w: PL_W - 27 - 9, h: boxH };
-const d = plRoomDrawing(room, box);
+const d = plRoomDrawing(room, box, mode);
 s += d.svg;
 if (d.scale) scales.push(d.scale);
 if (i === 0 && rooms.length > 1) s += `<line x1="25" y1="${box.y + boxH + 3}" x2="${PL_W - 7}" y2="${box.y + boxH + 3}" stroke="#bbb" stroke-width="0.2" stroke-dasharray="2 1.5"/>`;
 });
 const uniq = [...new Set(scales)];
 const pageInfo = { ...info, scaleNote: uniq.length === 1 ? `1:${uniq[0]}` : (uniq.length ? 'у чертежей' : '—') };
-s += plFrame(pageInfo, sheetNo, sheetCount, rooms.map(roomName).join(', '));
+s += plFrame(pageInfo, sheetNo, sheetCount, rooms.map(roomName).join(', '), docTitle);
 return s;
 }
 
@@ -651,6 +705,103 @@ const cur = typeof rlElevWall === 'number' ? rlElevWall : 0;
 openElevPrint([{ name, m: measure }], plObjectInfo(obj), obj ? `${obj.name}_${name}` : name, [mNum((measure.walls || [])[cur]) > 0 ? [cur] : null]);
 }
 
+/* ===================== ПЛАНЫ ПОЛА И ПОТОЛКА (PDF) ===================== */
+// План пола: размеры, проёмы, площадь, плинтус, плитка по раскладке.
+// План потолка: размеры, ниши и короба, рамки молдингов, карниз, подсветка, площадь.
+// Небольшие комнаты одного вида — по две на лист, крупные — по одной.
+const PL_FLAT = { floor: 'План пола', ceiling: 'План потолка' };
+function plFitsHalf(room) {
+const g = plRoomPolygon(room.measure);
+if (!g) return true;
+const xs = [0, ...g.segs.map(q => q.x2)], ys = [0, ...g.segs.map(q => q.y2)];
+const wM = Math.max(...xs) - Math.min(...xs), hM = Math.max(...ys) - Math.min(...ys);
+const halfH = (PL_H - 5 - 40 - 6 - 10 - 6) / 2 - 10 - 32, fullW = PL_W - 27 - 9 - 32;
+return wM * 1000 / 50 <= fullW && hM * 1000 / 50 <= halfH && g.segs.length <= 8;
+}
+// items: [{ room, mode }]
+async function buildFlatPDF(items, info, fileBase) {
+if (!items.length) throw new Error('Ничего не выбрано');
+const pages = [];
+for (let i = 0; i < items.length; i++) {
+const a = items[i], b = items[i + 1];
+if (b && a.mode === b.mode && plFitsHalf(a.room) && plFitsHalf(b.room)) { pages.push([a, b]); i++; }
+else pages.push([a]);
+}
+const { jsPDF } = window.jspdf;
+const pdf = new jsPDF('p', 'mm', 'a4');
+for (let i = 0; i < pages.length; i++) {
+if (i) pdf.addPage();
+const mode = pages[i][0].mode;
+const png = await plSvgToPng(plRoomPage(pages[i].map(it => it.room), info, i + 1, pages.length, mode, PL_FLAT[mode]));
+pdf.addImage(png, 'PNG', 0, 0, PL_W, PL_H, undefined, 'FAST');
+}
+const safe = String(fileBase || 'zamer').replace(/[^\wа-яё\- ]+/gi, '').trim().replace(/\s+/g, '_');
+return { pdfBlob: pdf.output('blob'), fileName: `Plany_pola_i_potolka_${safe || 'zamer'}.pdf` };
+}
+
+/* ---------- выбор планов для печати ---------- */
+// rooms: [{ name, room }]; sel[i] — набор видов помещения i: 'floor', 'ceiling'
+let flatPrint = null;
+function openFlatPrint(rooms, info, fileBase, preset) {
+rooms = rooms.filter(r => r.room && r.room.measure && (r.room.measure.walls || []).some(w => mNum(w) > 0));
+if (!rooms.length) { showAddToast('Нет стен с длиной — введите стены на вкладке «Стены»'); return; }
+flatPrint = { rooms, info, fileBase, sel: rooms.map(() => new Set(preset || ['floor', 'ceiling'])) };
+document.getElementById('sheetTitle').textContent = 'Планы пола и потолка — PDF с размерами';
+renderFlatPrint();
+document.getElementById('sheet').classList.add('open');
+document.getElementById('sheetOverlay').classList.add('open');
+document.body.classList.add('sheet-open');
+}
+function renderFlatPrint() {
+const st = flatPrint;
+if (!st) return;
+const n = st.sel.reduce((a, s) => a + s.size, 0);
+document.getElementById('sheetItems').innerHTML = `<div class="ep-list">
+${st.rooms.map((r, i) => `<div class="ep-room"><div class="ep-name">${plEsc(r.name)}</div>
+<div class="mp-ce-walls">${Object.entries(PL_FLAT).map(([k, label]) => `<button type="button" class="mp-ce-wall${st.sel[i].has(k) ? ' on' : ''}" onclick="flatPrintToggle(${i}, '${k}')" aria-pressed="${st.sel[i].has(k)}">${label}</button>`).join('')}</div></div>`).join('')}
+</div>
+<div class="ep-count">${n ? `Выбрано планов: ${n}` : 'Отметьте, что печатать'}</div>
+<button type="button" class="sheet-item" onclick="flatPrintGo('share')"${n ? '' : ' disabled'}><span class="sheet-item-icon" aria-hidden="true">${sheetIconHtml('📤')}</span>Отправить PDF</button>
+<button type="button" class="sheet-item" onclick="flatPrintGo('download')"${n ? '' : ' disabled'}><span class="sheet-item-icon" aria-hidden="true">${sheetIconHtml('⬇️')}</span>Скачать PDF</button>`;
+}
+function flatPrintToggle(i, k) {
+const set = flatPrint && flatPrint.sel[i];
+if (!set) return;
+if (set.has(k)) set.delete(k); else set.add(k);
+renderFlatPrint();
+}
+async function flatPrintGo(mode) {
+const st = flatPrint;
+if (!st) return;
+// сначала все планы пола, потом все планы потолка — так соседние влезают на один лист
+const items = [];
+['floor', 'ceiling'].forEach(k => st.rooms.forEach((r, i) => { if (st.sel[i].has(k)) items.push({ room: r.room, mode: k }); }));
+if (!items.length) return;
+closeSheet();
+showAddToast('Готовлю планы…');
+try {
+const { pdfBlob, fileName } = await buildFlatPDF(items, st.info, st.fileBase);
+const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+if (mode === 'share' && navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ title: 'Планы пола и потолка', files: [file] });
+else triggerFileDownload(pdfBlob, fileName);
+} catch (err) {
+if (err && err.name === 'AbortError') return;
+console.error('Планы:', err);
+alert('Не удалось собрать планы: ' + (err && err.message ? err.message : err));
+}
+}
+function openFlatPrintForObject(objectId) {
+const obj = (cloudData.objects || []).find(o => o.id === objectId);
+openFlatPrint(objectRooms(obj).map(room => ({ name: roomName(room), room })), plObjectInfo(obj), obj && obj.name);
+}
+// Текущий замер (в том числе несохранённый); preset — 'floor' или 'ceiling'
+function openFlatPrintForMeasure(preset) {
+if (!measure) return;
+const obj = measure.objectId ? (cloudData.objects || []).find(o => o.id === measure.objectId) : null;
+const name = (measure.room || '').trim() || 'Помещение';
+openFlatPrint([{ name, room: { measure } }], plObjectInfo(obj), obj ? `${obj.name}_${name}` : name, preset ? [preset] : null);
+}
+
 /* ---------- сборка PDF ---------- */
 async function plSvgToPng(inner, dpi = 200) {
 const wPx = Math.round(PL_W / 25.4 * dpi), hPx = Math.round(PL_H / 25.4 * dpi);
@@ -724,6 +875,7 @@ openSheet(`Обмерный план · ${obj ? obj.name : ''} · ${n} ${pluralR
 { icon: '⬇️', label: 'Скачать PDF', onClick: () => exportMeasurePlan(objectId, 'download') },
 null,
 { icon: '📏', label: 'Развёртки стен (PDF)…', onClick: () => openElevPrintForObject(objectId) },
+{ icon: '📏', label: 'Планы пола и потолка (PDF)…', onClick: () => openFlatPrintForObject(objectId) },
 ]);
 }
 
