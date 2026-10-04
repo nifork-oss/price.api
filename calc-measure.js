@@ -1204,6 +1204,57 @@ renderMeasure();
 document.getElementById('mpBody').scrollTop = 0;
 }
 
+// Свайп влево или вправо по замеру — соседняя вкладка (Стены → Потолок → …).
+// Не на чертежах (там жесты чертежу), не в полях ввода и не в рядах, которые
+// сами листаются вбок; во весь экран и с открытой клавиатурой замера — нет.
+(function () {
+let sw = null;
+const scrollsX = el => {
+for (let e = el; e && e.id !== 'mpBody'; e = e.parentElement) {
+if (e.scrollWidth > e.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(e).overflowX)) return true;
+}
+return false;
+};
+document.addEventListener('touchstart', (e) => {
+sw = null;
+const body = document.getElementById('mpBody');
+const panel = document.getElementById('measurePanel');
+if (e.touches.length !== 1 || !body || !body.contains(e.target)) return;
+if (e.target.closest('.rl-sketch, .mp-ce-plan, input, textarea, select')) return;
+if (panel.classList.contains('ruler-open') || document.body.classList.contains('cp-full-open') || document.body.classList.contains('rl-full-open')) return;
+if (scrollsX(e.target)) return;
+const t = e.touches[0];
+sw = { x: t.clientX, y: t.clientY, t: Date.now() };
+}, { passive: true });
+document.addEventListener('touchmove', (e) => { if (sw && e.touches.length > 1) sw = null; }, { passive: true });
+document.addEventListener('touchcancel', () => { sw = null; }, { passive: true });
+document.addEventListener('touchend', (e) => {
+if (!sw) return;
+const t = e.changedTouches[0];
+const dx = t.clientX - sw.x, dy = t.clientY - sw.y, dt = Date.now() - sw.t;
+sw = null;
+// уверенный горизонтальный жест: не короче 70 px, заметно больше вбок, чем вверх-вниз, и быстро
+if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || dt > 700) return;
+measureSwipeTab(dx < 0 ? 1 : -1);
+}, { passive: true });
+})();
+function measureSwipeTab(dir) {
+const tabs = [...document.querySelectorAll('#measurePanel .mp-tabs .chip')].filter(c => c.offsetParent !== null).map(c => c.dataset.tab);
+const i = tabs.indexOf(measureTab);
+const next = tabs[i + dir];
+if (i < 0 || !next) return;
+setMeasureTab(next);
+const chip = document.querySelector(`#measurePanel .mp-tabs .chip[data-tab="${next}"]`);
+if (chip && chip.scrollIntoView) chip.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+// короткий сдвиг — видно, в какую сторону перешли
+const body = document.getElementById('mpBody');
+body.classList.remove('mp-swipe-l', 'mp-swipe-r');
+void body.offsetWidth;
+body.classList.add(dir > 0 ? 'mp-swipe-l' : 'mp-swipe-r');
+clearTimeout(measureSwipeTab.t);
+measureSwipeTab.t = setTimeout(() => body.classList.remove('mp-swipe-l', 'mp-swipe-r'), 260);
+}
+
 
 /* ---------- ввод ---------- */
 function setMeasurePath(path, value) {
