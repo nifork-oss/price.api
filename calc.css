@@ -853,3 +853,10 @@ body.measure-open .sheet { z-index: 96; }
 .ep-name { font-size: 14px; font-weight: 700; color: #1f2a37; margin-bottom: 4px; }
 .ep-count { padding: 10px 12px 4px; font-size: 13px; color: #5d6878; }
 .sheet-item:disabled { opacity: .45; cursor: default; }
+
+/* свайп между вкладками замера */
+@keyframes mpSwipeL { from { transform: translateX(32px); opacity: .35; } to { transform: none; opacity: 1; } }
+@keyframes mpSwipeR { from { transform: translateX(-32px); opacity: .35; } to { transform: none; opacity: 1; } }
+.mp-swipe-l > .mp-body-inner { animation: mpSwipeL .2s ease-out; }
+.mp-swipe-r > .mp-body-inner { animation: mpSwipeR .2s ease-out; }
+@media (prefers-reduced-motion: reduce) { .mp-swipe-l > .mp-body-inner, .mp-swipe-r > .mp-body-inner { animation: none; } }
