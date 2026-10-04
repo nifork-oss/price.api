@@ -122,6 +122,7 @@
 </button>
 <div class="user-menu" id="userMenu" role="menu">
 <button type="button" class="menu-item" role="menuitem" id="tabProfileBtn" onclick="switchTab('profile')">Профиль</button>
+<button type="button" class="menu-item" role="menuitem" onclick="toggleUserMenu(false); openPriceDirectory()">Прайсы</button>
 <button type="button" class="menu-item" role="menuitem" id="tabUsersBtn" onclick="switchTab('users')" style="display: none;">Мастера</button>
 <button type="button" class="menu-item" role="menuitem" id="tabStatsBtn" onclick="switchTab('stats')" style="display: none;">Статистика и копии</button>
 <div class="menu-sep" id="userMenuSep"></div>
@@ -452,7 +453,7 @@
 <h3 style="font-size: 14px; margin-bottom: 12px;">Публичная витрина прайса</h3>
 <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600;">
 <input type="checkbox" id="publicPriceToggle" onchange="togglePublicPrice()">
-Показывать мой прайс-лист по ссылке (без входа)
+Показывать мой прайс-лист по ссылке (без входа) и в общем списке «Прайсы»
 </label>
 <div id="publicPriceLinkBox" style="display:none; margin-top:10px;">
 <input type="text" id="publicPriceLinkInput" readonly style="width:100%; box-sizing:border-box; font-size:12px; padding:8px; border:1px solid #cfd5dd; border-radius:8px; background:#f4f6f8;">
@@ -564,7 +565,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=d0bd0281"></script>
+<script src="calc-app.js?v=c6ad4ae8"></script>
 
 <script src="calc-measure.js?v=4e92741e"></script>
 

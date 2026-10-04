@@ -468,6 +468,24 @@ const handler = {
         return json({ services: cd.services || [], companyName: user.companyName || companyLogin, pieNote: user.pieNote || "" });
       }
 
+      // Список открытых прайсов — для кнопки «Прайсы» (без входа).
+      // Только те, кто сам включил показ прайса по ссылке, и только
+      // название компании и логин для ссылки — больше ничего из аккаунта.
+      if (path === "/public-companies" && request.method === "GET") {
+        const record = await readBin(env);
+        const companyData = record.companyData || {};
+        const companies = record.users
+          .filter((u) => u.publicPriceEnabled && u.role !== "client")
+          .map((u) => {
+            const cd = companyData[u.login] || {};
+            const services = (cd.services || []).filter((s) => s && !s.isCategory).length;
+            return { login: u.login, name: u.companyName || u.login, services };
+          })
+          .filter((c) => c.services > 0)
+          .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+        return json({ companies });
+      }
+
       // Публичный просмотр ОДНОГО счёта/расчёта по ссылке (без входа) —
       // для view.html. Отдаём только сам документ и название объекта,
       // без остальных данных аккаунта (прайс, другие счета, пользователи).

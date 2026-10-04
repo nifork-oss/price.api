@@ -2734,3 +2734,16 @@ if ('serviceWorker' in navigator) {
         });
     });
 }
+
+// Прайсы мастеров: компании, у которых открыт прайс по ссылке
+async function openPriceDirectory() {
+let list = null;
+try {
+const res = await fetch(`${WORKER_URL}/public-companies`);
+if (res.ok) list = (await res.json()).companies || [];
+} catch (e) { list = null; }
+if (!list) { alert('Не удалось загрузить список прайсов — проверьте интернет и попробуйте ещё раз.'); return; }
+const go = login => { location.href = 'index.html?company=' + encodeURIComponent(login); };
+const items = list.map(c => ({ icon: '🔗', label: `${c.name} · ${c.services} ${pluralRu(c.services, 'услуга', 'услуги', 'услуг')}`, onClick: () => go(c.login) }));
+openSheet(list.length ? 'Прайсы мастеров' : 'Пока ни одна компания не открыла свой прайс', items.length ? items : [{ label: 'Закрыть', onClick: () => {} }]);
+}

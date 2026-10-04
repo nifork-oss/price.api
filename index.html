@@ -343,6 +343,7 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px var(--s-ink); }
 
 <div class="nav-header">
 <a href="calc.html" class="nav-btn">Личный кабинет для мастера и заказчика</a>
+<button type="button" class="nav-btn" onclick="openPriceDirectory()">Прайсы мастеров</button>
 <div id="adminBadge" style="font-size:12px; font-weight:500; color:#5a6470; display:none;">Режим редактирования</div>
 </div>
 
@@ -1492,6 +1493,23 @@ const id = SHEET_ICONS[icon];
 return id ? `<svg class="ic"><use href="#i-${id}"/></svg>` : '';
 }
 let sheetActions = [];
+
+// Прайсы мастеров: компании, у которых открыт прайс по ссылке
+async function openPriceDirectory() {
+let list = null;
+try {
+const res = await fetch(`${WORKER_URL}/public-companies`);
+if (res.ok) list = (await res.json()).companies || [];
+} catch (e) { list = null; }
+if (!list) { alert('Не удалось загрузить список прайсов — проверьте интернет и попробуйте ещё раз.'); return; }
+const here = new URLSearchParams(location.search).get('company');
+const go = login => { location.href = 'index.html' + (login ? '?company=' + encodeURIComponent(login) : ''); };
+const word = n => { const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? 'услуга' : a >= 2 && a <= 4 && (b < 12 || b > 14) ? 'услуги' : 'услуг'; };
+const items = list.filter(c => c.login !== here).map(c => ({ icon: '🔗', label: `${c.name} · ${c.services} ${word(c.services)}`, onClick: () => go(c.login) }));
+// со страницы компании — вернуться к общему прайсу
+if (here) items.unshift({ icon: '🔗', label: 'Общий прайс', onClick: () => go('') }, null);
+openSheet(list.length ? 'Прайсы мастеров' : 'Пока ни одна компания не открыла свой прайс', items.length ? items : [{ label: 'Закрыть', onClick: () => {} }]);
+}
 
 function openSheet(title, items) {
 sheetActions = items.map(i => i && i.onClick);
