@@ -103,7 +103,7 @@ const molInd = f => (f && f.dbl ? mNum(f.ind) : 0);
 const molFrameSides = f => [f, f.inner].filter(Boolean).flatMap(r => [r.x1 - r.x0, r.x1 - r.x0, r.y1 - r.y0, r.y1 - r.y0]);
 const molFrameLen = f => molFrameSides(f).reduce((a, v) => a + minLen(v), 0);
 
-// Раскладка молдингов на стене: рамки обходят проёмы, линии разрываются на них
+// Раскладка молдингов на стене: рамки обходят проёмы и ниши, линии разрываются на них
 function molWallLayout(m, wi) {
 const L = mNum((m.walls || [])[wi]);
 const Hh = wallHeightOf(m, wi);
@@ -114,6 +114,8 @@ const [a0, a1] = openingSpan(o, L);
 const v = openingVert(o, Hh);
 return { a0, a1, y0: o.type === 'balcony' ? 0 : v.y0, y1: v.y1 };
 });
+// ниши в стенах — тоже препятствие: рамки обходят, линии разрываются
+if (typeof radNichesCompute === 'function') radNichesCompute(m).list.filter(e => e.wall === wi && e.span).forEach(e => ops.push({ a0: e.span[0], a1: e.span[1], y0: e.bottom, y1: e.top }));
 molGet(m).wall.forEach((row, ri) => {
 if (!molWalls(row.walls, m).includes(wi)) return;
 if (row.type === 'line') {
@@ -459,7 +461,7 @@ ${molDblHtml(`molDbl('ceil', ${i}, this.checked)`, f, `molding.ceil.${i}.ind`)}`
 <div class="mp-sec-title">Молдинги на стенах</div>
 <div class="rl-elev-nav"><button type="button" onclick="molStep(-1)" aria-label="Предыдущая стена">‹</button><span>Стена ${molElevWall + 1} из ${n}</span><button type="button" onclick="molStep(1)" aria-label="Следующая стена">›</button></div>
 <div class="mp-ce-plan" id="mpMolElev"></div>
-<div class="mp-hint">Ряд рамок раскладывается по стене сам: рамки обходят окна и двери с тем же промежутком. Линия — горизонтальный молдинг на высоте, разрывается на проёмах. Синим на развёртке — отступы: от пола, до потолка, между рамками и до внутренней рамки.</div>
+<div class="mp-hint">Ряд рамок раскладывается по стене сам: рамки обходят окна, двери и ниши с тем же промежутком. Линия — горизонтальный молдинг на высоте, разрывается на проёмах и нишах. Синим на развёртке — отступы: от пола, до потолка, между рамками и до внутренней рамки.</div>
 ${d.wall.map((row, i) => `<div class="mp-open">
 <div class="mp-open-top">
 <button type="button" class="mp-type" onclick="molRowType(${i})">${row.type === 'line' ? 'Линия' : 'Ряд рамок'} ▾</button>
