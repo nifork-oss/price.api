@@ -362,10 +362,10 @@ s += T(box.x, ly, `${e.code} — ${what}${where}, ${size}, L = ${plMm(e.len)}${e
 ly += 4.2;
 });
 }
-// ниши под окнами — там же, строками
+// ниши в стенах — там же, строками
 radList.forEach(e => {
 const extra = e.fin.length ? `; обработка ${[e.finLin ? `${plM2(e.finLin)} пог. м` : '', e.finArea ? `${plM2(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}` : '';
-s += T(box.x, ly, `${e.code} — ниша под ${e.opCode}${e.wall != null ? ` (стена ${e.wall + 1})` : ''}, ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}${extra}`, 2.6, 400, 'start', '#222');
+s += T(box.x, ly, `${e.code} — ниша${e.where ? ` (${e.where})` : ''}, ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}${extra}`, 2.6, 400, 'start', '#222');
 ly += 4.2;
 });
 if (loose.length) {
