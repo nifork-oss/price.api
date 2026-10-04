@@ -746,7 +746,9 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .mp-add-loose-row { font-size: 13px; color: var(--s-ink2); line-height: 1.6; margin-top: 4px; }
 .mp-add-loose { border: none; background: none; padding: 2px 4px; font: 600 13px inherit; font-family: inherit; color: var(--s-ink); text-decoration: underline; text-decoration-color: var(--tape-d); text-underline-offset: 3px; cursor: pointer; }
 
-.rl-sketch { position: relative; overflow: hidden; touch-action: none; }
+.rl-sketch { position: relative; overflow: hidden; touch-action: pan-y; }
+/* одним пальцем по чертежу листается страница; во весь экран жесты — чертежу */
+.rl-sketch.full { touch-action: none; }
 .rl-zoom { position: absolute; right: 6px; top: 6px; display: flex; flex-direction: column; gap: 4px; }
 .rl-zoom button { width: 34px; height: 34px; border: 1px solid var(--s-ink); border-radius: 6px; background: #ffffff; font-size: 18px; font-weight: 700; line-height: 1; color: var(--s-ink); cursor: pointer; }
 .rl-opbtns button { font-size: 14px; }

@@ -1735,7 +1735,31 @@ renderCeilPlan();
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cpFull) cpToggleFull(false); });
 window.addEventListener('resize', () => { if (cpFull) renderCeilPlan(); });
 
-// Палец — двигаем, два пальца — масштаб, колесо мыши — масштаб.
+// Чертежи в обычном виде не мешают листать страницу: одним пальцем по чертежу
+// листается страница, двигать и приближать — двумя пальцами (или во весь экран,
+// там один палец двигает). Колесо мыши листает страницу; приближает — с Ctrl
+// (так же шлёт щипок тачпада) или во весь экран.
+const pzFull = box => box.classList.contains('full');
+const pzOneFingerPan = (box, e) => e.pointerType !== 'touch' || pzFull(box);
+const pzWheelZoom = (box, e) => e.ctrlKey || pzFull(box);
+let pzHintAt = 0;
+function pzHint(dx, dy) {
+// подсказка — только когда тянут вбок (вверх-вниз страница и так листается)
+if (Math.abs(dx) <= Math.abs(dy) || Date.now() - pzHintAt < 4000) return;
+pzHintAt = Date.now();
+if (typeof showAddToast === 'function') showAddToast('Двумя пальцами — двигать и приближать чертёж');
+}
+// Два пальца или весь экран — страницу не листаем, жест забирает чертёж.
+// own() — ещё случаи, когда один палец нужен чертежу (тащим окно по стене).
+function pzGuardTouch(box, own) {
+box.addEventListener('touchmove', (e) => {
+if (e.cancelable && (e.touches.length >= 2 || pzFull(box) || (own && own()))) e.preventDefault();
+}, { passive: false });
+}
+// Центр двух пальцев
+const pzMid = pts => { const a = [...pts.values()]; return { x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2 }; };
+
+// Два пальца — двигаем и масштабируем, во весь экран — и одним пальцем.
 // Касания стен и полос после перетаскивания не срабатывают.
 function cpBindPanZoom(box) {
 if (box.dataset.pz) return;
@@ -1757,6 +1781,7 @@ if (pts.size === 1 && start.pts.size === 1) {
 const p0 = start.pts.get(e.pointerId); if (!p0) return;
 const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
 if (!start.moved && Math.hypot(dx, dy) < 6) return;
+if (!pzOneFingerPan(box, e)) { pzHint(dx, dy); return; }
 if (!start.moved) { try { box.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ } }
 start.moved = true; cpDragged = true;
 cpPan = { x: start.pan.x - dx * unit(), y: start.pan.y - dy * unit() };
@@ -1766,6 +1791,9 @@ if (start.pts.size !== 2) { start = { pan: { ...cpPan }, zoom: cpZoom, pts: new 
 const a = [...pts.values()], b = [...start.pts.values()];
 const d1 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), d0 = Math.hypot(b[0].x - b[1].x, b[0].y - b[1].y) || 1;
 cpZoom = Math.min(6, Math.max(0.5, start.zoom * d1 / d0));
+// и двигаем за центром пальцев
+const c1 = pzMid(pts), c0 = pzMid(start.pts);
+cpPan = { x: start.pan.x - (c1.x - c0.x) * unit(), y: start.pan.y - (c1.y - c0.y) * unit() };
 start.moved = true; cpDragged = true;
 renderCeilPlan();
 }
@@ -1778,10 +1806,12 @@ else start = { pan: { ...cpPan }, zoom: cpZoom, pts: new Map(pts), moved: true }
 box.addEventListener('pointerup', end);
 box.addEventListener('pointercancel', end);
 box.addEventListener('wheel', (e) => {
+if (!pzWheelZoom(box, e)) return;
 e.preventDefault();
 cpZoom = Math.min(6, Math.max(0.5, cpZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
 renderCeilPlan();
 }, { passive: false });
+pzGuardTouch(box);
 }
 
 // Чертёж на вкладке «Потолок»: стены с длинами, ниши и короба с размерами,
@@ -2121,6 +2151,7 @@ if (pts.size === 1 && start.pts.size === 1) {
 const p0 = start.pts.get(e.pointerId); if (!p0) return;
 const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
 if (!start.moved && Math.hypot(dx, dy) < 6) return;
+if (!pzOneFingerPan(box, e)) { pzHint(dx, dy); return; }
 if (!start.moved) { try { box.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ } }
 start.moved = true; setDragged(true);
 v.x = start.x - dx * unit(); v.y = start.y - dy * unit();
@@ -2130,6 +2161,9 @@ if (start.pts.size !== 2) { start = snap(true); return; }
 const a = [...pts.values()], b = [...start.pts.values()];
 const d1 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), d0 = Math.hypot(b[0].x - b[1].x, b[0].y - b[1].y) || 1;
 v.z = Math.min(8, Math.max(0.5, start.z * d1 / d0));
+// и двигаем за центром пальцев
+const c1 = pzMid(pts), c0 = pzMid(start.pts);
+v.x = start.x - (c1.x - c0.x) * unit(); v.y = start.y - (c1.y - c0.y) * unit();
 start.moved = true; setDragged(true);
 rerender();
 }
@@ -2137,7 +2171,8 @@ rerender();
 const end = (e) => { pts.delete(e.pointerId); start = pts.size ? snap(true) : null; };
 box.addEventListener('pointerup', end);
 box.addEventListener('pointercancel', end);
-box.addEventListener('wheel', (e) => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+box.addEventListener('wheel', (e) => { if (!pzWheelZoom(box, e)) return; e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+pzGuardTouch(box);
 }
 function cnBindPanZoom(box, which) {
 bindPanZoom(box, () => cnViews[which], () => renderCnViews(), v => { cnDragged = v; }, f => cnZoom(which, f));
