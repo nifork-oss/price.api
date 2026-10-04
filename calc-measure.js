@@ -1004,6 +1004,7 @@ html += `<section class="mp-sec">
 ${m.ceiling.map((c, i) => `<div class="mp-row">${mIn(`ceiling.${i}.l`, c.l, 'длина')}<span class="mp-x">×</span>${mIn(`ceiling.${i}.w`, c.w, 'ширина')}<span class="mp-row-res" id="mpCeilRes${i}"></span>${m.ceiling.length > 1 ? `<button type="button" class="mp-del" onclick="removeMeasureRow('ceiling', ${i})" aria-label="Убрать участок">✕</button>` : ''}</div>`).join('')}
 <div class="mp-add-row"><button type="button" class="mp-add" onclick="addMeasureRow('ceiling')">+ Участок</button></div>
 <div class="mp-calc" id="mpCalcCeiling"></div>
+<button type="button" class="mp-link-btn" onclick="openFlatPrintForMeasure('ceiling')">Печать плана потолка (PDF) →</button>
 </section>
 ${ceilElsSectionHtml(m)}`;
 } else if (measureTab === 'slopes') {

@@ -403,6 +403,7 @@ ${d.floor.on ? params('floor', d.floor, ['Ширина', 'Длина']) : ''}
 <div class="mp-hint" id="mpTileFloorCuts"></div>
 <div class="mp-hint">Касание стены на плане — её развёртка выше. Обведены стены с плиткой.</div>
 <div class="mp-calc" id="mpCalcTileFloor"></div>
+<button type="button" class="mp-link-btn" onclick="openFlatPrintForMeasure('floor')">Печать плана пола (PDF) →</button>
 </section>`;
 }
 
