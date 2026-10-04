@@ -106,6 +106,8 @@ const curTab = () => TABS.find(t => shown(t + 'Tab')) || mainTab();
 // переменные других частей (объявлены через let — на window их нет)
 const V = {
 molFull: () => typeof molFull !== 'undefined' ? molFull : null,
+tileFull: () => typeof tileFull !== 'undefined' ? tileFull : null,
+tileElevWall: () => typeof tileElevWall !== 'undefined' ? tileElevWall : null,
 cnFull: () => typeof cnFull !== 'undefined' ? cnFull : null,
 cpFull: () => typeof cpFull !== 'undefined' ? cpFull : false,
 rlFull: () => typeof rlFull !== 'undefined' ? rlFull : false,
@@ -129,6 +131,7 @@ const LAYERS = [
 { on: () => isOpen('userMenu'), close: () => toggleUserMenu(false) },
 { on: () => isOpen('aiPanel'), close: () => closeAiReview() },
 { on: () => isOpen('workPicker'), close: () => closeWorkPicker() },
+{ on: () => !!g('tileFull'), close: () => tileToggleFull(g('tileFull')) },
 { on: () => !!g('molFull'), close: () => molToggleFull(g('molFull')) },
 { on: () => !!g('cnFull'), close: () => cnToggleFull(g('cnFull')) },
 { on: () => !!g('cpFull'), close: () => cpToggleFull(false) },
@@ -187,7 +190,7 @@ const room = mOpen && t.kind === 'room' ? { objectId: t.objectId, roomId: t.room
 sessionStorage.setItem(placeKey(), JSON.stringify({
 tab: curTab(), obj: g('currentObjectId') || null, y: window.scrollY,
 measure: mOpen, mt: g('measureTab'), room,
-rv: g('rlView'), ew: g('rlElevWall'), mw: g('molElevWall'), cw: g('cnElevWall'),
+rv: g('rlView'), ew: g('rlElevWall'), mw: g('molElevWall'), cw: g('cnElevWall'), tw: g('tileElevWall'),
 my: mOpen && $('mpBody') ? $('mpBody').scrollTop : 0,
 }));
 } catch (e) { /* пусто */ }
@@ -216,6 +219,7 @@ if (p.rv === 'plan' || p.rv === 'elev') rlView = p.rv;
 if (Number.isInteger(p.ew)) rlElevWall = p.ew;
 if (Number.isInteger(p.mw)) molElevWall = p.mw;
 if (Number.isInteger(p.cw)) cnElevWall = p.cw;
+if (Number.isInteger(p.tw) && typeof tileElevWall !== 'undefined') tileElevWall = p.tw;
 if (p.mt) setMeasureTab(p.mt); else renderMeasure();
 setTimeout(() => { const b = $('mpBody'); if (b) b.scrollTop = p.my || 0; }, 50);
 }

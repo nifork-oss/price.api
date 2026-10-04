@@ -749,6 +749,15 @@ r.molCeil = mo.ceilLen;
 r.molWall = mo.wallLen;
 Object.keys(mo.lines).forEach(k => { r.lines['mol_' + k] = mo.lines[k]; });
 }
+// Плитка: стены и пол
+if (typeof tileCompute === 'function') {
+const t = tileCompute(m, r);
+r.tile = t;
+r.tileWalls = t.walls;
+r.tileFloor = t.floor;
+r.tileAll = t.walls + t.floor;
+Object.keys(t.lines).forEach(k => { r.lines['tile_' + k] = t.lines[k]; });
+}
 return r;
 }
 
@@ -761,6 +770,9 @@ text: [r.lines.walls, r.lines.openings, r.lines.net].filter(Boolean).join('\n') 
 if (tab === 'molCornice') return { value: r.molCornice || 0, unit: 'пог. м', label: 'Карниз', text: r.lines.mol_cornice || '' };
 if (tab === 'molPlinth') return { value: r.molPlinth || 0, unit: 'пог. м', label: 'Плинтус', text: r.lines.mol_plinth || '' };
 if (tab === 'molCeil') return { value: r.molCeil || 0, unit: 'пог. м', label: 'Молдинг на потолке', text: r.lines.mol_ceil || '' };
+if (tab === 'tileWalls') return { value: r.tileWalls || 0, unit: 'м²', label: 'Плитка: стены', text: r.lines.tile_walls || '' };
+if (tab === 'tileFloor') return { value: r.tileFloor || 0, unit: 'м²', label: 'Плитка: пол', text: r.lines.tile_floor || '' };
+if (tab === 'tileAll') return { value: r.tileAll || 0, unit: 'м²', label: 'Плитка: всего', text: [r.lines.tile_walls, r.lines.tile_floor, r.lines.tile_all].filter(Boolean).join('\n') };
 if (tab === 'molWall') return { value: r.molWall || 0, unit: 'пог. м', label: 'Молдинг на стенах', text: r.lines.mol_wall || '' };
 if (tab === 'corners' || tab === 'cornersOut' || tab === 'cornersIn') {
 const cmin = r.cornersMin ? MIN_NOTE : '';
@@ -857,6 +869,7 @@ function closeMeasure() {
 if (cpFull) { cpFull = false; document.body.classList.remove('cp-full-open'); }
 if (cnFull) { cnFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof molFull !== 'undefined' && molFull) { molFull = null; document.body.classList.remove('cp-full-open'); }
+if (typeof tileFull !== 'undefined' && tileFull) { tileFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof rlFull !== 'undefined' && rlFull) { rlFull = false; document.body.classList.remove('rl-full-open'); }
 cpZoom = 1; cpPan = { x: 0, y: 0 }; cpRot = 0;
 if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; rulerPick = null; if (typeof rlEditBase !== "undefined") rlEditBase = null; rlZoom = 1; rlPan = { x: 0, y: 0 }; rlUnderlayAdjust = false; rlLastFit = null; }
@@ -1038,6 +1051,8 @@ ${m.narrow.map((v, i) => `<div class="mp-row"><span class="mp-row-label">${i + 1
 html += cornersTabHtml(m);
 } else if (measureTab === 'molding') {
 html += typeof moldingTabHtml === 'function' ? moldingTabHtml(m) : '';
+} else if (measureTab === 'tile') {
+html += typeof tileTabHtml === 'function' ? tileTabHtml(m) : '';
 } else if (measureTab === 'history') {
 html += renderMeasureHistoryHtml();
 }
@@ -1077,6 +1092,7 @@ set('mpCeilElOver' + i, `Стена ${op.wall + 1}: проём ${mFmt(openingWid
 if (measureTab === 'ceiling') renderCeilPlan();
 if (measureTab === 'corners') renderCnViews(r);
 if (measureTab === 'molding' && typeof updateMoldingOutputs === 'function') updateMoldingOutputs(r);
+if (measureTab === 'tile' && typeof updateTileOutputs === 'function') updateTileOutputs(r);
 (measure.parts || []).forEach((pt, i) => {
 const l = mNum(pt.l), h = mNum(pt.h);
 set('mpPartArea' + i, l && h ? `${mFmt(l * h)} м²` : '');
@@ -1120,6 +1136,9 @@ pick = `<div class="mp-pick">${opt('ceiling', 'Потолок', r.ceiling, 'м²
 } else if (measureTab === 'corners' && r.cornersOut > 0 && r.cornersIn > 0 && measureTarget.kind !== 'room') {
 const opt = (key, label, val) => `<button type="button" class="${measureCornersPick === key ? 'active' : ''}" onclick="setCornersPick('${key}')">${label}<br><b>${mFmt(val)}</b> пог. м</button>`;
 pick = `<div class="mp-pick">${opt('cornersOut', 'Наружные', r.cornersOut)}${opt('cornersIn', 'Внутренние', r.cornersIn)}${opt('corners', 'Все', r.corners)}</div>`;
+} else if (measureTab === 'tile' && r.tileWalls > 0 && r.tileFloor > 0 && measureTarget.kind !== 'room') {
+const opt = key => `<button type="button" class="${effTab === key ? 'active' : ''}" onclick="setTilePick('${key}')">${{ tileWalls: 'Стены', tileFloor: 'Пол', tileAll: 'Всего' }[key]}<br><b>${mFmt(r[key])}</b> м²</button>`;
+pick = `<div class="mp-pick">${opt('tileWalls')}${opt('tileFloor')}${opt('tileAll')}</div>`;
 } else if (measureTab === 'molding' && ['molCornice', 'molPlinth', 'molCeil', 'molWall'].filter(k => r[k] > 0).length > 1 && measureTarget.kind !== 'room') {
 const opt = (key, label) => r[key] > 0 ? `<button type="button" class="${effTab === key ? 'active' : ''}" onclick="setMolPick('${key}')">${label}<br><b>${mFmt(r[key])}</b> пог. м</button>` : '';
 pick = `<div class="mp-pick">${opt('molCornice', 'Карниз')}${opt('molPlinth', 'Плинтус')}${opt('molCeil', 'Потолок')}${opt('molWall', 'Стены')}</div>`;
@@ -1160,6 +1179,11 @@ function measureEffTab(r) {
 if (measureTab === 'walls') return measureWallsPicks(r).includes(measureWallsPick) ? measureWallsPick : 'walls';
 if (measureTab === 'ceiling') return r.ceilNiche > 0 || r.ceilBox > 0 ? measureCeilPick : 'ceiling';
 if (measureTab === 'corners') return r.cornersOut > 0 && r.cornersIn > 0 ? measureCornersPick : (r.cornersOut > 0 ? 'cornersOut' : r.cornersIn > 0 ? 'cornersIn' : 'corners');
+if (measureTab === 'tile') {
+const have = ['tileWalls', 'tileFloor', 'tileAll'].filter(k => r[k] > 0);
+const pick = typeof measureTilePick === 'string' ? measureTilePick : 'tileWalls';
+return have.includes(pick) && (pick !== 'tileAll' || (r.tileWalls > 0 && r.tileFloor > 0)) ? pick : (r.tileWalls > 0 ? 'tileWalls' : r.tileFloor > 0 ? 'tileFloor' : 'tileWalls');
+}
 if (measureTab === 'molding') {
 const have = ['molCornice', 'molPlinth', 'molCeil', 'molWall'].filter(k => r[k] > 0);
 return have.includes(measureMolPick) ? measureMolPick : (have[0] || 'molCornice');
@@ -1171,6 +1195,7 @@ function setMeasureTab(tab) {
 if (cpFull) cpToggleFull(false);
 if (cnFull) { cnFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof molFull !== 'undefined' && molFull) { molFull = null; document.body.classList.remove('cp-full-open'); }
+if (typeof tileFull !== 'undefined' && tileFull) { tileFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof rlFull !== 'undefined' && rlFull) { rlFull = false; document.body.classList.remove('rl-full-open'); }
 if (typeof rulerTarget !== 'undefined' && rulerTarget) { rulerTarget = null; document.getElementById('measurePanel').classList.remove('ruler-open'); }
 measureTab = tab;
@@ -1545,6 +1570,7 @@ renderMeasure();
 // Номера стен в нишах и коробах после перестройки стен: map[старый] = новый (или -1)
 function remapCeilElWalls(m, map) {
 if (typeof remapMoldingWalls === 'function') remapMoldingWalls(m, map);
+if (typeof remapTileWalls === 'function') remapTileWalls(m, map);
 // ниши в стенах на стене (не под окном): новый номер стены; стены нет — без привязки
 (Array.isArray(m.radNiches) ? m.radNiches : []).forEach(el => {
 if (radUnder(el) || !Number.isInteger(el.wall)) return;
@@ -2188,7 +2214,7 @@ return list.sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedA
 
 function measureSummaryLines(m) {
 const r = computeMeasure(m);
-return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts, r.lines.radNiches, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn, r.lines.mol_cornice, r.lines.mol_plinth, r.lines.mol_ceil, r.lines.mol_wall].filter(Boolean);
+return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts, r.lines.radNiches, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn, r.lines.mol_cornice, r.lines.mol_plinth, r.lines.mol_ceil, r.lines.mol_wall, r.lines.tile_walls, r.lines.tile_floor].filter(Boolean);
 }
 
 function measurePills(m) {
@@ -2208,6 +2234,7 @@ if (r.corners > 0) p.push(`Углы ${mFmt(r.corners)} пог. м`);
 if (r.molCornice > 0) p.push(`Карниз ${mFmt(r.molCornice)} пог. м`);
 if (r.molPlinth > 0) p.push(`Плинтус ${mFmt(r.molPlinth)} пог. м`);
 if (r.molCeil + r.molWall > 0) p.push(`Молдинги ${mFmt(r.molCeil + r.molWall)} пог. м`);
+if (r.tileAll > 0) p.push(`Плитка ${mFmt(r.tileAll)} м²`);
 return p;
 }
 
