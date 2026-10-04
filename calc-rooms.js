@@ -22,6 +22,8 @@ const SURFACES = [
 { key: 'ceilFin', tab: 'ceilFin', label: 'Ниши/короба: обработка' },
 { key: 'ceilFinArea', tab: 'ceilFinArea', label: 'Ниши/короба: обработка, м²' },
 { key: 'ceilLight', tab: 'ceilLight', label: 'Подсветка' },
+{ key: 'radFin', tab: 'radFin', label: 'Ниши в стенах: обработка' },
+{ key: 'radFinArea', tab: 'radFinArea', label: 'Ниши в стенах: обработка, м²' },
 { key: 'slopes', tab: 'slopes', label: 'Откосы' },
 { key: 'narrow', tab: 'narrow', label: 'Узкие' },
 { key: 'corners', tab: 'corners', label: 'Углы' },
@@ -81,6 +83,8 @@ ceilBoxArea: 'Короба',
 ceilFin: 'Ниши и короба: обработка',
 ceilFinArea: 'Ниши и короба: обработка',
 ceilLight: 'Подсветка',
+radFin: 'Ниши в стенах',
+radFinArea: 'Ниши в стенах',
 slopes: 'Откосы',
 narrow: 'Узкие поверхности',
 corners: 'Углы',
@@ -379,14 +383,16 @@ try { localStorage.setItem(lastSurfaceStoreKey(), JSON.stringify(m)); } catch (e
 
 function suggestSurface(srv, has) {
 const n = String(srv.name || '').toLowerCase();
-// лепнина: потолочный плинтус — это карниз
-if (/карниз|галтел|потолочн\S* плинтус/.test(n) && has('molCornice')) return 'molCornice';
+// лепнина: потолочный плинтус — это карниз; «закарнизная ниша» (под карниз для штор) — не лепнина
+if (/(^|[^а-яё])карниз|галтел|потолочн\S* плинтус/.test(n) && !/закарниз|штор|гардин|тюл/.test(n) && has('molCornice')) return 'molCornice';
 if (/плинтус/.test(n) && has('molPlinth')) return 'molPlinth';
 if (/молдинг/.test(n) && (has('molCeil') || has('molWall'))) return /потол/.test(n) && has('molCeil') ? 'molCeil' : has('molWall') ? 'molWall' : 'molCeil';
 if (/угл|уголк/.test(n) && has('corners')) return /наруж/.test(n) && has('cornersOut') ? 'cornersOut' : /внутр/.test(n) && has('cornersIn') ? 'cornersIn' : 'corners';
 if (/откос/.test(n) && has('slopes')) return 'slopes';
 if (/плитк|кафел|фартук|панел/.test(n) && has('parts')) return 'parts';
 if (/подсвет|светодиод|led|лент/.test(n) && has('ceilLight')) return 'ceilLight';
+// ниши в стенах (под батарею, под ТВ) — по отмеченным сторонам
+if (/ниш/.test(n) && !/закарниз/.test(n) && /батар|радиат|под\s*окн|(^|[^а-яё])тв([^а-яё]|$)|телевиз|в\s*стен|стенов/.test(n) && (has('radFin') || has('radFinArea'))) return srv.unit === 'м²' && has('radFinArea') ? 'radFinArea' : has('radFin') ? 'radFin' : 'radFinArea';
 // шпаклёвка, покраска и т. п. ниш и коробов — по отмеченным сторонам; монтаж — по длине
 if (/ниш|короб/.test(n) && /шпакл|покра|грунт|обработ|отдел|шлиф/.test(n) && (has('ceilFin') || has('ceilFinArea'))) return srv.unit === 'м²' && has('ceilFinArea') ? 'ceilFinArea' : 'ceilFin';
 if (/ниш/.test(n) && has('ceilNiche')) return 'ceilNiche';

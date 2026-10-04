@@ -181,7 +181,8 @@ const pad = 16; // место под размерные линии, мм
 // ниши и короба потолка — подписаны под чертежом, место под строки оставляем заранее
 const ceilEls = (r.ceilEls || []).filter(e => e.strips.length);
 const loose0 = (m.openings || []).some(o => typeof o.wall !== 'number' && mNum(o.w));
-const legendH = (r.ceilEls || []).length ? 4.2 * (r.ceilEls || []).length + (loose0 ? 4 : 0) : 0;
+const legendN = (r.ceilEls || []).length + (r.radNiches || []).length;
+const legendH = legendN ? 4.2 * legendN + (loose0 ? 4 : 0) : 0;
 const availW = box.w - 2 * pad, availH = box.h - 10 - 2 * pad - legendH;
 let scale = PL_SCALES[PL_SCALES.length - 1];
 for (const sc of PL_SCALES) { if (wM * 1000 / sc <= availW && hM * 1000 / sc <= availH) { scale = sc; break; } }
@@ -348,8 +349,9 @@ if (mNum(m.height)) s += T(X(cx), Y(cy) + 7.5, `h = ${plMm(mNum(m.height))}`, 2.
 const loose = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => typeof o.wall !== 'number' && mNum(o.w) && (o.type === 'balcony' ? winH(o) : mNum(o.h)));
 // ниши и короба — строками под чертежом
 const ceilList = r.ceilEls || [];
+const radList = r.radNiches || [];
+let ly = box.y + box.h - 1 - (loose.length ? 4 : 0) - 4.2 * (ceilList.length + radList.length - 1);
 if (ceilList.length) {
-let ly = box.y + box.h - 1 - (loose.length ? 4 : 0) - 4.2 * (ceilList.length - 1);
 ceilList.forEach(e => {
 const what = e.type === 'box' ? 'короб' : 'закарнизная ниша';
 const size = `${plMm(e.w)}${e.h ? '×' + plMm(e.h) : ''}`;
@@ -360,6 +362,12 @@ s += T(box.x, ly, `${e.code} — ${what}${where}, ${size}, L = ${plMm(e.len)}${e
 ly += 4.2;
 });
 }
+// ниши в стенах — там же, строками
+radList.forEach(e => {
+const extra = e.fin.length ? `; обработка ${[e.finLin ? `${plM2(e.finLin)} пог. м` : '', e.finArea ? `${plM2(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}` : '';
+s += T(box.x, ly, `${e.code} — ниша${e.where ? ` (${e.where})` : ''}, ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}${extra}`, 2.6, 400, 'start', '#222');
+ly += 4.2;
+});
 if (loose.length) {
 s += T(box.x, box.y + box.h - 1, 'Без привязки к стене: ' + loose.map(({ o, oi }) =>
 (o.type === 'balcony'

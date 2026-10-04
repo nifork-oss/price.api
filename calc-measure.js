@@ -301,6 +301,115 @@ out.list.push(e);
 return out;
 }
 
+/* ---------- ниши в стенах: под окнами (для батарей) и просто в стене (под ТВ и т. п.) ---------- */
+// measure.radNiches = [{
+//   underOp: номер окна или балконного блока — ниша под окном, по его центру;
+//   wall, off, from: стена и отступ от угла А или Б (пусто — по центру) — ниша просто в стене;
+//   w: ширина (у ниши под окном пусто — как окно), h: высота, d: глубина,
+//   gap: отступ вниз от подоконника (у ниши под окном), y0: низ от пола,
+//   sides: { ключ: вкл/выкл } }].
+// Стена в нише уже входит в площадь стен (она просто глубже), поэтому отдельно
+// считаются только стороны ниши.
+const RAD_FACES = [
+{ key: 'sides', label: 'Боковины', on: true },
+{ key: 'top', label: 'Верх', on: true },
+{ key: 'bottom', label: 'Низ', on: true },
+{ key: 'back', label: 'Стена в нише', on: false }
+];
+const radUnder = el => !!el && Number.isInteger(el.underOp);
+const radCode = (list, idx) => {
+const u = radUnder(list[idx]);
+return (u ? 'НБ-' : 'НС-') + list.slice(0, idx + 1).filter(x => radUnder(x) === u).length;
+};
+const radFaceOn = (el, f) => el.sides && typeof el.sides[f.key] === 'boolean' ? el.sides[f.key] : f.on;
+// число из поля, где 0 — тоже значение; пусто — NaN
+const radOpt = v => { const t = String(v == null ? '' : v).trim(); if (t === '') return NaN; const x = evalMeasureExpr(t); return isFinite(x) && x >= 0 ? x : NaN; };
+// окна, под которыми бывает ниша: окна и балконные блоки с шириной
+const radOpOk = o => !!o && o.type !== 'door' && openingWidth(o) > 0;
+function radOp(m, el) {
+const o = radUnder(el) ? (Array.isArray(m.openings) ? m.openings : [])[el.underOp] : null;
+return radOpOk(o) ? o : null;
+}
+const radWall = (m, el) => !radUnder(el) && Number.isInteger(el.wall) && el.wall >= 0 && el.wall < (m.walls || []).length ? el.wall : null;
+// Где ниша: стена, [начало, конец] вдоль стены (если известно), низ и верх от пола
+function radNicheGeom(m, el) {
+const y0 = radOpt(el.y0), hIn = mNum(el.h);
+let w, top, bottom, span = null, wall = null, guess = false, o = null, off = null;
+if (radUnder(el)) {
+o = radOp(m, el);
+if (!o) return null;
+wall = typeof o.wall === 'number' ? o.wall : null;
+const v = openingVert(o, (wall != null ? wallHeightOf(m, wall) : mNum(m.height)) || 2.7);
+guess = !!v.guess;
+w = mNum(el.w) || mNum(o.w);              // у балконного блока — под оконной частью
+// верх — подоконник минус отступ; низ — от пола, или верх минус высота, или пол
+const lim = Math.max(0, v.y0 - (radOpt(el.gap) || 0));
+bottom = isFinite(y0) ? y0 : (hIn ? lim - hIn : 0);
+top = isFinite(y0) && hIn ? Math.min(lim, y0 + hIn) : lim;
+const L = wall != null ? mNum((m.walls || [])[wall]) : 0;
+if (L > 0) {
+const [a0, a1] = openingSpan(o, L);
+const [c0, c1] = o.type === 'balcony' ? balconyParts(o, a0, a1).win : [a0, a1];
+const c = (c0 + c1) / 2;
+span = [Math.max(0, c - w / 2), Math.min(L, c + w / 2)];
+}
+} else {
+w = mNum(el.w);
+if (!(w > 0) || !(hIn > 0)) return null;
+wall = radWall(m, el);
+const Hh = (wall != null ? wallHeightOf(m, wall) : mNum(m.height)) || Infinity;
+bottom = isFinite(y0) ? y0 : 0;
+top = Math.min(Hh, bottom + hIn);
+const L = wall != null ? mNum((m.walls || [])[wall]) : 0;
+if (L > 0) {
+const ww = Math.min(w, L);
+const o2 = radOpt(el.off);
+let a0 = (L - ww) / 2;
+if (isFinite(o2)) { off = Math.min(o2, L - ww); a0 = el.from === 'end' ? L - off - ww : off; }
+span = [Math.max(0, a0), Math.min(L, a0 + ww)];
+}
+}
+bottom = Math.max(0, bottom);
+if (!(w > 0) || !(top - bottom > 0.005)) return null;
+return { o, w: span ? span[1] - span[0] : w, h: top - bottom, top, bottom, span, wall, guess, off };
+}
+// низ есть только у ниши, которая не доходит до пола
+const radRaised = (m, el) => { const gm = radNicheGeom(m, el); return !!gm && gm.bottom > 0.005; };
+function radNichesCompute(m) {
+const out = { list: [], finLin: 0, finArea: 0, finMin: false };
+const list = Array.isArray(m.radNiches) ? m.radNiches : [];
+list.forEach((el, idx) => {
+const gm = radNicheGeom(m, el);
+if (!gm) return;
+const d = mNum(el.d);
+const raised = gm.bottom > 0.005;
+const under = radUnder(el);
+const where = under
+? `под ${opCode(gm.o, el.underOp)}${gm.wall != null ? `, стена ${gm.wall + 1}` : ''}`
+: gm.wall != null ? `стена ${gm.wall + 1}, ${gm.off != null ? `от угла ${el.from === 'end' ? 'Б' : 'А'} ${mFmt(gm.off)}` : 'по центру'}` : '';
+const e = { idx, code: radCode(list, idx), under, where, ...gm, d, raised, fin: [], finLin: 0, finArea: 0 };
+// стороны ниши — по правилу «уже метра — пог. м»
+const dims = { sides: [[d, gm.h], [d, gm.h]], top: [[gm.w, d]], bottom: raised ? [[gm.w, d]] : [], back: [[gm.w, gm.h]] };
+RAD_FACES.forEach(f => {
+if (!radFaceOn(el, f)) return;
+const pieces = (dims[f.key] || []).map(([a, b]) => ceilFacePiece(a, b)).filter(Boolean);
+if (!pieces.length) return;
+const lin = pieces.reduce((a, p) => a + (p.lin || 0), 0), ar = pieces.reduce((a, p) => a + (p.area || 0), 0);
+if (pieces.some(p => p.min)) out.finMin = true;
+e.finLin += lin; e.finArea += ar;
+e.fin.push(`${f.label.toLowerCase()} ${pieces.length > 1 ? `${pieces.length} × ${pieces[0].txt}` : pieces[0].txt}${ar ? ' м²' : ''}`);
+});
+out.finLin += e.finLin; out.finArea += e.finArea;
+const size = `${mFmt(gm.w)}×${mFmt(gm.h)}${d ? '×' + mFmt(d) : ''}`;
+const finTxt = e.fin.length
+? `; обработка: ${e.fin.join(' + ')} = ${[e.finLin ? `${mFmt(e.finLin)} пог. м` : '', e.finArea ? `${mFmt(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}`
+: (d ? '' : ' — укажите глубину');
+e.line = `${e.code} ниша${where ? ` (${where})` : ''} ${size}${raised ? `, от пола ${mFmt(gm.bottom)}` : ''}${gm.guess ? ' (подоконник условно 0,8)' : ''}${finTxt}`;
+out.list.push(e);
+});
+return out;
+}
+
 /* ---------- узкие места у проёмов (режим «без вычета проёмов») ---------- */
 // У каждого проёма на стене смотрим, сколько до угла, потолка, пола и соседнего
 // проёма. Меньше метра (но не вплотную) — добавляем погонные метры вдоль проёма:
@@ -420,12 +529,18 @@ items.push({ key: 'eo' + e.idx, group: 'els', kind: 'out', label: e.code, pieces
 items.push({ key: 'ei' + e.idx, group: 'els', kind: 'in', label: e.code, pieces: e.h > 0 ? [e.len, e.innerLen] : [e.len], def: false });
 }
 });
+// ниши в стенах: наружные рёбра по краю ниши и внутренние углы в глубине
+(r.radNiches || []).forEach(e => {
+const pieces = [e.h, e.h, e.w, ...(e.raised ? [e.w] : [])];
+items.push({ key: 'ro' + e.idx, group: 'rad', kind: 'out', label: e.code, pieces, def: true });
+if (e.d > 0) items.push({ key: 'ri' + e.idx, group: 'rad', kind: 'in', label: e.code, pieces, def: false });
+});
 const sel = m.corners && typeof m.corners === 'object' ? m.corners : {};
 items.forEach(it => { it.on = typeof sel[it.key] === 'boolean' ? sel[it.key] : it.def; });
 return items;
 }
 
-const CORNER_GROUPS = { walls: 'углы стен', slopes: 'откосы', joints: 'стыки', els: 'ниши и короба' };
+const CORNER_GROUPS = { walls: 'углы стен', slopes: 'откосы', joints: 'стыки', els: 'ниши и короба', rad: 'ниши в стенах' };
 function cornersCompute(m, r) {
 const items = cornerItemsList(m, r);
 const res = { items, out: 0, in: 0, min: false, linesOut: [], linesIn: [] };
@@ -605,6 +720,14 @@ if (nar.length) r.lines.narrow = `Узкие поверхности: ${nar.map(f
 const narParts = [r.narrowManual, r.narrowWalls || 0, r.openStrips || 0].filter(v => v > 0);
 if (narParts.length > 1) r.lines.narrowTotal = `Узкие всего: ${narParts.map(mFmt).join(' + ')} = ${mFmt(r.narrow)} пог. м`;
 
+// Ниши в стенах: под окнами и просто в стене
+const rn = radNichesCompute(m);
+r.radNiches = rn.list;
+r.radFin = rn.finLin;
+r.radFinArea = rn.finArea;
+r.radFinMin = rn.finMin;
+if (rn.list.length) r.lines.radNiches = rn.list.map(e => e.line).join('\n') + (rn.finMin ? MIN_NOTE : '');
+
 // Углы: наружные и внутренние, по отмеченным
 const cr = cornersCompute(m, r);
 r.cornerItems = cr.items;
@@ -657,6 +780,8 @@ if (tab === 'ceilBox') return { value: r.ceilBox, unit: 'пог. м', label: 'К
 if (tab === 'ceilLight') return { value: r.ceilLight, unit: 'пог. м', label: 'Подсветка', text: (r.ceilEls || []).filter(e => e.light).map(e => e.line).join('\n') };
 if (tab === 'ceilFin') return { value: r.ceilFin, unit: 'пог. м', label: 'Ниши и короба: обработка', text: (r.ceilEls || []).filter(e => e.finLin > 0).map(e => e.line).join('\n') + (r.ceilFinMin ? MIN_NOTE : '') };
 if (tab === 'ceilFinArea') return { value: r.ceilFinArea, unit: 'м²', label: 'Ниши и короба: обработка, м²', text: (r.ceilEls || []).filter(e => e.finArea > 0).map(e => e.line).join('\n') };
+if (tab === 'radFin') return { value: r.radFin || 0, unit: 'пог. м', label: 'Ниши в стенах: обработка', text: (r.radNiches || []).filter(e => e.finLin > 0).map(e => e.line).join('\n') + (r.radFinMin ? MIN_NOTE : '') };
+if (tab === 'radFinArea') return { value: r.radFinArea || 0, unit: 'м²', label: 'Ниши в стенах: обработка, м²', text: (r.radNiches || []).filter(e => e.finArea > 0).map(e => e.line).join('\n') };
 if (tab === 'slopes') return { value: r.slopesLen, unit: 'пог. м', label: 'Откосы', text: r.lines.slopesLen || '' };
 if (tab === 'narrow') return { value: r.narrow, unit: 'пог. м', label: 'Узкие поверхности', text: [r.lines.narrowWalls, r.lines.narrow, r.lines.openStrips, r.lines.narrowTotal].filter(Boolean).join('\n') };
 return { value: 0, unit: '', label: '', text: '' };
@@ -855,7 +980,8 @@ ${(m.parts || []).map((pt, i) => `<div class="mp-open">
 </div>`).join('')}
 <div class="mp-add-row"><button type="button" class="mp-add" onclick="addMeasureRow('parts')">+ Участок стены</button></div>
 <div class="mp-calc" id="mpCalcParts"></div>
-</section>`;
+</section>
+${radNichesSectionHtml(m)}`;
 } else if (measureTab === 'ceiling') {
 html += `<section class="mp-sec">
 <div class="mp-sec-title">Потолок</div>
@@ -930,6 +1056,12 @@ set('mpCeilAuto', r.ceilingAuto
 ? `Комната сошлась — площадь потолка посчитана по контуру стен: <b>${mFmt(r.ceiling)} м²</b>. Если потолок сложный (короба, уровни), введите участки ниже — тогда посчитается по ним.`
 : '');
 set('mpCalcParts', [r.lines.parts, r.lines.wallsMinusParts].filter(Boolean).map(escapeHtml).join('<br>'));
+set('mpCalcRad', r.lines.radNiches ? escapeHtml(r.lines.radNiches).replace(/\n/g, '<br>') : '');
+(measure.radNiches || []).forEach((el, i) => {
+const e = (r.radNiches || []).find(x => x.idx === i);
+set('mpRadRes' + i, e ? `${mFmt(e.w)}×${mFmt(e.h)}` : '');
+set('mpRadFin' + i, !e ? (radUnder(el) ? (radOp(measure, el) ? 'Ниша не помещается — проверьте подоконник от пола, отступы и высоту' : 'Выберите окно') : 'Укажите ширину и высоту ниши') : e.fin.length ? `Обработка: ${escapeHtml(e.fin.join(' + '))} = <b>${[e.finLin ? `${mFmt(e.finLin)} пог. м` : '', e.finArea ? `${mFmt(e.finArea)} м²` : ''].filter(Boolean).join(' + ')}</b>` : (e.d ? 'Обработка не считается — стороны не отмечены' : 'Укажите глубину — посчитаются стороны ниши'));
+});
 set('mpCalcCeilEls', [r.lines.ceilEls, r.lines.ceilingNet].filter(Boolean).map(escapeHtml).join('<br>').replace(/\n/g, '<br>'));
 (measure.ceilEls || []).forEach((el, i) => {
 const e = (r.ceilEls || []).find(x => x.idx === i);
@@ -971,15 +1103,16 @@ function renderMeasureFooter(r) {
 const foot = document.getElementById('mpFoot');
 if (measureTab === 'history') { foot.classList.add('hidden'); return; }
 foot.classList.remove('hidden');
-if (measureTab === 'walls' && !(r.parts > 0)) measureWallsPick = 'walls';
+const wallsPicks = measureWallsPicks(r);
+if (measureTab === 'walls' && !wallsPicks.includes(measureWallsPick)) measureWallsPick = 'walls';
 const ceilHasEls = r.ceilNiche > 0 || r.ceilBox > 0;
 if (measureTab === 'ceiling' && !ceilHasEls) measureCeilPick = 'ceiling';
 const effTab = measureEffTab(r);
 const v = measureValueForTab(r, effTab);
 let main = '', sub = '', pick = '';
-if (measureTab === 'walls' && r.parts > 0 && measureTarget.kind !== 'room') {
-const opt = (key, label, val) => `<button type="button" class="${measureWallsPick === key ? 'active' : ''}" onclick="setWallsPick('${key}')">${label}<br><b>${mFmt(val)}</b></button>`;
-pick = `<div class="mp-pick">${opt('walls', 'Стены', r.wallsCalc)}${opt('parts', 'Участки', r.parts)}${opt('wallsMinus', 'Стены − участки', r.wallsMinusParts)}</div>`;
+if (measureTab === 'walls' && wallsPicks.length > 1 && measureTarget.kind !== 'room') {
+const opt = (key, label, val, unit = '') => wallsPicks.includes(key) ? `<button type="button" class="${measureWallsPick === key ? 'active' : ''}" onclick="setWallsPick('${key}')">${label}<br><b>${mFmt(val)}</b>${unit ? ' ' + unit : ''}</button>` : '';
+pick = `<div class="mp-pick">${opt('walls', 'Стены', r.wallsCalc)}${opt('parts', 'Участки', r.parts)}${opt('wallsMinus', 'Стены − участки', r.wallsMinusParts)}${opt('radFin', 'Ниши в стенах', r.radFin, 'пог. м')}${opt('radFinArea', 'Ниши в стенах', r.radFinArea, 'м²')}</div>`;
 } else if (measureTab === 'ceiling' && ceilHasEls && measureTarget.kind !== 'room') {
 const opt = (key, label, val, unit) => `<button type="button" class="${measureCeilPick === key ? 'active' : ''}" onclick="setCeilPick('${key}')">${label}<br><b>${mFmt(val)}</b> ${unit}</button>`;
 pick = `<div class="mp-pick">${opt('ceiling', 'Потолок', r.ceiling, 'м²')}${r.ceilingNet > 0 ? opt('ceilingNet', 'Без ниш/коробов', r.ceilingNet, 'м²') : ''}${r.ceilNiche > 0 ? opt('ceilNiche', 'Ниши', r.ceilNiche, 'пог. м') : ''}${r.ceilBox > 0 ? opt('ceilBox', 'Короба', r.ceilBox, 'пог. м') : ''}${r.ceilFin > 0 ? opt('ceilFin', 'Обработка', r.ceilFin, 'пог. м') : ''}${r.ceilFinArea > 0 ? opt('ceilFinArea', 'Обработка', r.ceilFinArea, 'м²') : ''}${r.ceilLight > 0 ? opt('ceilLight', 'Подсветка', r.ceilLight, 'пог. м') : ''}</div>`;
@@ -1012,6 +1145,10 @@ btn.textContent = measureTarget.roomId ? 'Сохранить замер' : 'До
 }
 
 let measureWallsPick = 'walls';
+// что можно вставить с вкладки «Стены»: стены, участки, обработка ниш в стенах
+function measureWallsPicks(r) {
+return ['walls', ...(r.parts > 0 ? ['parts', 'wallsMinus'] : []), ...(r.radFin > 0 ? ['radFin'] : []), ...(r.radFinArea > 0 ? ['radFinArea'] : [])];
+}
 function setWallsPick(p) { measureWallsPick = p; updateMeasureOutputs(); }
 let measureCeilPick = 'ceiling';
 function setCeilPick(p) { measureCeilPick = p; updateMeasureOutputs(); }
@@ -1019,7 +1156,7 @@ let measureCornersPick = 'corners';
 function setCornersPick(p) { measureCornersPick = p; updateMeasureOutputs(); }
 // Что вставляется с текущей вкладки, если внизу есть выбор
 function measureEffTab(r) {
-if (measureTab === 'walls') return r.parts > 0 ? measureWallsPick : 'walls';
+if (measureTab === 'walls') return measureWallsPicks(r).includes(measureWallsPick) ? measureWallsPick : 'walls';
 if (measureTab === 'ceiling') return r.ceilNiche > 0 || r.ceilBox > 0 ? measureCeilPick : 'ceiling';
 if (measureTab === 'corners') return r.cornersOut > 0 && r.cornersIn > 0 ? measureCornersPick : (r.cornersOut > 0 ? 'cornersOut' : r.cornersIn > 0 ? 'cornersIn' : 'corners');
 if (measureTab === 'molding') {
@@ -1113,7 +1250,7 @@ function removeMeasureRow(kind, i) {
 measure[kind].splice(i, 1);
 if (kind === 'openings') remapCeilElOpsAfterRemove(measure, i);
 if (kind === 'walls' && Array.isArray(measure.wallHeights)) measure.wallHeights.splice(i, 1);
-if (kind !== 'openings' && kind !== 'parts' && kind !== 'ceilEls' && measure[kind].length === 0) measure[kind].push(kind === 'ceiling' ? { l: '', w: '' } : '');
+if (kind !== 'openings' && kind !== 'parts' && kind !== 'ceilEls' && kind !== 'radNiches' && measure[kind].length === 0) measure[kind].push(kind === 'ceiling' ? { l: '', w: '' } : '');
 saveMeasureDraft();
 renderMeasure();
 }
@@ -1149,6 +1286,135 @@ function setOpeningSlopes(i, on) {
 measure.openings[i].slopes = on;
 saveMeasureDraft();
 updateMeasureOutputs();
+}
+
+/* ---------- ниши в стенах: ввод ---------- */
+function radNichesSectionHtml(m) {
+const list = Array.isArray(m.radNiches) ? m.radNiches : [];
+const ops = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => radOpOk(o));
+const walls = Array.isArray(m.walls) ? m.walls : [];
+const hasWalls = walls.some(w => mNum(w) > 0);
+return `<section class="mp-sec">
+<div class="mp-sec-title">Ниши в стенах</div>
+<div class="mp-hint">Под окном (для батареи) — по центру окна, от подоконника вниз; в стене (под ТВ, полки) — где угодно на стене. Стена в нише уже входит в площадь стен, отдельно считаются боковины, верх и низ. Рёбра ниш — на вкладке «Углы».</div>
+${list.map((el, i) => {
+const under = radUnder(el);
+const wi = radWall(m, el);
+return `<div class="mp-open">
+<div class="mp-open-top">
+<button type="button" class="mp-type" onclick="toggleRadKind(${i})" aria-label="Сменить: под окном или в стене">${radCode(list, i)} ${under ? 'Под окном' : 'В стене'} ▾</button>
+<span class="mp-open-area" id="mpRadRes${i}"></span>
+<button type="button" class="mp-del" onclick="removeMeasureRow('radNiches', ${i})" aria-label="Убрать нишу">✕</button>
+</div>
+${under ? `<div class="mp-place"><label>Под окном
+<select onchange="setRadOp(${i}, this.value)">
+${radOp(m, el) ? '' : '<option value="" selected>выберите окно</option>'}
+${ops.map(({ o, oi }) => `<option value="${oi}" ${el.underOp === oi ? 'selected' : ''}>${opCode(o, oi)} ${o.type === 'balcony' ? 'балк. блок' : 'окно'} ${mFmt(openingWidth(o))}${typeof o.wall === 'number' ? ' · стена ' + (o.wall + 1) : ''}</option>`).join('')}
+</select></label></div>` : walls.length && hasWalls ? `<div class="mp-place"><label>На стене
+<select onchange="setRadWall(${i}, this.value)">
+<option value="">без привязки</option>
+${walls.map((w, k) => mNum(w) > 0 ? `<option value="${k}" ${wi === k ? 'selected' : ''}>стена ${k + 1} · ${mFmt(mNum(w))} м</option>` : '').join('')}
+</select></label>
+${wi != null ? `<label>От угла <button type="button" class="mp-ce-corner" onclick="toggleRadFrom(${i})" aria-label="Сменить угол">${el.from === 'end' ? 'Б' : 'А'} ⇄</button>${mIn(`radNiches.${i}.off`, el.off, 'по центру')}</label>` : ''}
+</div>` : ''}
+<div class="mp-dims" style="margin-top:6px;">
+<label>Ширина ↔${mIn(`radNiches.${i}.w`, el.w, under ? 'как окно' : '1,2')}</label><span class="mp-x">×</span>
+<label>Высота ↕${mIn(`radNiches.${i}.h`, el.h, under ? 'по отступам' : '0,8')}</label><span class="mp-x">×</span>
+<label>Глубина${mIn(`radNiches.${i}.d`, el.d, '0,1')}</label>
+</div>
+<div class="mp-dims mp-dims-2" style="margin-top:6px;">
+${under ? `<label>Отступ от подоконника ↓${mIn(`radNiches.${i}.gap`, el.gap, '0')}</label><span class="mp-x">·</span>` : ''}
+<label>Низ от пола ↑${mIn(`radNiches.${i}.y0`, el.y0, '0')}</label>${under ? '' : '<span></span><span></span>'}
+</div>
+${under ? '<div class="mp-hint" style="margin:4px 0 0;">Достаточно двух из трёх: высота и отступы. Пусто — от подоконника до пола.</div>' : ''}
+<div class="mp-ce-walls mp-ce-faces"><span class="mp-ce-walls-label">Обрабатываем:</span>
+${RAD_FACES.filter(f => f.key !== 'bottom' || radRaised(m, el)).map(f => `<button type="button" class="mp-ce-wall${radFaceOn(el, f) ? ' on' : ''}" onclick="toggleRadFace(${i}, '${f.key}')" aria-pressed="${radFaceOn(el, f)}">${f.label}</button>`).join('')}
+</div>
+<div class="mp-hint" style="margin:4px 0 0;" id="mpRadFin${i}"></div>
+</div>`;
+}).join('')}
+<div class="mp-add-row">
+${ops.length ? '<button type="button" class="mp-add" onclick="addRadNiches()">+ Ниши под окнами</button>' : ''}
+<button type="button" class="mp-add" onclick="addRadWallNiche()">+ Ниша в стене</button>
+</div>
+<div class="mp-calc" id="mpCalcRad"></div>
+</section>`;
+}
+// размеры — как у предыдущей ниши того же вида
+const radPrev = under => [...(measure.radNiches || [])].reverse().find(e => radUnder(e) === under);
+const radCopy = p => p ? { w: p.w || '', h: p.h || '', d: p.d || '', y0: p.y0 || '', ...(p.gap != null ? { gap: p.gap } : {}), ...(p.sides ? { sides: { ...p.sides } } : {}) } : { w: '', h: '', d: '' };
+// По нише под каждым окном, у которого её ещё нет
+function addRadNiches() {
+if (!Array.isArray(measure.radNiches)) measure.radNiches = [];
+const prev = radPrev(true);
+const taken = new Set(measure.radNiches.filter(radUnder).map(e => e.underOp));
+let added = 0;
+(measure.openings || []).forEach((o, oi) => {
+if (!radOpOk(o) || taken.has(oi)) return;
+measure.radNiches.push({ underOp: oi, ...radCopy(prev) });
+added++;
+});
+if (!added) { showAddToast('Под всеми окнами ниши уже есть'); return; }
+const first = measure.radNiches.length - added;
+saveMeasureDraft();
+renderMeasure();
+showAddToast(added === 1 ? 'Ниша под окном добавлена — укажите глубину' : `Добавлено ниш под окнами: ${added} — укажите глубину`);
+focusMeasurePath(`radNiches.${first}.${prev && prev.d ? 'w' : 'd'}`);
+}
+// Ниша в стене — на стене, которая сейчас на развёртке
+function addRadWallNiche() {
+if (!Array.isArray(measure.radNiches)) measure.radNiches = [];
+const lens = (measure.walls || []).map(mNum);
+const cur = typeof rlElevWall === 'number' && lens[rlElevWall] > 0 ? rlElevWall : lens.findIndex(v => v > 0);
+const prev = radPrev(false);
+measure.radNiches.push({ ...radCopy(prev), ...(cur >= 0 ? { wall: cur } : {}), off: '', from: 'start' });
+saveMeasureDraft();
+renderMeasure();
+focusMeasurePath(`radNiches.${measure.radNiches.length - 1}.w`);
+}
+function toggleRadKind(i) {
+const el = (measure.radNiches || [])[i];
+if (!el) return;
+if (radUnder(el)) {
+const o = radOp(measure, el);
+delete el.underOp; delete el.gap;
+if (o && typeof o.wall === 'number') el.wall = o.wall;
+} else {
+const oi = (measure.openings || []).findIndex(radOpOk);
+if (oi < 0) { showAddToast('Окон нет — добавьте окно на вкладке «Стены»'); return; }
+el.underOp = oi; delete el.wall; delete el.off;
+}
+saveMeasureDraft();
+renderMeasure();
+}
+function setRadOp(i, v) {
+const el = (measure.radNiches || [])[i];
+if (!el || v === '') return;
+el.underOp = Number(v);
+saveMeasureDraft();
+renderMeasure();
+}
+function setRadWall(i, v) {
+const el = (measure.radNiches || [])[i];
+if (!el) return;
+if (v === '') delete el.wall; else el.wall = Number(v);
+saveMeasureDraft();
+renderMeasure();
+}
+function toggleRadFrom(i) {
+const el = (measure.radNiches || [])[i];
+if (!el) return;
+el.from = el.from === 'end' ? 'start' : 'end';
+saveMeasureDraft();
+renderMeasure();
+}
+function toggleRadFace(i, key) {
+const el = (measure.radNiches || [])[i];
+const f = RAD_FACES.find(x => x.key === key);
+if (!el || !f) return;
+el.sides = { ...(el.sides || {}), [key]: !radFaceOn(el, f) };
+saveMeasureDraft();
+renderMeasure();
 }
 
 /* ---------- ниши и короба: ввод и мини-чертёж ---------- */
@@ -1277,6 +1543,12 @@ renderMeasure();
 // Номера стен в нишах и коробах после перестройки стен: map[старый] = новый (или -1)
 function remapCeilElWalls(m, map) {
 if (typeof remapMoldingWalls === 'function') remapMoldingWalls(m, map);
+// ниши в стенах на стене (не под окном): новый номер стены; стены нет — без привязки
+(Array.isArray(m.radNiches) ? m.radNiches : []).forEach(el => {
+if (radUnder(el) || !Number.isInteger(el.wall)) return;
+const k = map[el.wall];
+if (Number.isInteger(k) && k >= 0) el.wall = k; else delete el.wall;
+});
 (Array.isArray(m.ceilEls) ? m.ceilEls : []).forEach(el => {
 if (!Array.isArray(el.walls)) return;
 el.walls = [...new Set(el.walls.map(i => map[i]).filter(i => Number.isInteger(i) && i >= 0))].sort((a, b) => a - b);
@@ -1350,8 +1622,12 @@ saveMeasureDraft();
 updateMeasureOutputs();
 }
 
-// Проём убрали: ниши над ним остаются на стене, номера других проёмов сдвигаются
+// Проём убрали: ниши над ним остаются на стене, ниши под ним убираются, номера других проёмов сдвигаются
 function remapCeilElOpsAfterRemove(m, removed) {
+if (Array.isArray(m.radNiches)) {
+m.radNiches = m.radNiches.filter(el => !radUnder(el) || el.underOp !== removed);
+m.radNiches.forEach(el => { if (radUnder(el) && el.underOp > removed) el.underOp -= 1; });
+}
 (Array.isArray(m.ceilEls) ? m.ceilEls : []).forEach(el => {
 if (!Number.isInteger(el.overOp)) return;
 if (el.overOp === removed) delete el.overOp;
@@ -1880,6 +2156,8 @@ row('Внутренние:', of('joints', 'in')),
 'Нужны длины стен на вкладке «Стены».')}
 ${of('els', 'out').length ? sec('Ниши и короба', 'Наружное ребро — по кромке; внутренние углы — где ниша или короб примыкают к потолку и стене.',
 row('Наружные рёбра:', of('els', 'out')) + row('Внутренние углы:', of('els', 'in')), '') : ''}
+${of('rad', 'out').length ? sec('Ниши в стенах', 'Наружные рёбра — по краю ниши: две боковые и сверху (у ниши выше пола — и снизу); внутренние углы — там же в глубине.',
+row('Наружные рёбра:', of('rad', 'out')) + row('Внутренние углы:', of('rad', 'in')), '') : ''}
 <div class="mp-calc" id="mpCalcCorners"></div>`;
 }
 
@@ -1902,7 +2180,7 @@ return list.sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedA
 
 function measureSummaryLines(m) {
 const r = computeMeasure(m);
-return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn, r.lines.mol_cornice, r.lines.mol_plinth, r.lines.mol_ceil, r.lines.mol_wall].filter(Boolean);
+return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.parts, r.lines.wallsMinusParts, r.lines.radNiches, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn, r.lines.mol_cornice, r.lines.mol_plinth, r.lines.mol_ceil, r.lines.mol_wall].filter(Boolean);
 }
 
 function measurePills(m) {
@@ -1910,6 +2188,7 @@ const r = computeMeasure(m);
 const p = [];
 if (r.wallsGross > 0) p.push(`Стены ${mFmt(r.wallsCalc)} м²`);
 if (r.parts > 0) p.push(`Участки ${mFmt(r.parts)} м²`);
+if ((r.radNiches || []).length) p.push(`Ниши в стенах ${r.radNiches.length} шт.`);
 if (r.ceiling > 0) p.push(`Потолок ${mFmt(r.ceiling)} м²`);
 if (r.ceilNiche > 0) p.push(`Ниши ${mFmt(r.ceilNiche)} пог. м`);
 if (r.ceilBox > 0) p.push(`Короба ${mFmt(r.ceilBox)} пог. м`);
