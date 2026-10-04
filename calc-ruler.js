@@ -749,7 +749,7 @@ ${shape && rlView === 'elev' ? `<div class="rl-elev-nav">
 <button type="button" onclick="rulerElevStep(1)" aria-label="Следующая стена">›</button>
 </div>` : ''}
 <div class="rl-sketch${rlFull && rlView === 'plan' ? ' full' : ''}" id="rlSketch"></div>
-${shape && rlView === 'elev' ? '<div class="rl-elev-sum" id="rlElevSum"></div><div class="rl-ophint">Коснитесь длины, высоты, окна или двери — откроется клавиатура. Окно: ширина → высота → подоконник → отступ.</div>' : ''}
+${shape && rlView === 'elev' ? '<div class="rl-elev-sum" id="rlElevSum"></div><button type="button" class="mp-link-btn" onclick="openElevPrintForMeasure()">Печать развёрток со всеми размерами (PDF) →</button><div class="rl-ophint">Коснитесь длины, высоты, окна или двери — откроется клавиатура. Окно: ширина → высота → подоконник → отступ.</div>' : ''}
 ${shape ? `<div class="rl-walls">${chips}</div>` : ''}
 ${shape ? underlayBarHtml() : ''}
 ${shape ? (rulerPick

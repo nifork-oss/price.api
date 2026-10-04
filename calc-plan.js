@@ -41,7 +41,7 @@ return Math.abs(a) / 2;
 }
 
 /* ---------- рамка и штамп ---------- */
-function plFrame(info, sheetNo, sheetCount, title) {
+function plFrame(info, sheetNo, sheetCount, title, docTitle = 'Обмерный план') {
 // рамка: слева 20 мм под подшивку, остальные поля 5 мм
 let s = `<rect x="20" y="5" width="${PL_W - 25}" height="${PL_H - 10}" fill="none" stroke="#000" stroke-width="0.6"/>`;
 // штамп 185 × 40 мм в правом нижнем углу
@@ -64,7 +64,7 @@ s += small(x0 + 1.5, y0 + 23.2, 'Адрес') + T(x0 + 1.5, y0 + 28, info.addres
 s += small(x0 + 1.5, y0 + 33.2, 'Дата') + T(x0 + 1.5, y0 + 38, info.date, 3);
 // правая часть — объект и наименование
 s += small(x0 + 67, y0 + 3.2, 'Объект') + T(x0 + 67, y0 + 8, info.object, 3.6, 700);
-s += T(x0 + 67, y0 + 17.5, 'Обмерный план', 4.2, 700);
+s += T(x0 + 67, y0 + 17.5, docTitle, 4.2, 700);
 s += T(x0 + 67, y0 + 27.5, title, 3.2);
 s += small(x0 + 67, y0 + 33.2, 'Высоты и размеры по месту, мм') ;
 s += small(x0 + 137, y0 + 13.2, 'Лист') + T(x0 + 147.5, y0 + 18.5, sheetNo, 4, 700, 'middle');
@@ -395,6 +395,262 @@ s += plFrame(pageInfo, sheetNo, sheetCount, rooms.map(roomName).join(', '));
 return s;
 }
 
+
+/* ===================== РАЗВЁРТКИ СТЕН (PDF) ===================== */
+// Развёртка стены в масштабе со всеми размерами: цепочка по длине (углы, проёмы,
+// ниши), общая длина и высота, у каждого проёма — подоконник, высота и до потолка,
+// у ниш — от пола и высота, у лепнины — рамки с отступами. По две стены на лист.
+const PL_DIM = '#000';
+function plElevDrawing(m, wi, box, title) {
+const T = (x, y, text, size = 2.5, weight = 400, anchor = 'middle', fill = '#000', rot = false) =>
+`<text x="${x}" y="${y}" font-family="${PL_FONT}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" fill="${fill}"${rot ? ` transform="rotate(-90 ${x} ${y})"` : ''}>${plEsc(text)}</text>`;
+let s = T(box.x, box.y + 4, title, 3.4, 700, 'start');
+const L = mNum((m.walls || [])[wi]), Hh = wallHeightOf(m, wi);
+if (!(L > 0) || !(Hh > 0)) return { svg: s + T(box.x, box.y + 10, 'Нет длины или высоты стены — развёртку не построить', 2.8, 400, 'start', '#a33'), scale: 0 };
+let g = null;
+try { g = rulerGeometry(m); } catch (e) { g = null; }
+const padL = 18, padR = 14, padT = 14, padB = 26;
+let sc = PL_SCALES[PL_SCALES.length - 1];
+for (const v of PL_SCALES) { if (L * 1000 / v <= box.w - padL - padR && Hh * 1000 / v <= box.h - padT - padB) { sc = v; break; } }
+const k = 1000 / sc;
+const x0 = box.x + padL + ((box.w - padL - padR) - L * k) / 2, yTop = box.y + padT, yF = yTop + Hh * k;
+// смотрим на стену изнутри комнаты — как на экране
+const flip = !!g && (g.orient || 1) < 0;
+const XA = a => flip ? x0 + (L - a) * k : x0 + a * k;
+const Yh = h => yF - h * k;
+const line = (x1, y1, x2, y2, w = 0.2, dash = '') => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${PL_DIM}" stroke-width="${w}"${dash ? ` stroke-dasharray="${dash}"` : ''}/>`;
+// размерная цепочка по горизонтали: точки вдоль стены (м), высота линии y (мм листа)
+const hChain = (pts, y, size = 2.3) => {
+const p = [...new Set(pts.map(v => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
+if (p.length < 2) return '';
+let o = line(Math.min(XA(p[0]), XA(p[p.length - 1])), y, Math.max(XA(p[0]), XA(p[p.length - 1])), y);
+p.forEach(v => { const x = XA(v); o += line(x, y + 1.2, x, y - 1.2, 0.2) + line(x - 0.7, y + 0.7, x + 0.7, y - 0.7, 0.35); });
+for (let i = 0; i < p.length - 1; i++) {
+const a = XA(p[i]), b = XA(p[i + 1]), seg = p[i + 1] - p[i];
+if (seg < 0.001) continue;
+const txt = String(plMm(seg));
+o += T((a + b) / 2, y - 0.9, txt, Math.abs(b - a) < txt.length * size * 0.55 ? size * 0.8 : size);
+}
+return o;
+};
+// по вертикали: точки — высоты от пола (м), линия на x (мм листа), подписи слева
+const vChain = (pts, x, size = 2.2) => {
+const p = [...new Set(pts.map(v => Math.round(v * 1000) / 1000))].sort((a, b) => a - b);
+if (p.length < 2) return '';
+let o = line(x, Yh(p[0]), x, Yh(p[p.length - 1]));
+p.forEach(v => { const y = Yh(v); o += line(x - 1.2, y, x + 1.2, y, 0.2) + line(x - 0.7, y + 0.7, x + 0.7, y - 0.7, 0.35); });
+for (let i = 0; i < p.length - 1; i++) {
+const seg = p[i + 1] - p[i];
+if (seg < 0.001) continue;
+const txt = String(plMm(seg));
+o += T(x - 0.9, (Yh(p[i]) + Yh(p[i + 1])) / 2, txt, seg * k < txt.length * size * 0.55 ? size * 0.8 : size, 400, 'middle', '#000', true);
+}
+return o;
+};
+// стена и пол
+s += `<rect x="${x0}" y="${yTop}" width="${L * k}" height="${Hh * k}" fill="#fff" stroke="#000" stroke-width="0.5"/>`;
+s += line(x0 - 3, yF, x0 + L * k + 3, yF, 0.9);
+// углы А и Б
+[[0, 'А'], [L, 'Б']].forEach(([a, t]) => { s += `<circle cx="${XA(a)}" cy="${yTop - 3.2}" r="1.9" fill="#fff" stroke="#000" stroke-width="0.25"/>` + T(XA(a), yTop - 2.3, t, 2.3, 700); });
+// лепнина: карниз и плинтус полосами, рамки и линии молдингов
+const lay = typeof molWallLayout === 'function' ? molWallLayout(m, wi) : { frames: [], lines: [] };
+const md = typeof molGet === 'function' ? molGet(m) : null;
+if (md && md.cornice.on && molWalls(md.cornice.walls, m).includes(wi)) s += `<rect x="${x0}" y="${yTop}" width="${L * k}" height="1.4" fill="#e6e0ee" stroke="#000" stroke-width="0.15"/>`;
+if (md && md.plinth.on && molWalls(md.plinth.walls, m).includes(wi)) {
+let x = 0;
+const seg = (a, b) => b - a > 0.005 ? `<rect x="${Math.min(XA(a), XA(b))}" y="${yF - 1.2}" width="${Math.abs(XA(b) - XA(a))}" height="1.2" fill="#eadfce" stroke="#000" stroke-width="0.15"/>` : '';
+molDoorSpans(m, wi, L).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { s += seg(x, a0); x = Math.max(x, a1); });
+s += seg(x, L);
+}
+lay.frames.forEach(f => [f, f.inner].filter(Boolean).forEach((r, j) => {
+const xl = Math.min(XA(r.x0), XA(r.x1));
+s += `<rect x="${xl}" y="${Yh(r.y1)}" width="${Math.abs(XA(r.x1) - XA(r.x0))}" height="${(r.y1 - r.y0) * k}" fill="none" stroke="#5b2d86" stroke-width="${j ? 0.18 : 0.28}"/>`;
+}));
+lay.lines.forEach(l => { s += `<line x1="${XA(l.x0)}" y1="${Yh(l.y)}" x2="${XA(l.x1)}" y2="${Yh(l.y)}" stroke="#5b2d86" stroke-width="0.35"/>`; });
+// ниши в стенах
+const niches = typeof radNichesCompute === 'function' ? radNichesCompute(m).list.filter(e => e.wall === wi && e.span) : [];
+niches.forEach(e => {
+const xl = Math.min(XA(e.span[0]), XA(e.span[1])), w = Math.abs(XA(e.span[1]) - XA(e.span[0]));
+s += `<rect x="${xl}" y="${Yh(e.top)}" width="${w}" height="${(e.top - e.bottom) * k}" fill="#f3efe8" stroke="#000" stroke-width="0.25" stroke-dasharray="1.2 0.8"/>`;
+s += T(xl + w / 2, Yh((e.top + e.bottom) / 2) + 0.9, `${e.code}${e.d ? ', гл. ' + plMm(e.d) : ''}`, 2.1);
+});
+// проёмы
+const ops = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => o.wall === wi && openingWidth(o) > 0);
+const edges = [0, L];
+ops.forEach(({ o, oi }) => {
+const [a0, a1] = openingSpan(o, L);
+const v = openingVert(o, Hh);
+const xl = Math.min(XA(a0), XA(a1)), xr = Math.max(XA(a0), XA(a1));
+if (o.type === 'balcony') {
+const bp = balconyParts(o, a0, a1);
+[bp.door, bp.win].forEach(sp => edges.push(sp[0], sp[1]));
+const dl = Math.min(XA(bp.door[0]), XA(bp.door[1])), dr = Math.max(XA(bp.door[0]), XA(bp.door[1]));
+const wl = Math.min(XA(bp.win[0]), XA(bp.win[1])), wr = Math.max(XA(bp.win[0]), XA(bp.win[1]));
+s += `<rect x="${dl}" y="${Yh(v.door[1])}" width="${dr - dl}" height="${v.door[1] * k}" fill="#fff" stroke="#000" stroke-width="0.35"/>`;
+s += `<rect x="${wl}" y="${Yh(v.y1)}" width="${wr - wl}" height="${(v.y1 - v.y0) * k}" fill="#eef4fb" stroke="#000" stroke-width="0.35"/>`;
+} else {
+edges.push(a0, a1);
+const isDoor = o.type === 'door';
+s += `<rect x="${xl}" y="${Yh(v.y1)}" width="${xr - xl}" height="${(v.y1 - v.y0) * k}" fill="${isDoor ? '#fff' : '#eef4fb'}" stroke="#000" stroke-width="0.35"${v.guess ? ' stroke-dasharray="1.5 1"' : ''}/>`;
+if (isDoor) s += line(xl, yF, xr, Yh(v.y1), 0.15) + line(xr, yF, xl, Yh(v.y1), 0.15);
+else s += line((xl + xr) / 2, Yh(v.y1), (xl + xr) / 2, Yh(v.y0), 0.15) + line(xl, Yh((v.y0 + v.y1) / 2), xr, Yh((v.y0 + v.y1) / 2), 0.15);
+}
+s += T((xl + xr) / 2, Yh(v.y1) + 3, opCode(o, oi), 2.3, 700);
+// по высоте у правого края проёма: пол — подоконник — верх — потолок
+s += vChain(o.type === 'door' ? [0, v.y1, Hh] : [0, v.y0, v.y1, Hh], xr + 3);
+if (v.guess) s += T((xl + xr) / 2, Yh(v.y0) - 1.5, 'подоконник условно', 1.8, 400, 'middle', '#a33');
+});
+niches.forEach(e => {
+edges.push(e.span[0], e.span[1]);
+// высота ниши и низ от пола — у левого края
+s += vChain([0, e.bottom, e.top].filter((v, i) => i || e.bottom > 0.005), Math.min(XA(e.span[0]), XA(e.span[1])) - 2.5);
+});
+// молдинги: у первой рамки ряда — размеры, отступы от пола и до потолка, промежуток, внутренняя рамка
+const seen = new Set();
+lay.frames.forEach(f => {
+if (seen.has(f.ri)) return;
+seen.add(f.ri);
+const xl = Math.min(XA(f.x0), XA(f.x1)), xr = Math.max(XA(f.x0), XA(f.x1));
+s += T(xl + (xr - xl) * 0.4, Yh(f.y1) + Math.min(4.5, (f.y1 - f.y0) * k * 0.3), `${plMm(f.x1 - f.x0)}×${plMm(f.y1 - f.y0)}`, 2.1, 700, 'middle', '#5b2d86');
+const others = lay.frames.filter(q => q.ri !== f.ri && Math.min(f.x1, q.x1) - Math.max(f.x0, q.x0) > 0.01);
+const below = Math.max(0, ...others.filter(q => q.y1 <= f.y0 + 0.001).map(q => q.y1));
+const above = Math.min(Hh, ...others.filter(q => q.y0 >= f.y1 - 0.001).map(q => q.y0));
+s += vChain([below, f.y0, f.y1, ...(others.some(q => q.y0 >= f.y1 - 0.001) ? [] : [above])], xl + (xr - xl) * 0.78);
+const row = lay.frames.filter(q => q.ri === f.ri);
+const j = row.findIndex((q, n) => row[n + 1] && Math.abs(row[n + 1].x0 - q.x1 - q.gap) < 0.005);
+if (j >= 0 && row[j].gap > 0) s += hChain([row[j].x1, row[j + 1].x0], Yh(row[j].y0 + (row[j].y1 - row[j].y0) * 0.2), 2);
+if (f.inner) s += T(xl + 1, Yh(f.inner.y0) - 0.8, `внутр. ${plMm(f.inner.x0 - f.x0)}`, 1.9, 400, 'start', '#5b2d86');
+});
+lay.lines.filter((l, n, a) => a.findIndex(q => q.ri === l.ri) === n).forEach(l => { s += vChain([0, l.y], Math.min(XA(l.x0), XA(l.x1)) + 3); });
+// цепочка по длине, общая длина, высота стены
+s += hChain(edges, yF + 6);
+s += hChain([0, L], yF + 13, 2.6);
+s += vChain([0, Hh], x0 - 7, 2.6);
+// итог под чертежом
+const net = ops.reduce((a, { o }) => a + (o.type === 'balcony' ? mNum(o.w) * winH(o) + mNum(o.dw) * mNum(o.dh) : mNum(o.w) * mNum(o.h)) * (mCount(o.n) || 1), 0);
+s += T(box.x, yF + 20, `${plMm(L)} × ${plMm(Hh)} мм · стена ${plM2(L * Hh)} м²${net > 0 ? ` − проёмы ${plM2(net)} = ${plM2(L * Hh - net)} м²` : ''} · М 1:${sc}`, 2.5, 400, 'start', '#222');
+const notes = [...niches.map(e => `${e.code}: ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}`)];
+if (notes.length) s += T(box.x, yF + 24, notes.join('; '), 2.2, 400, 'start', '#444');
+return { svg: s, scale: sc };
+}
+
+function plElevPage(items, info, sheetNo, sheetCount) {
+const top = 10, bottomLimit = PL_H - 5 - 40 - 6;
+const boxH = (bottomLimit - top - 6) / 2;
+let s = '';
+const scales = [];
+items.forEach((it, i) => {
+const box = { x: 27, y: top + i * (boxH + 6), w: PL_W - 27 - 9, h: boxH };
+const d = plElevDrawing(it.m, it.wi, box, it.title);
+s += d.svg;
+if (d.scale) scales.push(d.scale);
+if (i === 0 && items.length > 1) s += `<line x1="25" y1="${box.y + boxH + 3}" x2="${PL_W - 7}" y2="${box.y + boxH + 3}" stroke="#bbb" stroke-width="0.2" stroke-dasharray="2 1.5"/>`;
+});
+const uniq = [...new Set(scales)];
+const names = [...new Set(items.map(it => it.room))].join(', ');
+s += plFrame({ ...info, scaleNote: uniq.length === 1 ? `1:${uniq[0]}` : (uniq.length ? 'у чертежей' : '—') }, sheetNo, sheetCount, names, 'Развёртки стен');
+return s;
+}
+
+// items: [{ m, wi, room, title }]
+async function buildElevPDF(items, info, fileBase) {
+if (!items.length) throw new Error('Не выбрано ни одной стены');
+const pages = [];
+for (let i = 0; i < items.length; i += 2) pages.push(items.slice(i, i + 2));
+const { jsPDF } = window.jspdf;
+const pdf = new jsPDF('p', 'mm', 'a4');
+for (let i = 0; i < pages.length; i++) {
+if (i) pdf.addPage();
+const png = await plSvgToPng(plElevPage(pages[i], info, i + 1, pages.length));
+pdf.addImage(png, 'PNG', 0, 0, PL_W, PL_H, undefined, 'FAST');
+}
+const safe = String(fileBase || 'zamer').replace(/[^\wа-яё\- ]+/gi, '').trim().replace(/\s+/g, '_');
+return { pdfBlob: pdf.output('blob'), fileName: `Razvertki_${safe || 'zamer'}.pdf` };
+}
+
+/* ---------- выбор развёрток для печати ---------- */
+// rooms: [{ name, m }]; sel[i] — набор номеров стен помещения i
+let elevPrint = null;
+const elevWallsOf = m => (Array.isArray(m.walls) ? m.walls : []).map((w, i) => mNum(w) > 0 ? i : -1).filter(i => i >= 0);
+function openElevPrint(rooms, info, fileBase, preset) {
+rooms = rooms.filter(r => r.m && elevWallsOf(r.m).length);
+if (!rooms.length) { showAddToast('Нет стен с длиной — введите стены на вкладке «Стены»'); return; }
+elevPrint = { rooms, info, fileBase, sel: rooms.map((r, i) => new Set(preset && preset[i] ? preset[i] : elevWallsOf(r.m))) };
+document.getElementById('sheetTitle').textContent = 'Развёртки стен — PDF со всеми размерами';
+renderElevPrint();
+document.getElementById('sheet').classList.add('open');
+document.getElementById('sheetOverlay').classList.add('open');
+document.body.classList.add('sheet-open');
+}
+function renderElevPrint() {
+const st = elevPrint;
+if (!st) return;
+const n = st.sel.reduce((a, s) => a + s.size, 0);
+document.getElementById('sheetItems').innerHTML = `<div class="ep-list">
+${st.rooms.map((r, i) => {
+const ws = elevWallsOf(r.m);
+const all = ws.every(w => st.sel[i].has(w));
+return `<div class="ep-room"><div class="ep-name">${plEsc(r.name)}</div>
+<div class="mp-ce-walls"><span class="mp-ce-walls-label">Стены:</span>${ws.map(w => `<button type="button" class="mp-ce-wall${st.sel[i].has(w) ? ' on' : ''}" onclick="elevPrintToggle(${i}, ${w})" aria-pressed="${st.sel[i].has(w)}">${w + 1}</button>`).join('')}<button type="button" class="mp-ce-wall mp-ce-all${all ? ' on' : ''}" onclick="elevPrintAll(${i})">все</button></div></div>`;
+}).join('')}
+</div>
+<div class="ep-count">${n ? `Выбрано развёрток: ${n} · листов A4: ${Math.ceil(n / 2)}` : 'Отметьте стены'}</div>
+<button type="button" class="sheet-item" onclick="elevPrintGo('share')"${n ? '' : ' disabled'}><span class="sheet-item-icon" aria-hidden="true">${sheetIconHtml('📤')}</span>Отправить PDF</button>
+<button type="button" class="sheet-item" onclick="elevPrintGo('download')"${n ? '' : ' disabled'}><span class="sheet-item-icon" aria-hidden="true">${sheetIconHtml('⬇️')}</span>Скачать PDF</button>`;
+}
+function elevPrintToggle(i, w) {
+const set = elevPrint && elevPrint.sel[i];
+if (!set) return;
+if (set.has(w)) set.delete(w); else set.add(w);
+renderElevPrint();
+}
+function elevPrintAll(i) {
+const st = elevPrint;
+if (!st || !st.sel[i]) return;
+const ws = elevWallsOf(st.rooms[i].m);
+st.sel[i] = new Set(ws.every(w => st.sel[i].has(w)) ? [] : ws);
+renderElevPrint();
+}
+async function elevPrintGo(mode) {
+const st = elevPrint;
+if (!st) return;
+const items = [];
+st.rooms.forEach((r, i) => [...st.sel[i]].sort((a, b) => a - b).forEach(wi => items.push({ m: r.m, wi, room: r.name, title: `${r.name} — стена ${wi + 1}` })));
+if (!items.length) return;
+closeSheet();
+showAddToast('Готовлю развёртки…');
+try {
+const { pdfBlob, fileName } = await buildElevPDF(items, st.info, st.fileBase);
+const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+if (mode === 'share' && navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ title: 'Развёртки стен', files: [file] });
+else triggerFileDownload(pdfBlob, fileName);
+} catch (err) {
+if (err && err.name === 'AbortError') return;
+console.error('Развёртки:', err);
+alert('Не удалось собрать развёртки: ' + (err && err.message ? err.message : err));
+}
+}
+function plObjectInfo(obj) {
+return {
+company: (cloudData.self && cloudData.self.companyName) || currentUser || '',
+client: (obj && obj.client) || '', address: (obj && obj.address) || '', object: (obj && obj.name) || '',
+date: new Date().toLocaleDateString('ru-RU'),
+};
+}
+// Все помещения объекта
+function openElevPrintForObject(objectId) {
+const obj = (cloudData.objects || []).find(o => o.id === objectId);
+openElevPrint(objectRooms(obj).map(room => ({ name: roomName(room), m: room.measure })), plObjectInfo(obj), obj && obj.name);
+}
+// Текущий замер (в том числе несохранённый): отмечена стена с развёртки
+function openElevPrintForMeasure() {
+if (!measure) return;
+const obj = measure.objectId ? (cloudData.objects || []).find(o => o.id === measure.objectId) : null;
+const name = (measure.room || '').trim() || 'Помещение';
+const cur = typeof rlElevWall === 'number' ? rlElevWall : 0;
+openElevPrint([{ name, m: measure }], plObjectInfo(obj), obj ? `${obj.name}_${name}` : name, [mNum((measure.walls || [])[cur]) > 0 ? [cur] : null]);
+}
+
 /* ---------- сборка PDF ---------- */
 async function plSvgToPng(inner, dpi = 200) {
 const wPx = Math.round(PL_W / 25.4 * dpi), hPx = Math.round(PL_H / 25.4 * dpi);
@@ -454,7 +710,7 @@ const pdf = new jsPDF('p', 'mm', 'a4');
 for (let i = 0; i < pages.length; i++) {
 if (i) pdf.addPage();
 const png = await plSvgToPng(pages[i]);
-pdf.addImage(png, 'PNG', 0, 0, PL_W, PL_H);
+pdf.addImage(png, 'PNG', 0, 0, PL_W, PL_H, undefined, 'FAST');
 }
 const safe = String(obj.name || 'obekt').replace(/[^\wа-яё\- ]+/gi, '').trim().replace(/\s+/g, '_');
 return { pdfBlob: pdf.output('blob'), fileName: `Obmernyy_plan_${safe || 'obekt'}.pdf` };
@@ -466,6 +722,8 @@ const n = objectRooms(obj).length;
 openSheet(`Обмерный план · ${obj ? obj.name : ''} · ${n} ${pluralRu(n, 'помещение', 'помещения', 'помещений')}`, [
 { icon: '📤', label: 'Отправить PDF', onClick: () => exportMeasurePlan(objectId, 'share') },
 { icon: '⬇️', label: 'Скачать PDF', onClick: () => exportMeasurePlan(objectId, 'download') },
+null,
+{ icon: '📏', label: 'Развёртки стен (PDF)…', onClick: () => openElevPrintForObject(objectId) },
 ]);
 }
 

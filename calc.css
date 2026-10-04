@@ -842,3 +842,12 @@ body.rl-full-open .add-toast, body.cp-full-open .add-toast { z-index: 140; }
 /* Кнопка «Сохранить» в окне замера помещения: жёлтая, пока есть несохранённые правки */
 .mp-room-save:disabled { opacity: 0.45; cursor: default; }
 .mp-room-save.dirty { background: var(--tape); border-color: var(--tape); color: var(--s-ink); }
+
+/* выбор развёрток для печати (в листе снизу; поверх замера) */
+body.measure-open .sheet-overlay { z-index: 95; }
+body.measure-open .sheet { z-index: 96; }
+.ep-list { max-height: 50vh; overflow-y: auto; padding: 0 8px; }
+.ep-room { padding: 8px 0; border-bottom: 1px solid #eef0f2; }
+.ep-name { font-size: 14px; font-weight: 700; color: #1f2a37; margin-bottom: 4px; }
+.ep-count { padding: 10px 12px 4px; font-size: 13px; color: #5d6878; }
+.sheet-item:disabled { opacity: .45; cursor: default; }
