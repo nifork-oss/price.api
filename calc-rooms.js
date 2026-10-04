@@ -33,6 +33,9 @@ const SURFACES = [
 { key: 'molPlinth', tab: 'molPlinth', label: 'Плинтус' },
 { key: 'molCeil', tab: 'molCeil', label: 'Молдинг на потолке' },
 { key: 'molWall', tab: 'molWall', label: 'Молдинг на стенах' },
+{ key: 'tileWalls', tab: 'tileWalls', label: 'Плитка: стены' },
+{ key: 'tileFloor', tab: 'tileFloor', label: 'Плитка: пол' },
+{ key: 'tileAll', tab: 'tileAll', label: 'Плитка: всего' },
 ];
 
 function calcObject() {
@@ -94,6 +97,9 @@ molCornice: 'Карниз',
 molPlinth: 'Плинтус',
 molCeil: 'Молдинг на потолке',
 molWall: 'Молдинг на стенах',
+tileWalls: 'Плитка: стены',
+tileFloor: 'Плитка: пол',
+tileAll: 'Плитка',
 };
 function surfaceInvoiceLabel(item) {
 if (!item || !item.surface || item.surface === 'manual') return '';
@@ -389,6 +395,8 @@ if (/плинтус/.test(n) && has('molPlinth')) return 'molPlinth';
 if (/молдинг/.test(n) && (has('molCeil') || has('molWall'))) return /потол/.test(n) && has('molCeil') ? 'molCeil' : has('molWall') ? 'molWall' : 'molCeil';
 if (/угл|уголк/.test(n) && has('corners')) return /наруж/.test(n) && has('cornersOut') ? 'cornersOut' : /внутр/.test(n) && has('cornersIn') ? 'cornersIn' : 'corners';
 if (/откос/.test(n) && has('slopes')) return 'slopes';
+// плитка: на пол — пол, на стены и фартук — стены, иначе — сколько есть
+if (/плит[кч]|кафел|керамогранит|мозаик/.test(n) && (has('tileWalls') || has('tileFloor'))) return /пол/.test(n) && has('tileFloor') ? 'tileFloor' : /стен|фартук/.test(n) && has('tileWalls') ? 'tileWalls' : has('tileAll') && has('tileWalls') && has('tileFloor') ? 'tileAll' : has('tileWalls') ? 'tileWalls' : 'tileFloor';
 if (/плитк|кафел|фартук|панел/.test(n) && has('parts')) return 'parts';
 if (/подсвет|светодиод|led|лент/.test(n) && has('ceilLight')) return 'ceilLight';
 // ниши в стенах (под батарею, под ТВ) — по отмеченным сторонам
