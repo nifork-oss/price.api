@@ -856,6 +856,7 @@ renderMeasure();
 function closeMeasure() {
 if (cpFull) { cpFull = false; document.body.classList.remove('cp-full-open'); }
 if (cnFull) { cnFull = null; document.body.classList.remove('cp-full-open'); }
+if (typeof molFull !== 'undefined' && molFull) { molFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof rlFull !== 'undefined' && rlFull) { rlFull = false; document.body.classList.remove('rl-full-open'); }
 cpZoom = 1; cpPan = { x: 0, y: 0 }; cpRot = 0;
 if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; rulerPick = null; if (typeof rlEditBase !== "undefined") rlEditBase = null; rlZoom = 1; rlPan = { x: 0, y: 0 }; rlUnderlayAdjust = false; rlLastFit = null; }
@@ -1169,6 +1170,7 @@ return measureTab;
 function setMeasureTab(tab) {
 if (cpFull) cpToggleFull(false);
 if (cnFull) { cnFull = null; document.body.classList.remove('cp-full-open'); }
+if (typeof molFull !== 'undefined' && molFull) { molFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof rlFull !== 'undefined' && rlFull) { rlFull = false; document.body.classList.remove('rl-full-open'); }
 if (typeof rulerTarget !== 'undefined' && rulerTarget) { rulerTarget = null; document.getElementById('measurePanel').classList.remove('ruler-open'); }
 measureTab = tab;
@@ -2068,45 +2070,51 @@ window.addEventListener('resize', () => { if (cnFull) renderCnViews(); });
 // касания на чертеже: после перетаскивания не срабатывают
 function cnTap(key) { if (cnDragged) { cnDragged = false; return; } toggleCorner(key); }
 function cnTapWall(i) { if (cnDragged) { cnDragged = false; return; } cnShowWall(i); }
-function cnBindPanZoom(box, which) {
+// Перетаскивание, два пальца и колёсико для чертежа в окошке шириной 340 условных единиц.
+// getView() — текущий вид { z, x, y } (объект может заменяться), rerender — перерисовать,
+// setDragged(true) — касание стало перетаскиванием (касания по чертежу тогда не срабатывают).
+function bindPanZoom(box, getView, rerender, setDragged, zoomBy) {
 if (box.dataset.pz) return;
 box.dataset.pz = '1';
 const pts = new Map();
 let start = null;
-const unit = () => (340 / cnViews[which].z) / (box.clientWidth || 340);
-const snap = moved => ({ x: cnViews[which].x, y: cnViews[which].y, z: cnViews[which].z, pts: new Map(pts), moved });
+const unit = () => (340 / getView().z) / (box.clientWidth || 340);
+const snap = moved => ({ x: getView().x, y: getView().y, z: getView().z, pts: new Map(pts), moved });
 box.addEventListener('pointerdown', (e) => {
 if (e.target.closest('.cp-zoom') || e.target.closest('.cp-caption')) return;
 if (e.isPrimary) pts.clear();
 pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
 start = snap(false);
-cnDragged = false;
+setDragged(false);
 });
 box.addEventListener('pointermove', (e) => {
 if (!pts.has(e.pointerId) || !start) return;
 pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-const v = cnViews[which];
+const v = getView();
 if (pts.size === 1 && start.pts.size === 1) {
 const p0 = start.pts.get(e.pointerId); if (!p0) return;
 const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
 if (!start.moved && Math.hypot(dx, dy) < 6) return;
 if (!start.moved) { try { box.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ } }
-start.moved = true; cnDragged = true;
+start.moved = true; setDragged(true);
 v.x = start.x - dx * unit(); v.y = start.y - dy * unit();
-renderCnViews();
+rerender();
 } else if (pts.size === 2) {
 if (start.pts.size !== 2) { start = snap(true); return; }
 const a = [...pts.values()], b = [...start.pts.values()];
 const d1 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), d0 = Math.hypot(b[0].x - b[1].x, b[0].y - b[1].y) || 1;
 v.z = Math.min(8, Math.max(0.5, start.z * d1 / d0));
-start.moved = true; cnDragged = true;
-renderCnViews();
+start.moved = true; setDragged(true);
+rerender();
 }
 });
 const end = (e) => { pts.delete(e.pointerId); start = pts.size ? snap(true) : null; };
 box.addEventListener('pointerup', end);
 box.addEventListener('pointercancel', end);
-box.addEventListener('wheel', (e) => { e.preventDefault(); cnZoom(which, e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+box.addEventListener('wheel', (e) => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15); }, { passive: false });
+}
+function cnBindPanZoom(box, which) {
+bindPanZoom(box, () => cnViews[which], () => renderCnViews(), v => { cnDragged = v; }, f => cnZoom(which, f));
 }
 
 function cnShowWall(wi) {

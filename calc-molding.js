@@ -296,13 +296,17 @@ return s;
 }
 
 // Развёртка стены на вкладке «Лепнина»: стена, проёмы, лепнина и размеры рамок
-function molElevSvg(m, wi) {
+function molElevSvg(m, wi, W = 340, H = 240, vw = { z: 1, x: 0, y: 0 }) {
 const g = molGeom(m);
-const W = 340, H = 240, left = 34, right = 14, top = 16, bottom = 46;
+const left = 34, right = 14, top = 16, bottom = 46;
 const L = mNum((m.walls || [])[wi]), Hh = wallHeightOf(m, wi);
 if (!(L > 0) || !(Hh > 0)) return `<div class="mp-hint" style="padding:18px 8px;text-align:center;">${!(L > 0) ? 'Введите длину стены на вкладке «Стены»' : 'Введите высоту стен на вкладке «Стены»'}</div>`;
-const k = Math.min((W - left - right) / L, (H - top - bottom) / Hh);
-const x0 = left + ((W - left - right) - L * k) / 2, yF = top + Hh * k;
+// приближение растягивает чертёж; подписи — прежнего размера
+const k0 = Math.min((W - left - right) / L, (H - top - bottom) / Hh);
+const z = vw.z, vx = (W - W / z) / 2 + vw.x, vy = (H - H / z) / 2 + vw.y;
+const k = k0 * z;
+// по центру окна — и по ширине, и по высоте (во весь экран окно высокое)
+const x0 = (left + ((W - left - right) - L * k0) / 2 - vx) * z, yF = (top + ((H - top - bottom) - Hh * k0) / 2 + Hh * k0 - vy) * z;
 const flip = g && (g.orient || 1) < 0;
 const XA = a => flip ? x0 + (L - a) * k : x0 + a * k;
 const Yh = h => yF - h * k;
@@ -375,14 +379,16 @@ return s;
 }
 
 // План: карниз и плинтус вдоль стен, рамки на потолке
-function molPlanSvg(m, res) {
+function molPlanSvg(m, res, W = 340, H = 230, vw = { z: 1, x: 0, y: 0 }) {
 const g = molGeom(m);
 if (!g || !g.segs.length) return '';
-const W = 340, H = 230, P = 34;
+const P = 34;
 const xs = [0, ...g.segs.map(q => q.x2)], ys = [0, ...g.segs.map(q => q.y2)];
 const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-const k = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
-const ox = (W - (maxX - minX) * k) / 2 - minX * k, oy = (H - (maxY - minY) * k) / 2 - minY * k;
+const k0 = Math.min((W - 2 * P) / Math.max(maxX - minX, 0.5), (H - 2 * P) / Math.max(maxY - minY, 0.5));
+const ox0 = (W - (maxX - minX) * k0) / 2 - minX * k0, oy0 = (H - (maxY - minY) * k0) / 2 - minY * k0;
+const z = vw.z, vx = (W - W / z) / 2 + vw.x, vy = (H - H / z) / 2 + vw.y;
+const k = k0 * z, ox = (ox0 - vx) * z, oy = (oy0 - vy) * z;
 const X = v => ox + v * k, Y = v => oy + v * k;
 const o = g.orient || 1;
 const d = molGet(m);
@@ -410,7 +416,7 @@ if (!(q.len > 0)) return;
 const mx = (X(q.x1) + X(q.x2)) / 2 + q.dy * o * 14, my = (Y(q.y1) + Y(q.y2)) / 2 - q.dx * o * 14;
 const on = q.i === molElevWall;
 s += `<circle cx="${mx}" cy="${my}" r="8" fill="${on ? '#14181f' : '#ffffff'}" stroke="#14181f" stroke-width="1"/><text x="${mx}" y="${my + 3.5}" text-anchor="middle" font-size="10" font-weight="700" fill="${on ? '#ffffff' : '#14181f'}">${q.i + 1}</text>`;
-s += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="transparent" stroke-width="22" style="cursor:pointer" onclick="molShowWall(${q.i})"><title>Развёртка стены ${q.i + 1}</title></path>`;
+s += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="transparent" stroke-width="22" style="cursor:pointer" onclick="molTapWall(${q.i})"><title>Развёртка стены ${q.i + 1}</title></path>`;
 });
 return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Лепнина на плане" font-family="inherit">${s}</svg>`;
 }
@@ -431,7 +437,7 @@ const toggle = (kind, on, label) => `<label class="mp-check mp-ce-light"><input 
 if (!hasWalls) return `<section class="mp-sec"><div class="mp-empty">Лепнина считается по стенам.<br>Сначала введите стены на вкладке «Стены».</div></section>`;
 return `<section class="mp-sec">
 <div class="mp-sec-title">План</div>
-<div class="mp-ce-plan" id="mpMolPlan"></div>
+<div class="mp-ce-plan rl-sketch${molFull === 'plan' ? ' full' : ''}" id="mpMolPlan"></div>
 <div class="mp-hint">Фиолетовая линия — карниз, коричневая — плинтус, пунктир — рамки на потолке. Касание стены — её развёртка ниже.</div>
 </section>
 <section class="mp-sec">
@@ -460,7 +466,7 @@ ${molDblHtml(`molDbl('ceil', ${i}, this.checked)`, f, `molding.ceil.${i}.ind`)}`
 <section class="mp-sec">
 <div class="mp-sec-title">Молдинги на стенах</div>
 <div class="rl-elev-nav"><button type="button" onclick="molStep(-1)" aria-label="Предыдущая стена">‹</button><span>Стена ${molElevWall + 1} из ${n}</span><button type="button" onclick="molStep(1)" aria-label="Следующая стена">›</button></div>
-<div class="mp-ce-plan" id="mpMolElev"></div>
+<div class="mp-ce-plan rl-sketch${molFull === 'elev' ? ' full' : ''}" id="mpMolElev"></div>
 <div class="mp-hint">Ряд рамок раскладывается по стене сам: рамки обходят окна, двери и ниши с тем же промежутком. Линия — горизонтальный молдинг на высоте, разрывается на проёмах и нишах. Синим на развёртке — отступы: от пола, до потолка, между рамками и до внутренней рамки.</div>
 ${d.wall.map((row, i) => `<div class="mp-open">
 <div class="mp-open-top">
@@ -528,8 +534,7 @@ renderMeasure();
 function updateMoldingOutputs(r) {
 const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerHTML = v; };
 const mo = r.mol || moldingCompute(measure);
-set('mpMolPlan', molPlanSvg(measure, mo));
-set('mpMolElev', molElevSvg(measure, molElevWall));
+renderMolViews(mo);
 set('mpCalcMolCornice', mo.lines.cornice ? escapeHtml(mo.lines.cornice) : '');
 set('mpCalcMolPlinth', mo.lines.plinth ? escapeHtml(mo.lines.plinth) : '');
 set('mpCalcMolCeil', [mo.lines.ceil, mo.lines.ceilBad].filter(Boolean).map(escapeHtml).join('<br>'));
@@ -628,14 +633,63 @@ function molStep(dir) {
 const n = (measure.walls || []).length;
 if (!n) return;
 molElevWall = (molElevWall + dir + n) % n;
+molViews.elev = { z: 1, x: 0, y: 0 };
 renderMeasure();
 }
 function molShowWall(wi) {
 molElevWall = wi;
+molViews.elev = { z: 1, x: 0, y: 0 };
 renderMeasure();
 const el = document.getElementById('mpMolElev');
 if (el) el.scrollIntoView({ block: 'center' });
 }
+/* приближение, перемещение и весь экран для плана и развёртки — как на «Углах» */
+const molViews = { plan: { z: 1, x: 0, y: 0 }, elev: { z: 1, x: 0, y: 0 } };
+let molFull = null, molDragged = false;
+function molSize(box, which) {
+const base = which === 'plan' ? 230 : 240;
+if (molFull === which && box && box.clientWidth > 0 && box.clientHeight > 0) return { W: 340, H: Math.round(340 * box.clientHeight / box.clientWidth) };
+return { W: 340, H: base };
+}
+function renderMolViews(mo) {
+if (!measure) return;
+mo = mo || moldingCompute(measure);
+[['plan', 'mpMolPlan'], ['elev', 'mpMolElev']].forEach(([which, id]) => {
+const box = document.getElementById(id);
+if (!box) return;
+const { W, H } = molSize(box, which);
+const vw = molViews[which];
+const svg = which === 'plan' ? molPlanSvg(measure, mo, W, H, vw) : molElevSvg(measure, molElevWall, W, H, vw);
+// без чертежа (нет стен или высоты) — только подсказка, без кнопок
+if (!svg.startsWith('<svg')) { box.innerHTML = svg; return; }
+const moved = Math.abs(vw.z - 1) > 0.01 || Math.abs(vw.x) > 1 || Math.abs(vw.y) > 1;
+const full = molFull === which;
+box.innerHTML = `${svg}<div class="rl-zoom cp-zoom">
+<button type="button" onclick="molZoom('${which}', 1.6)" aria-label="Приблизить">+</button>
+<button type="button" onclick="molZoom('${which}', 1 / 1.6)" aria-label="Отдалить">−</button>
+${moved ? `<button type="button" onclick="molReset('${which}')" aria-label="Весь чертёж">⤢</button>` : ''}
+<button type="button" onclick="molToggleFull('${which}')" aria-label="${full ? 'Закрыть' : 'Во весь экран'}">${full ? '✕' : '⛶'}</button>
+</div>${full && which === 'elev' ? `<div class="cp-caption">Стена ${molElevWall + 1} <button type="button" class="cn-cap-btn" onclick="molStep(-1)">‹</button><button type="button" class="cn-cap-btn" onclick="molStep(1)">›</button></div>` : ''}`;
+bindPanZoom(box, () => molViews[which], () => renderMolViews(), v => { molDragged = v; }, f => molZoom(which, f));
+});
+}
+function molZoom(which, f) { const v = molViews[which]; v.z = Math.min(8, Math.max(0.5, v.z * f)); renderMolViews(); }
+function molReset(which) { molViews[which] = { z: 1, x: 0, y: 0 }; renderMolViews(); }
+function molToggleFull(which) {
+molFull = molFull === which ? null : which;
+document.body.classList.toggle('cp-full-open', !!molFull);
+['plan', 'elev'].forEach(w => { const b = document.getElementById(w === 'plan' ? 'mpMolPlan' : 'mpMolElev'); if (b) b.classList.toggle('full', molFull === w); });
+renderMolViews();
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && molFull) molToggleFull(molFull); });
+window.addEventListener('resize', () => { if (molFull) renderMolViews(); });
+// касание стены на плане — её развёртка; после перетаскивания не срабатывает
+function molTapWall(i) {
+if (molDragged) { molDragged = false; return; }
+if (molFull === 'plan') molToggleFull('plan');
+molShowWall(i);
+}
+
 function setMolPick(p) { measureMolPick = p; updateMeasureOutputs(); }
 
 // номера стен в лепнине после перестройки стен: map[старый] = новый (или -1)
