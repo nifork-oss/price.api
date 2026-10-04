@@ -39,7 +39,7 @@ function rlTurns() { if (!Array.isArray(measure.turns)) measure.turns = []; retu
 function rulerSnapshot() {
 const m = measure;
 // углы и начальное направление тоже — иначе после «Отменить» план мог перекоситься
-const snap = JSON.stringify({ shape: m.shape, height: m.height, walls: m.walls, wallHeights: m.wallHeights, turns: m.turns, angles: m.angles || [], startHeading: m.startHeading || 0, openings: m.openings, ceilEls: m.ceilEls || [], molding: m.molding || null });
+const snap = JSON.stringify({ shape: m.shape, height: m.height, walls: m.walls, wallHeights: m.wallHeights, turns: m.turns, angles: m.angles || [], startHeading: m.startHeading || 0, openings: m.openings, ceilEls: m.ceilEls || [], radNiches: m.radNiches || [], molding: m.molding || null });
 if (rulerUndo[rulerUndo.length - 1] !== snap) rulerUndo.push(snap);
 if (rulerUndo.length > 50) rulerUndo.shift();
 }
@@ -208,6 +208,12 @@ if (typeof molElevShapes === 'function') out += molElevShapes(m, i, XA, Yh, L, H
 const cornerA = XA(0), cornerB = XA(L);
 [[cornerA, 'А'], [cornerB, 'Б']].forEach(([cx, letter]) => {
 out += `<circle cx="${cx}" cy="${Yh(Hh) - 12}" r="9" fill="#ffffff" stroke="#14181f" stroke-width="1.2"/><text x="${cx}" y="${Yh(Hh) - 8}" text-anchor="middle" font-size="11" font-weight="700" fill="#14181f">${letter}</text>`;
+});
+// ниши под окнами — штриховой рамкой от подоконника вниз, с глубиной
+if (typeof radNichesCompute === 'function') radNichesCompute(m).list.filter(e => e.wall === i && e.span).forEach(e => {
+const xL = Math.min(XA(e.span[0]), XA(e.span[1])), xR = Math.max(XA(e.span[0]), XA(e.span[1]));
+out += `<rect x="${xL}" y="${Yh(e.top)}" width="${xR - xL}" height="${(e.top - e.bottom) * k}" fill="#f1ece4" stroke="#8a6d3b" stroke-width="1.2" stroke-dasharray="4 2"/>`;
+out += `<text x="${(xL + xR) / 2}" y="${Yh((e.top + e.bottom) / 2) + 4}" text-anchor="middle" font-size="10" font-weight="700" fill="#8a6d3b">${e.code}${e.d ? ' · ' + mFmt(e.d) : ''}</text>`;
 });
 // проёмы
 const ops = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => o.wall === i && openingWidth(o) > 0);
