@@ -603,6 +603,8 @@ if (pts.size === 1 && start.pts.size === 1) {
 const p0 = start.pts.get(e.pointerId); if (!p0) return;
 const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
 if (!start.moved && Math.hypot(dx, dy) < 6) return;
+// окно по стене и подложка — одним пальцем всегда; сам чертёж — двумя (или во весь экран)
+if (!box._op && !(rlUnderlayAdjust && box._ul) && !pzOneFingerPan(box, e)) { pzHint(dx, dy); return; }
 if (!start.moved) { try { box.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ } }
 start.moved = true; rlDragged = true;
 if (box._op) {
@@ -657,6 +659,10 @@ renderRulerSketch();
 return;
 }
 rlZoom = Math.min(5, Math.max(0.5, start.zoom * d1 / d0));
+// и двигаем за центром пальцев
+const c1 = pzMid(pts), c0 = pzMid(start.pts);
+const u2 = (320 / rlZoom) / (box.clientWidth || 320);
+rlPan = { x: start.pan.x - (c1.x - c0.x) * u2, y: start.pan.y - (c1.y - c0.y) * u2 };
 start.moved = true; rlDragged = true;
 renderRulerSketch();
 }
@@ -670,6 +676,7 @@ else start = { ...snapshot(), moved: true }; // остался один пале
 };
 window.addEventListener('pointerup', end);
 window.addEventListener('pointercancel', end);
+pzGuardTouch(box, () => !!box._op || !!(rlUnderlayAdjust && box._ul));
 }
 
 // Где на стене проём (метры от угла А): отступ от выбранного угла, иначе по центру
