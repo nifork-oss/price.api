@@ -1551,11 +1551,13 @@ showAddToast(rulerFixOption(nb) || rulerFixOption(-1)
 
 /* ---------- подправка плана замерами от углов ---------- */
 // Углы на объекте точно не измерить. Зато просто измерить рулеткой расстояние
-// от угла стены до стены напротив (кратчайшее, под прямым углом к ней).
+// от выбранной стены до стены напротив. Для каждого угла стены (А и Б) — своя
+// стена напротив. Если стена напротив короче и против угла её нет, замер
+// переезжает по выбранной стене и встаёт напротив угла той стены.
 // По замеру выбранная стена сдвигается: её угол едет вдоль соседней стены,
 // соседняя удлиняется или укорачивается, остальные стены и углы не меняются.
-// measure.wallChecks = [{ wall, opp, a, b, n }]: от угла А и угла Б стены wall
-// до стены opp; n — сколько было стен (иначе замер уже не к тем стенам).
+// measure.wallChecks = [{ wall, oppA, oppB, a, b, n }]: замеры у угла А и угла Б
+// стены wall до стен oppA / oppB; n — сколько было стен (иначе замер уже не к тем стенам).
 
 function rulerCheckReady(m) {
 return m.walls.length >= 4 && m.walls.every(w => mNum(w) > 0);
@@ -1567,34 +1569,45 @@ const out = [];
 for (let k = 0; k < n; k++) if (k !== i && k !== (i + 1) % n && k !== (i - 1 + n) % n) out.push(k);
 return out;
 }
-// Стена напротив — та, в которую упирается луч из середины стены внутрь комнаты
-function rulerOppositeWall(m, i) {
+// Стена напротив — та, в которую упирается луч внутрь комнаты из точки стены
+// (frac — доля длины от угла А: у угла А смотрим ближе к А, у угла Б — к Б)
+function rulerOppositeWall(m, i, frac) {
 const g = rulerGeometry(m);
 const cand = rulerCheckCandidates(m, i);
 const s = g.segs[i];
 if (!s || !cand.length) return -1;
-const mx = (s.x1 + s.x2) / 2, my = (s.y1 + s.y2) / 2;
 const nx = -s.dy * g.orient, ny = s.dx * g.orient;
+const hit = f => {
+const mx = s.x1 + (s.x2 - s.x1) * f, my = s.y1 + (s.y2 - s.y1) * f;
 let best = -1, bestT = Infinity;
 cand.forEach(k => {
 const q = g.segs[k];
 const ex = q.x2 - q.x1, ey = q.y2 - q.y1;
-// mid + n·t = q1 + e·u
+// m + n·t = q1 + e·u
 const det = -nx * ey + ny * ex;
 if (Math.abs(det) < 1e-9) return;
 const rx = q.x1 - mx, ry = q.y1 - my;
 const tt = (-rx * ey + ry * ex) / det, u = (nx * ry - ny * rx) / det;
 if (tt > 0.01 && u >= -0.001 && u <= 1.001 && tt < bestT) { bestT = tt; best = k; }
 });
-if (best >= 0) return best;
+return best;
+};
+// у угла луч может пройти мимо — двигаемся к середине стены
+for (const f of [frac, (frac + 0.5) / 2, 0.5]) { const k = hit(f); if (k >= 0) return k; }
 // луч никуда не попал — самая «встречная» по направлению
-let bestDot = Infinity;
+let best = -1, bestDot = Infinity;
 cand.forEach(k => { const d = s.dx * g.segs[k].dx + s.dy * g.segs[k].dy; if (d < bestDot) { bestDot = d; best = k; } });
 return best;
 }
+function rlCheckOpp(c, f) {
+const v = f === 'a' ? c.oppA : c.oppB;
+return typeof v === 'number' ? v : c.opp; // c.opp — замеры, сделанные до раздельного выбора
+}
 function rulerCheckValid(m, c) {
 const n = m.walls.length;
-return !!c && c.n === n && c.wall < n && rulerCheckCandidates(m, c.wall).includes(c.opp);
+if (!c || c.n !== n || c.wall >= n) return false;
+const cand = rulerCheckCandidates(m, c.wall);
+return cand.includes(rlCheckOpp(c, 'a')) && cand.includes(rlCheckOpp(c, 'b'));
 }
 function rulerCheckOf(m, i) {
 const c = (m.wallChecks || []).find(x => x.wall === i);
@@ -1604,12 +1617,58 @@ function rulerCheckEnsure(i) {
 const m = measure;
 if (!Array.isArray(m.wallChecks)) m.wallChecks = [];
 m.wallChecks = m.wallChecks.filter(c => rulerCheckValid(m, c));
-if (!m.wallChecks.some(c => c.wall === i)) m.wallChecks.push({ wall: i, opp: rulerOppositeWall(m, i), a: '', b: '', n: m.walls.length });
+if (!m.wallChecks.some(c => c.wall === i)) {
+m.wallChecks.push({ wall: i, oppA: rulerOppositeWall(m, i, 0.15), oppB: rulerOppositeWall(m, i, 0.85), a: '', b: '', n: m.walls.length });
+}
 }
 
 // Кратчайшее расстояние от точки до прямой, на которой стена j
 function rlDistToLine(p, P, h, j) {
 return Math.abs(Math.cos(h[j]) * (p[1] - P[j][1]) - Math.sin(h[j]) * (p[0] - P[j][0]));
+}
+// со знаком: с какой стороны от прямой через a в направлении u лежит точка p
+function rlSide(a, u, p) { return u[0] * (p[1] - a[1]) - u[1] * (p[0] - a[0]); }
+
+// Где мерить у угла f ('a' | 'b') стены i до стены j.
+// Против угла есть стена j — мерим от угла до неё (под прямым углом к ней).
+// Против угла её нет — мерим от выбранной стены до ближнего к углу конца стены j
+// (под прямым углом к выбранной стене): mode 'pt', q — тот конец стены j.
+function rulerCheckSpot(P, h, L, i, j, f) {
+const n = L.length;
+const A = P[i], B = P[i + 1];
+const X = f === 'a' ? A : B;
+const uj = [Math.cos(h[j]), Math.sin(h[j])];
+const tau = (X[0] - P[j][0]) * uj[0] + (X[1] - P[j][1]) * uj[1];
+if (tau >= -0.01 && tau <= L[j] + 0.01) {
+const q = [P[j][0] + uj[0] * tau, P[j][1] + uj[1] * tau];
+return { mode: 'corner', p: X, q, dist: rlDistToLine(X, P, h, j) };
+}
+const ui = [Math.cos(h[i]), Math.sin(h[i])];
+const ends = [P[j], P[j + 1]].map(Q => ({ Q, s: (Q[0] - A[0]) * ui[0] + (Q[1] - A[1]) * ui[1] }))
+.filter(e => e.s > 0.01 && e.s < L[i] - 0.01);
+if (!ends.length) return { mode: 'corner', p: X, q: [P[j][0] + uj[0] * tau, P[j][1] + uj[1] * tau], dist: rlDistToLine(X, P, h, j), off: true };
+ends.sort((e1, e2) => f === 'a' ? e1.s - e2.s : e2.s - e1.s);
+const Q = ends[0].Q, s = ends[0].s;
+return { mode: 'pt', p: [A[0] + ui[0] * s, A[1] + ui[1] * s], q: Q, dist: rlDistToLine(Q, P, h, i), s };
+}
+function rlCheckGeom(m) {
+const g = rulerGeometry(m);
+return { g, L: m.walls.map(mNum), h: g.segs.map(s => s.heading * Math.PI / 180), P: [[0, 0], ...g.segs.map(s => [s.x2, s.y2])] };
+}
+
+// Решить f(x) = 0 (одна переменная), начиная с x0
+function rlSolve1(fn, x0) {
+let x = x0;
+for (let it = 0; it < 60; it++) {
+const y = fn(x);
+if (Math.abs(y) < 1e-7) return x;
+const d = (fn(x + 1e-6) - y) / 1e-6;
+if (!isFinite(d) || Math.abs(d) < 1e-9) return null;
+let step = y / d;
+if (Math.abs(step) > 1) step = Math.sign(step);
+x -= step;
+}
+return Math.abs(fn(x)) < 1e-5 ? x : null;
 }
 
 // Сдвинуть стену по замерам: угол А едет вдоль предыдущей стены, угол Б — вдоль
@@ -1618,42 +1677,47 @@ return Math.abs(Math.cos(h[j]) * (p[1] - P[j][1]) - Math.sin(h[j]) * (p[0] - P[j
 // и углы остаются как были; меняется лишь сама выбранная стена.
 function rulerCheckMove(m, c) {
 const n = m.walls.length;
-const g = rulerGeometry(m);
-const L = m.walls.map(mNum);
-const h = g.segs.map(s => s.heading * Math.PI / 180);
-const P = [[0, 0], ...g.segs.map(s => [s.x2, s.y2])];
-const i = c.wall, prev = (i - 1 + n) % n, next = (i + 1) % n, j = c.opp;
+const { L, h, P } = rlCheckGeom(m);
+const i = c.wall, prev = (i - 1 + n) % n, next = (i + 1) % n;
+const uPrev = [Math.cos(h[prev]), Math.sin(h[prev])], uNext = [Math.cos(h[next]), Math.sin(h[next])];
+const endNext = P[next + 1];
+const Aat = t => [P[prev][0] + uPrev[0] * t, P[prev][1] + uPrev[1] * t];
+const Bat = t => [endNext[0] - uNext[0] * t, endNext[1] - uNext[1] * t];
+// условие для замера у угла f: расстояние со знаком (сторона — как сейчас) минус замер
+const slot = f => {
+const d = mNum(c[f]);
+if (!(d > 0)) return null;
+const j = rlCheckOpp(c, f);
+const sp = rulerCheckSpot(P, h, L, i, j, f);
 const uj = [Math.cos(h[j]), Math.sin(h[j])];
-const side = p => uj[0] * (p[1] - P[j][1]) - uj[1] * (p[0] - P[j][0]); // со знаком: с какой стороны стены j
-// точка base + u·t, на расстоянии d от стены j с той же стороны, что и сейчас
-const slide = (base, u, cur, d) => {
-const k = uj[0] * u[1] - uj[1] * u[0];
-if (Math.abs(k) < 0.05) return null; // стена едет параллельно стене напротив — расстояние не меняется
-const want = (side(cur) < 0 ? -1 : 1) * d;
-return (want - side(base)) / k;
+if (sp.mode === 'corner') {
+const sg = rlSide(P[j], uj, sp.p) < 0 ? -1 : 1;
+return (A, B) => sg * rlSide(P[j], uj, f === 'a' ? A : B) - d;
+}
+const ui0 = [Math.cos(h[i]), Math.sin(h[i])];
+const sg = rlSide(P[i], ui0, sp.q) < 0 ? -1 : 1;
+return (A, B) => {
+const l = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1;
+return sg * rlSide(A, [(B[0] - A[0]) / l, (B[1] - A[1]) / l], sp.q) - d;
 };
-const newL = L.slice();
-let A = P[i], B = P[i + 1];
-const a = mNum(c.a), b = mNum(c.b);
-if (a > 0) {
-const u = [Math.cos(h[prev]), Math.sin(h[prev])];
-const t = slide(P[prev], u, A, a);
-if (t === null) return { err: `Стена ${prev + 1} идёт вдоль стены ${j + 1} — от угла А так не подправить` };
-if (t < 0.05) return { err: `Стене ${prev + 1} пришлось бы стать короче 5 см — проверьте замер от угла А` };
-newL[prev] = t; A = [P[prev][0] + u[0] * t, P[prev][1] + u[1] * t];
+};
+const fa = slot('a'), fb = slot('b');
+let tA = L[prev], tB = L[next];
+// угол А и угол Б подгоняем по очереди, пока оба замера не сойдутся
+for (let it = 0; it < 40; it++) {
+const oA = tA, oB = tB;
+if (fa) { const v = rlSolve1(t => fa(Aat(t), Bat(tB)), tA); if (v === null) return { err: `От угла А стены ${i + 1} так не подправить: стена ${prev + 1} идёт вдоль замера` }; tA = v; }
+if (fb) { const v = rlSolve1(t => fb(Aat(tA), Bat(t)), tB); if (v === null) return { err: `От угла Б стены ${i + 1} так не подправить: стена ${next + 1} идёт вдоль замера` }; tB = v; }
+if (Math.abs(tA - oA) < 1e-7 && Math.abs(tB - oB) < 1e-7) break;
 }
-if (b > 0) {
-const u = [Math.cos(h[next]), Math.sin(h[next])];
-const end = P[next + 1];
-// конец следующей стены стоит на месте, угол Б едет вдоль неё
-const t = slide(end, [-u[0], -u[1]], B, b);
-if (t === null) return { err: `Стена ${next + 1} идёт вдоль стены ${j + 1} — от угла Б так не подправить` };
-if (t < 0.05) return { err: `Стене ${next + 1} пришлось бы стать короче 5 см — проверьте замер от угла Б` };
-newL[next] = t; B = [end[0] - u[0] * t, end[1] - u[1] * t];
-}
+if (fa && Math.abs(fa(Aat(tA), Bat(tB))) > 0.001 || fb && Math.abs(fb(Aat(tA), Bat(tB))) > 0.001) return { err: 'Замеры не сходятся между собой — проверьте их' };
+if (tA < 0.05) return { err: `Стене ${prev + 1} пришлось бы стать короче 5 см — проверьте замер у угла А` };
+if (tB < 0.05) return { err: `Стене ${next + 1} пришлось бы стать короче 5 см — проверьте замер у угла Б` };
+const A = Aat(tA), B = Bat(tB);
 const li = Math.hypot(B[0] - A[0], B[1] - A[1]);
 if (li < 0.05) return { err: 'Стена стянулась бы в точку — проверьте замеры' };
-newL[i] = li;
+const newL = L.slice();
+newL[prev] = tA; newL[next] = tB; newL[i] = li;
 const deg = h.map(v => v * 180 / Math.PI);
 deg[i] = Math.atan2(B[1] - A[1], B[0] - A[0]) * 180 / Math.PI;
 return { L: newL, deg, changed: [prev, i, next].filter((k, q, arr) => arr.indexOf(k) === q && Math.abs(newL[k] - L[k]) >= 0.0005) };
@@ -1701,13 +1765,16 @@ showAddToast(res.changed.length
 : 'План и так совпадает с замерами');
 }
 
+// Стена напротив для того угла, у которого сейчас замер
 function rulerCheckSetOpp(j) {
 const t = rulerTarget; if (!t || t.kind !== 'chk') return;
 rulerCheckEnsure(t.idx);
 const c = measure.wallChecks.find(x => x.wall === t.idx);
-if (c.opp === j) return;
+const key = t.field === 'b' ? 'oppB' : 'oppA';
+if (rlCheckOpp(c, t.field) === j && typeof c[key] === 'number') return;
 rulerSnapshot();
-c.opp = j;
+c.oppA = rlCheckOpp(c, 'a'); c.oppB = rlCheckOpp(c, 'b'); delete c.opp;
+c[key] = j;
 saveMeasureDraft();
 rulerBuf = rulerFieldValue(t);
 renderRulerSketch();
@@ -1721,76 +1788,73 @@ saveMeasureDraft();
 rulerEdit('wall', t.idx);
 }
 
-// Сколько сейчас по плану от угла до стены — чтобы было с чем сравнить замер
-function rulerCheckPlanDist(m, c, field) {
-const g = rulerGeometry(m);
-const n = m.walls.length;
-const h = g.segs.map(s => s.heading * Math.PI / 180);
-const P = [[0, 0], ...g.segs.map(s => [s.x2, s.y2])];
-return rlDistToLine(P[field === 'a' ? c.wall : (c.wall + 1) % n], P, h, c.opp);
-}
 function rulerCheckLabel(t) {
 const c = rulerCheckOf(measure, t.idx);
-if (!c || c.opp < 0) return `Стена ${t.idx + 1} · нет стены напротив`;
-const plan = rulerCheckPlanDist(measure, c, t.field);
-return `От угла ${t.field === 'a' ? 'А' : 'Б'} стены ${t.idx + 1} до стены ${c.opp + 1}, кратчайшее · по плану ${mFmt(Math.round(plan * 1000) / 1000)}`;
+if (!c) return `Стена ${t.idx + 1} · нет стены напротив`;
+const j = rlCheckOpp(c, t.field);
+const { L, h, P } = rlCheckGeom(measure);
+const sp = rulerCheckSpot(P, h, L, t.idx, j, t.field);
+const plan = mFmt(Math.round(sp.dist * 1000) / 1000);
+return sp.mode === 'pt'
+? `У угла ${t.field === 'a' ? 'А' : 'Б'}: от стены ${t.idx + 1} до угла стены ${j + 1}, под прямым углом · по плану ${plan}`
+: `От угла ${t.field === 'a' ? 'А' : 'Б'} стены ${t.idx + 1} до стены ${j + 1}, кратчайшее · по плану ${plan}`;
 }
 function rulerCheckTools(t) {
 const c = rulerCheckOf(measure, t.idx);
-let tools = `<button type="button" class="rl-tool rl-turn${t.field === 'a' ? ' on' : ''}" onclick="rulerEdit('chk', ${t.idx}, 'a')">От угла А</button>
-<button type="button" class="rl-tool rl-turn${t.field === 'b' ? ' on' : ''}" onclick="rulerEdit('chk', ${t.idx}, 'b')">От угла Б</button>`;
+let tools = `<button type="button" class="rl-tool rl-turn${t.field === 'a' ? ' on' : ''}" onclick="rulerEdit('chk', ${t.idx}, 'a')">У угла А</button>
+<button type="button" class="rl-tool rl-turn${t.field === 'b' ? ' on' : ''}" onclick="rulerEdit('chk', ${t.idx}, 'b')">У угла Б</button>`;
 const cand = rulerCheckCandidates(measure, t.idx);
 if (c && cand.length > 1) {
-tools += `<span class="rl-turn-label">До стены:</span>` + cand.map(k => `<button type="button" class="rl-tool rl-turn${c.opp === k ? ' on' : ''}" onclick="rulerCheckSetOpp(${k})">${k + 1}</button>`).join('');
+const cur = rlCheckOpp(c, t.field);
+tools += `<span class="rl-turn-label">До стены (или коснитесь её):</span>` + cand.map(k => `<button type="button" class="rl-tool rl-turn${cur === k ? ' on' : ''}" onclick="rulerCheckSetOpp(${k})">${k + 1}</button>`).join('');
 }
 if (c && (mNum(c.a) > 0 || mNum(c.b) > 0)) tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCheckApply()">Подправить план</button>`;
 tools += `<button type="button" class="rl-tool rl-tool-del" onclick="rulerCheckRemove()">Убрать замер</button>`;
 return tools;
 }
 
-// На чертеже: от углов до стены напротив — синим пунктиром, с замером.
+// На чертеже: замеры до стен напротив — синим пунктиром, с размером.
 // Если план с замером расходится больше чем на 1 см — замер красным, рядом — сколько по плану.
 function rulerChecksSvg(m, g, X, Y, o2) {
 const t = rulerTarget;
 const n = m.walls.length;
 if (g.segs.length !== n) return '';
-const h = g.segs.map(s => s.heading * Math.PI / 180);
-const P = [[0, 0], ...g.segs.map(s => [s.x2, s.y2])];
+const { L, h, P } = rlCheckGeom(m);
 const ppm = Math.hypot(X(1) - X(0), Y(1) - Y(0)) || 1;
 let out = '';
 (m.wallChecks || []).filter(c => rulerCheckValid(m, c)).forEach(c => {
 const active = t && t.kind === 'chk' && t.idx === c.wall;
 if (!active && !(mNum(c.a) > 0) && !(mNum(c.b) > 0)) return;
-const q = g.segs[c.opp];
-if (active) out += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="#2f6fc0" stroke-width="9" stroke-linecap="square" opacity=".35"/>`;
-[['a', P[c.wall], 'А'], ['b', P[(c.wall + 1) % n], 'Б']].forEach(([f, p, letter]) => {
+const s = g.segs[c.wall];
+['a', 'b'].forEach(f => {
 const val = mNum(c[f]);
 const on = active && t.field === f;
 if (!active && !(val > 0)) return;
-const ux = Math.cos(h[c.opp]), uy = Math.sin(h[c.opp]);
-const tt = (p[0] - P[c.opp][0]) * ux + (p[1] - P[c.opp][1]) * uy;
-const fx = P[c.opp][0] + ux * tt, fy = P[c.opp][1] + uy * tt;
-const plan = rlDistToLine(p, P, h, c.opp);
-const off = val > 0 && Math.abs(plan - val) > 0.01;
-out += `<path d="M${X(p[0])} ${Y(p[1])}L${X(fx)} ${Y(fy)}" stroke="#2f6fc0" stroke-width="${on ? 2.5 : 1.6}" stroke-dasharray="5 4"/>`;
-// значок прямого угла у стены напротив
-const vx = p[0] - fx, vy = p[1] - fy, vl = Math.hypot(vx, vy) || 1;
-const sq = 7 / ppm, sx = Math.sign(tt) || 1;
-const ax = fx + vx / vl * sq, ay = fy + vy / vl * sq;
-out += `<path d="M${X(ax)} ${Y(ay)}L${X(ax - ux * sq * sx)} ${Y(ay - uy * sq * sx)}L${X(fx - ux * sq * sx)} ${Y(fy - uy * sq * sx)}" fill="none" stroke="#2f6fc0" stroke-width="1.2"/>`;
-// подпись — ближе к углу (середину занимает номер стены) и внутрь, к другому углу стены
-const other = f === 'a' ? P[(c.wall + 1) % n] : P[c.wall];
-const inw = Math.sign((other[0] - p[0]) * ux + (other[1] - p[1]) * uy) || 1;
-const ix = ux * inw, iy = uy * inw;
-const lx = X(p[0] + (fx - p[0]) * 0.3) + ix * 8, ly = Y(p[1] + (fy - p[1]) * 0.3) + iy * 8 + iy * 6;
+const j = rlCheckOpp(c, f);
+const q = g.segs[j];
+if (on) out += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="#2f6fc0" stroke-width="9" stroke-linecap="square" opacity=".35"/>`;
+const sp = rulerCheckSpot(P, h, L, c.wall, j, f);
+const off = val > 0 && Math.abs(sp.dist - val) > 0.01;
+const [p, qq] = [sp.p, sp.q];
+out += `<path d="M${X(p[0])} ${Y(p[1])}L${X(qq[0])} ${Y(qq[1])}" stroke="#2f6fc0" stroke-width="${on ? 2.5 : 1.6}" stroke-dasharray="5 4"/>`;
+// значок прямого угла: у стены напротив (замер от угла) или у выбранной стены (замер до угла)
+const foot = sp.mode === 'pt' ? p : qq, from = sp.mode === 'pt' ? qq : p;
+const wd = sp.mode === 'pt' ? [s.dx, s.dy] : [Math.cos(h[j]), Math.sin(h[j])];
+const vx = from[0] - foot[0], vy = from[1] - foot[1], vl = Math.hypot(vx, vy) || 1;
+const sq = 7 / ppm;
+const ax = foot[0] + vx / vl * sq, ay = foot[1] + vy / vl * sq;
+out += `<path d="M${X(ax)} ${Y(ay)}L${X(ax + wd[0] * sq)} ${Y(ay + wd[1] * sq)}L${X(foot[0] + wd[0] * sq)} ${Y(foot[1] + wd[1] * sq)}" fill="none" stroke="#2f6fc0" stroke-width="1.2"/>`;
+// подпись — ближе к выбранной стене и в сторону середины стены
+const ui = [s.dx, s.dy], inw = f === 'a' ? 1 : -1;
+const ix = ui[0] * inw, iy = ui[1] * inw;
+const lx = X(p[0] + (qq[0] - p[0]) * 0.3) + ix * 8, ly = Y(p[1] + (qq[1] - p[1]) * 0.3) + iy * 14;
 const anchor = ix > 0.5 ? 'start' : ix < -0.5 ? 'end' : 'middle';
-const label = val > 0 ? mFmt(val) + (off ? ` (план ${mFmt(Math.round(plan * 1000) / 1000)})` : '') : '?';
+const label = val > 0 ? mFmt(val) + (off ? ` (план ${mFmt(Math.round(sp.dist * 1000) / 1000)})` : '') : '?';
 out += `<text x="${lx}" y="${ly + 4}" text-anchor="${anchor}" font-size="12" font-weight="700" fill="${off ? '#c2361f' : '#2f6fc0'}" paint-order="stroke" stroke="#ffffff" stroke-width="3">${escapeHtml(label)}</text>`;
 if (active) {
-const s = g.segs[c.wall];
 const cx = X(p[0]) - s.dy * 20 * o2, cy = Y(p[1]) + s.dx * 20 * o2;
 out += `<circle cx="${cx}" cy="${cy}" r="10" fill="${on ? '#ffc83d' : '#ffffff'}" stroke="#14181f" stroke-width="1.5"/>`;
-out += `<text x="${cx}" y="${cy + 4.5}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#14181f">${letter}</text>`;
+out += `<text x="${cx}" y="${cy + 4.5}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#14181f">${f === 'a' ? 'А' : 'Б'}</text>`;
 }
 });
 });
