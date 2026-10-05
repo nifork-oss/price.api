@@ -1639,7 +1639,8 @@ const A = P[i], B = P[i + 1];
 const X = f === 'a' ? A : B;
 const uj = [Math.cos(h[j]), Math.sin(h[j])];
 const tau = (X[0] - P[j][0]) * uj[0] + (X[1] - P[j][1]) * uj[1];
-if (tau >= -0.01 && tau <= L[j] + 0.01) {
+// стена напротив чуть не доходит до уровня угла (наклон в доли градуса) — всё равно мерим от угла
+if (tau >= -0.15 && tau <= L[j] + 0.15) {
 const q = [P[j][0] + uj[0] * tau, P[j][1] + uj[1] * tau];
 return { mode: 'corner', p: X, q, dist: rlDistToLine(X, P, h, j) };
 }
@@ -1795,9 +1796,10 @@ const j = rlCheckOpp(c, t.field);
 const { L, h, P } = rlCheckGeom(measure);
 const sp = rulerCheckSpot(P, h, L, t.idx, j, t.field);
 const plan = mFmt(Math.round(sp.dist * 1000) / 1000);
+const letter = t.field === 'a' ? 'А' : 'Б';
 return sp.mode === 'pt'
-? `У угла ${t.field === 'a' ? 'А' : 'Б'}: от стены ${t.idx + 1} до угла стены ${j + 1}, под прямым углом · по плану ${plan}`
-: `От угла ${t.field === 'a' ? 'А' : 'Б'} стены ${t.idx + 1} до стены ${j + 1}, кратчайшее · по плану ${plan}`;
+? `Замер ${letter}: от стены ${t.idx + 1} до угла стены ${j + 1} (синий пунктир) · по плану ${plan}`
+: `Замер ${letter}: от угла ${letter} до стены ${j + 1} · по плану ${plan}`;
 }
 function rulerCheckTools(t) {
 const c = rulerCheckOf(measure, t.idx);
@@ -1849,10 +1851,15 @@ const ui = [s.dx, s.dy], inw = f === 'a' ? 1 : -1;
 const ix = ui[0] * inw, iy = ui[1] * inw;
 const lx = X(p[0] + (qq[0] - p[0]) * 0.3) + ix * 8, ly = Y(p[1] + (qq[1] - p[1]) * 0.3) + iy * 14;
 const anchor = ix > 0.5 ? 'start' : ix < -0.5 ? 'end' : 'middle';
-const label = val > 0 ? mFmt(val) + (off ? ` (план ${mFmt(Math.round(sp.dist * 1000) / 1000)})` : '') : '?';
+const label = (f === 'a' ? 'А: ' : 'Б: ') + (val > 0 ? mFmt(val) + (off ? ` (план ${mFmt(Math.round(sp.dist * 1000) / 1000)})` : '') : '?');
 out += `<text x="${lx}" y="${ly + 4}" text-anchor="${anchor}" font-size="12" font-weight="700" fill="${off ? '#c2361f' : '#2f6fc0'}" paint-order="stroke" stroke="#ffffff" stroke-width="3">${escapeHtml(label)}</text>`;
+// точка замера на выбранной стене
+if (active) out += `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="${on ? 5 : 4}" fill="${on ? '#ffc83d' : '#ffffff'}" stroke="#2f6fc0" stroke-width="2"/>`;
+// буквы — в самих углах стены, а не в точке замера
 if (active) {
-const cx = X(p[0]) - s.dy * 20 * o2, cy = Y(p[1]) + s.dx * 20 * o2;
+const k = f === 'a' ? c.wall : c.wall + 1;
+// снаружи комнаты, чтобы не налезать на размеры внутри
+const cx = X(P[k][0]) + s.dy * 22 * o2, cy = Y(P[k][1]) - s.dx * 22 * o2;
 out += `<circle cx="${cx}" cy="${cy}" r="10" fill="${on ? '#ffc83d' : '#ffffff'}" stroke="#14181f" stroke-width="1.5"/>`;
 out += `<text x="${cx}" y="${cy + 4.5}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#14181f">${f === 'a' ? 'А' : 'Б'}</text>`;
 }
