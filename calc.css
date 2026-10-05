@@ -864,3 +864,15 @@ body.measure-open .sheet { z-index: 96; }
 .mp-swipe-l > .mp-body-inner { animation: mpSwipeL .2s ease-out; }
 .mp-swipe-r > .mp-body-inner { animation: mpSwipeR .2s ease-out; }
 @media (prefers-reduced-motion: reduce) { .mp-swipe-l > .mp-body-inner, .mp-swipe-r > .mp-body-inner { animation: none; } }
+
+/* «+ Добавить» и правка элемента под чертежом */
+.rl-add-sel { flex: 1; min-height: 44px; padding: 0 12px; border: 1.5px solid #14181f; border-radius: 8px; background: #ffffff; font: 600 15px inherit; font-family: inherit; color: #14181f; cursor: pointer; }
+.rl-add-sel.rl-tool { flex: 0 0 auto; min-height: 36px; font-size: 13px; border-width: 1px; border-color: #14181f; }
+.rl-focus { margin: 10px 0 4px; padding: 10px; border: 2px solid #ffc83d; border-radius: 10px; background: #fffaf0; }
+.rl-focus .mp-open { margin: 0; border: none; background: transparent; padding: 0; }
+.rl-focus .mp-tofocus { display: none; }
+.rl-focus-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-weight: 700; font-size: 14px; color: #14181f; }
+.rl-focus-head button { min-height: 36px; padding: 6px 14px; border: none; border-radius: 8px; background: #14181f; color: #ffffff; font: 600 13px inherit; font-family: inherit; cursor: pointer; }
+.mp-tofocus { flex: 0 0 auto; min-height: 30px; padding: 4px 9px; border: 1px solid #c9ced5; border-radius: 6px; background: #ffffff; font-size: 12px; font-weight: 600; color: #33404f; cursor: pointer; white-space: nowrap; }
+.mp-focus-ph { margin: 0 0 8px; padding: 10px 12px; border: 1px dashed #c9ced5; border-radius: 8px; font-size: 13px; color: #5d6878; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mp-focus-ph button { border: 1px solid #14181f; border-radius: 6px; background: #ffffff; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }

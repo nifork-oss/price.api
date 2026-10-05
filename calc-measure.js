@@ -1068,6 +1068,7 @@ ${m.openings.map((o, i) => `<div class="mp-open">
 <div class="mp-open-top">
 <button type="button" class="mp-type" onclick="toggleOpeningType(${i})" aria-label="Сменить тип проёма">${o.type === 'door' ? 'Дверь' : o.type === 'balcony' ? 'Балк. блок' : 'Окно'} ▾</button>
 <span class="mp-open-area" id="mpOpenArea${i}"></span>
+${typeof o.wall === 'number' ? `<button type="button" class="mp-tofocus" onclick="measureFocusOn('openings', ${i})" aria-label="Править на чертеже">↑ К плану</button>` : ''}
 <button type="button" class="mp-del" onclick="removeMeasureRow('openings', ${i})" aria-label="Убрать проём">✕</button>
 </div>
 <div class="mp-dims">
@@ -1105,10 +1106,11 @@ ${m.openings.length ? `<button type="button" class="mp-link-btn" onclick="setMea
 <section class="mp-sec">
 <div class="mp-sec-title">Участки стен</div>
 <div class="mp-hint">Часть стены под отдельную работу: плитка до 1,5 м, фартук, акцентная стена. Стены при этом не меняются — при выборе работы будут и «Участки», и «Стены без участков».</div>
-${(m.parts || []).map((pt, i) => `<div class="mp-open">
+${(m.parts || []).map((pt, i) => `<div class="mp-open" data-card="parts.${i}">
 <div class="mp-open-top">
 <input class="mp-name-in" type="text" data-path="parts.${i}.name" value="${escapeHtml(pt.name || '')}" placeholder="Название: плитка, фартук…" autocomplete="off">
 <span class="mp-open-area" id="mpPartArea${i}"></span>
+<button type="button" class="mp-tofocus" onclick="measureFocusOn('parts', ${i})" aria-label="Править под чертежом">↑ К плану</button>
 <button type="button" class="mp-del" onclick="removeMeasureRow('parts', ${i})" aria-label="Убрать участок">✕</button>
 </div>
 <div class="mp-dims mp-dims-2">
@@ -1183,6 +1185,7 @@ html += typeof tileTabHtml === 'function' ? tileTabHtml(m) : '';
 html += renderMeasureHistoryHtml();
 }
 body.innerHTML = `<div class="mp-body-inner">${html}</div>`;
+placeMeasureFocus();
 updateMeasureOutputs();
 }
 
@@ -1464,6 +1467,7 @@ focusMeasurePath(kind === 'ceiling' ? `ceiling.${last}.l` : kind === 'parts' ? `
 }
 
 function removeMeasureRow(kind, i) {
+if (measureFocus && measureFocus.kind === kind) measureFocus = null;
 measure[kind].splice(i, 1);
 if (kind === 'openings') remapCeilElOpsAfterRemove(measure, i);
 if (kind === 'walls' && Array.isArray(measure.wallHeights)) measure.wallHeights.splice(i, 1);
@@ -1517,10 +1521,11 @@ return `<section class="mp-sec">
 ${list.map((el, i) => {
 const under = radUnder(el);
 const wi = radWall(m, el);
-return `<div class="mp-open">
+return `<div class="mp-open" data-card="radNiches.${i}">
 <div class="mp-open-top">
 <button type="button" class="mp-type" onclick="toggleRadKind(${i})" aria-label="Сменить: под окном или в стене">${radCode(list, i)} ${under ? 'Под окном' : 'В стене'} ▾</button>
 <span class="mp-open-area" id="mpRadRes${i}"></span>
+<button type="button" class="mp-tofocus" onclick="measureFocusOn('radNiches', ${i})" aria-label="Править под чертежом">↑ К плану</button>
 <button type="button" class="mp-del" onclick="removeMeasureRow('radNiches', ${i})" aria-label="Убрать нишу">✕</button>
 </div>
 ${under ? `<div class="mp-place"><label>Под окном
@@ -1634,6 +1639,109 @@ saveMeasureDraft();
 renderMeasure();
 }
 
+/* ---------- «+ Добавить» и правка элемента прямо под чертежом ---------- */
+// Выбранная ниша, мебель или участок стены переносится карточкой сразу под
+// чертёж — правишь и тут же видишь, как меняется план или развёртка.
+let measureFocus = null; // { kind: 'covers' | 'radNiches' | 'parts', idx }
+// Список «что добавить»: wall — стена, к которой добавляем (из клавиатуры стены)
+function measureAddMenuHtml(wall, cls = '') {
+const m = measure;
+const hasWin = (m.openings || []).some(o => typeof radOpOk === 'function' && radOpOk(o));
+const w = Number.isInteger(wall) ? wall : 'null';
+return `<select class="rl-add-sel ${cls}" aria-label="Добавить" onchange="measureAddFromMenu(this.value, ${w}); this.value = ''">
+<option value="">+ Добавить${Number.isInteger(wall) ? ` на стену ${wall + 1}` : ''} ▾</option>
+<optgroup label="Проёмы">
+<option value="window">Окно</option>
+<option value="door">Дверь</option>
+<option value="balcony">Балконный блок</option>
+</optgroup>
+<optgroup label="На стене">
+<option value="radWall">Ниша в стене (ТВ, полки)</option>
+${hasWin ? '<option value="radUnder">Ниши под окнами (батареи)</option>' : ''}
+<option value="cover">Закрыто мебелью (шкаф, кухня)</option>
+<option value="part">Участок стены (плитка, фартук)</option>
+</optgroup>
+</select>`;
+}
+function measureAddFromMenu(kind, wall) {
+if (!kind) return;
+if (kind === 'window' || kind === 'door' || kind === 'balcony') {
+if (Number.isInteger(wall)) {
+if (!rulerTarget || (rulerTarget.kind !== 'wall' && rulerTarget.kind !== 'wallH')) rulerTarget = { kind: 'wall', idx: wall };
+rulerAddOpening(kind);
+} else rulerStartOpening(kind);
+return;
+}
+// остальное правится карточкой под чертежом — клавиатуру убираем
+if (Number.isInteger(wall)) rlElevWall = wall;
+if (rulerTarget) rulerClose();
+const len = k => (Array.isArray(measure[k]) ? measure[k].length : 0);
+if (kind === 'radWall') { measureFocus = { kind: 'radNiches', idx: len('radNiches') }; rlView = 'elev'; addRadWallNiche(); }
+else if (kind === 'radUnder') { measureFocus = { kind: 'radNiches', idx: len('radNiches') }; rlView = 'elev'; addRadNiches(); }
+else if (kind === 'cover') { measureFocus = { kind: 'covers', idx: len('covers') }; addCover(); }
+else if (kind === 'part') { if (!Array.isArray(measure.parts)) measure.parts = []; measureFocus = { kind: 'parts', idx: len('parts') }; addMeasureRow('parts'); }
+if (measureFocus && !(measure[measureFocus.kind] || [])[measureFocus.idx]) measureFocus = null;
+measureFocusScroll();
+}
+// «↑ К плану» у карточки: перенести её под чертёж (проём — открыть на чертеже)
+function measureFocusOn(kind, idx) {
+const el = (measure[kind] || [])[idx];
+if (!el) return;
+if (kind === 'openings') {
+measureFocus = null;
+if (typeof el.wall === 'number') { rlView = 'plan'; rulerEdit('op', idx, 'w'); }
+measureFocusScroll();
+return;
+}
+if (rulerTarget) rulerClose();
+measureFocus = { kind, idx };
+let wall = null;
+if (kind === 'covers' && Number.isInteger(el.wall)) wall = el.wall;
+if (kind === 'radNiches') {
+rlView = 'elev';
+if (Number.isInteger(el.wall)) wall = el.wall;
+else if (radUnder(el)) { const o = radOp(measure, el); if (o && typeof o.wall === 'number') wall = o.wall; }
+}
+if (wall != null) rlElevWall = wall;
+renderMeasure();
+measureFocusScroll();
+}
+function measureFocusClose() {
+measureFocus = null;
+renderMeasure();
+}
+function measureFocusScroll() {
+setTimeout(() => {
+const sk = document.getElementById('rlSketch');
+if (sk) sk.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}, 30);
+}
+function measureFocusTitle(f) {
+if (f.kind === 'covers') return `Мебель ${coverCode(f.idx)}`;
+if (f.kind === 'radNiches') return `Ниша ${radCode(measure.radNiches, f.idx)}`;
+if (f.kind === 'parts') return `Участок стены ${f.idx + 1}`;
+return '';
+}
+// после отрисовки: карточку выбранного элемента — в место под чертежом
+function placeMeasureFocus() {
+const slot = document.getElementById('rlFocusSlot');
+if (!slot) return;
+slot.innerHTML = '';
+slot.style.display = 'none';
+const f = measureFocus;
+if (!f || measureTab !== 'walls') return;
+if (!(measure[f.kind] || [])[f.idx]) { measureFocus = null; return; }
+const card = document.querySelector(`#mpBody [data-card="${f.kind}.${f.idx}"]`);
+if (!card) return;
+const ph = document.createElement('div');
+ph.className = 'mp-focus-ph';
+ph.innerHTML = `${escapeHtml(measureFocusTitle(f))} — правится под чертежом <button type="button" onclick="measureFocusScroll()">↑ К плану</button>`;
+card.parentNode.insertBefore(ph, card);
+slot.innerHTML = `<div class="rl-focus-head"><span>${escapeHtml(measureFocusTitle(f))}</span><button type="button" onclick="measureFocusClose()">Готово ✓</button></div>`;
+slot.appendChild(card);
+slot.style.display = '';
+}
+
 /* ---------- закрыто мебелью: ввод ---------- */
 function coversSectionHtml(m) {
 const list = Array.isArray(m.covers) ? m.covers : [];
@@ -1644,10 +1752,11 @@ return `<section class="mp-sec">
 <div class="mp-hint">Шкафы, кухня, мебельные панели: за ними стену не обрабатываем — площадь вычитается из стен. Ширина пусто — вся стена, высота пусто — до потолка. Если над шкафом стену делаем, укажите высоту шкафа; навесной — низ от пола. С глубиной шкаф в углу закрывает боком соседнюю стену — отметьте, обрабатываем её за боком или нет.</div>
 ${list.map((el, i) => {
 const wi = coverWall(m, el);
-return `<div class="mp-open">
+return `<div class="mp-open" data-card="covers.${i}">
 <div class="mp-open-top">
 <input class="mp-name-in" type="text" data-path="covers.${i}.name" value="${escapeHtml(el.name || '')}" placeholder="${coverCode(i)}: шкаф, кухня, панель…" autocomplete="off">
 <span class="mp-open-area" id="mpCoverRes${i}"></span>
+<button type="button" class="mp-tofocus" onclick="measureFocusOn('covers', ${i})" aria-label="Править под чертежом">↑ К плану</button>
 <button type="button" class="mp-del" onclick="removeMeasureRow('covers', ${i})" aria-label="Убрать">✕</button>
 </div>
 ${hasWalls ? `<div class="mp-place"><label>На стене
