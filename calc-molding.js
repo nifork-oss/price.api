@@ -45,13 +45,15 @@ return [...new Set(sel)].filter(i => all.includes(i)).sort((a, b) => a - b);
 }
 
 // углы между соседними выбранными стенами: внутренние и наружные
-function molCorners(g, walls) {
+// at(i, j) — есть ли карниз/плинтус у самого угла (не спрятан за мебелью)
+function molCorners(g, walls, at) {
 const res = { in: 0, out: 0 };
 if (!g) return res;
 const set = new Set(walls), n = g.segs.length, o = g.orient || 1;
 g.segs.forEach((q, i) => {
 const j = i + 1 < n ? i + 1 : (g.closed ? 0 : -1);
 if (j < 0 || !set.has(i) || !set.has(j)) return;
+if (at && !at(i, j)) return;
 const q2 = g.segs[j];
 const c = q.dx * q2.dy - q.dy * q2.dx;
 if (Math.abs(c) < 0.02) return;
@@ -67,6 +69,28 @@ const [a0, a1] = openingSpan(o, L);
 return o.type === 'balcony' ? balconyParts(o, a0, a1).door : [a0, a1];
 });
 }
+
+// Мебель на стене: куски, которые стоят на полу (там нет плинтуса)
+// или доходят до потолка (там нет карниза)
+function molCoverSpans(m, wi, kind) {
+if (typeof coversCompute !== 'function') return [];
+return coversCompute(m).pieces.filter(p => p.wall === wi && (kind === 'floor' ? p.bottom < 0.005 : p.toCeil)).map(p => p.span);
+}
+// где плинтуса нет: двери и мебель на полу
+function molPlinthGaps(m, wi, L) { return [...molDoorSpans(m, wi, L), ...molCoverSpans(m, wi, 'floor')]; }
+// свободные куски стены [0, L] за вычетом промежутков
+function molFreeSpans(L, gaps) {
+const out = []; let x = 0;
+[...gaps].sort((a, b) => a[0] - b[0]).forEach(([a, b]) => { if (a - x > 0.005) out.push([x, a]); x = Math.max(x, b); });
+if (L - x > 0.005) out.push([x, L]);
+return out;
+}
+// угол между стенами i и j открыт: у конца стены i и у начала стены j нет мебели
+function molCoverCornerOpen(m, lens, kind) {
+return (i, j) => !molCoverSpans(m, i, kind).some(sp => sp[1] >= lens[i] - 0.005) && !molCoverSpans(m, j, kind).some(sp => sp[0] <= 0.005);
+}
+// карниз: стена без мебели до потолка
+function molCorniceSpans(m, wi, L) { return molFreeSpans(L, molCoverSpans(m, wi, 'ceil')); }
 
 // Рамка на потолке: контур комнаты, сдвинутый внутрь на d (углы — «на ус»)
 function molOffsetPoly(g, d) {
@@ -175,9 +199,8 @@ const doors = typeof openingSpan === 'function'
 ? (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => o.wall === i && (o.type === 'door' || o.type === 'balcony') && openingWidth(o) > 0)
 .map(({ o, oi }) => { const [a0, a1] = openingSpan(o, L); const sp = o.type === 'balcony' ? balconyParts(o, a0, a1).door : [a0, a1]; return { oi, code: opCode(o, oi), a0: sp[0], a1: sp[1] }; }).sort((a, b) => a.a0 - b.a0)
 : [];
-let x = 0;
-doors.forEach(dr => { if (dr.a0 - x > 0.005) res.pieces.push(dr.a0 - x); x = Math.max(x, dr.a1); });
-if (L - x > 0.005) res.pieces.push(L - x);
+// за мебелью на полу плинтуса нет — он упирается в шкаф
+molFreeSpans(L, [...doors.map(dr => [dr.a0, dr.a1]), ...molCoverSpans(m, i, 'floor')]).forEach(([a, b]) => res.pieces.push(b - a));
 doors.forEach(dr => {
 if (dr.a0 > 0.005) res.ends.push({ key: `d${dr.oi}a`, label: `${dr.code} к углу А`, door: dr.oi });
 if (dr.a1 < L - 0.005) res.ends.push({ key: `d${dr.oi}b`, label: `${dr.code} к углу Б`, door: dr.oi });
@@ -211,9 +234,12 @@ const txtMin = list => list.map(fmtMin).join(' + ');
 const hasMin = list => list.some(v => v > 0 && v < 1);
 if (d.cornice.on) {
 const walls = molWalls(d.cornice.walls, m);
-const pieces = walls.map(i => lens[i]);
+// за мебелью до потолка карниза нет
+const pieces = [];
+walls.forEach(i => molCorniceSpans(m, i, lens[i]).forEach(([a, b]) => pieces.push(b - a)));
 const len = sumMin(pieces);
-const c = molCorners(g, walls);
+// угол за мебелью до потолка — без карниза
+const c = molCorners(g, walls, molCoverCornerOpen(m, lens, 'ceil'));
 if (hasMin(pieces)) out.min = true;
 out.cornice = { walls, len, corners: c, planks: planks(pieces.reduce((a, v) => a + v, 0), d.cornice.plank) };
 if (len > 0) out.lines.cornice = `Карниз: ${walls.length === lens.filter(v => v > 0).length ? 'по периметру' : 'стены ' + walls.map(i => i + 1).join(', ')} ${txtMin(pieces)} = ${mFmt(len)} пог. м${c.in || c.out ? ` · углы: внутр. ${c.in}, наруж. ${c.out}` : ''}${out.cornice.planks ? ` · планок по ${mFmt(mNum(d.cornice.plank))} м: ${out.cornice.planks} (+10%)` : ''}`;
@@ -222,7 +248,7 @@ if (d.plinth.on) {
 const pl = molPlinthPlan(m, g, d.plinth);
 const len = sumMin(pl.pieces) + pl.env.length;     // конверт — 1 пог. м
 if (hasMin(pl.pieces)) out.min = true;
-const c = molCorners(g, pl.walls);
+const c = molCorners(g, pl.walls, molCoverCornerOpen(m, lens, 'floor'));
 out.plinth = { walls: pl.walls, len, caps: pl.caps.length, env: pl.env.length, ends: pl.ends, corners: c, planks: planks(pl.pieces.reduce((a, v) => a + v, 0), d.plinth.plank) };
 if (len > 0) out.lines.plinth = `Плинтус: ${txtMin(pl.pieces)}${pl.looseW ? ` − ${mFmt(pl.looseW)} (двери без места на стене)` : ''}${pl.env.length ? ` + конверты ${pl.env.length} × 1` : ''} = ${mFmt(len)} пог. м${pl.caps.length ? ` · заглушек: ${pl.caps.length}` : ''}${c.in || c.out ? ` · углы: внутр. ${c.in}, наруж. ${c.out}` : ''}${out.plinth.planks ? ` · планок по ${mFmt(mNum(d.plinth.plank))} м: ${out.plinth.planks} (+10%)` : ''}`;
 }
@@ -271,11 +297,11 @@ const lay = molWallLayout(m, wi);
 const k = Math.abs(Yh(0) - Yh(1));
 if (d.cornice.on && molWalls(d.cornice.walls, m).includes(wi)) {
 const ch = Math.min(6, 0.1 * k + 2);
-s += `<rect x="${Math.min(XA(0), XA(L))}" y="${Yh(Hh)}" width="${Math.abs(XA(L) - XA(0))}" height="${ch}" fill="#e9dcf5" stroke="${MOL_INK}" stroke-width="1"/>`;
+molCorniceSpans(m, wi, L).forEach(([a, b]) => { s += `<rect x="${Math.min(XA(a), XA(b))}" y="${Yh(Hh)}" width="${Math.abs(XA(b) - XA(a))}" height="${ch}" fill="#e9dcf5" stroke="${MOL_INK}" stroke-width="1"/>`; });
 }
 if (d.plinth.on && molWalls(d.plinth.walls, m).includes(wi)) {
 const ph = Math.min(6, 0.08 * k + 2);
-const doors = molDoorSpans(m, wi, L).sort((a, b) => a[0] - b[0]);
+const doors = molPlinthGaps(m, wi, L).sort((a, b) => a[0] - b[0]);
 let x = 0;
 const seg = (a, b) => { if (b - a > 0.005) s += `<rect x="${Math.min(XA(a), XA(b))}" y="${Yh(0) - ph}" width="${Math.abs(XA(b) - XA(a))}" height="${ph}" fill="#e3d5c3" stroke="#7a5230" stroke-width="1"/>`; };
 doors.forEach(([a0, a1]) => { seg(x, a0); x = Math.max(x, a1); });
@@ -402,10 +428,10 @@ const nx = -q.dy * o, ny = q.dx * o;
 const p0 = [q.x1 + q.dx * a, q.y1 + q.dy * a], p1 = [q.x1 + q.dx * b, q.y1 + q.dy * b];
 return `<path d="M${X(p0[0]) + nx * off} ${Y(p0[1]) + ny * off}L${X(p1[0]) + nx * off} ${Y(p1[1]) + ny * off}" stroke="${col}" stroke-width="${w}"/>`;
 };
-if (d.cornice.on) molWalls(d.cornice.walls, m).forEach(i => { const q = g.segs[i]; if (q && q.len > 0) s += along(q, 5, 0, q.len, MOL_INK, 2.5); });
+if (d.cornice.on) molWalls(d.cornice.walls, m).forEach(i => { const q = g.segs[i]; if (q && q.len > 0) molCorniceSpans(m, i, q.len).forEach(([a, b]) => { s += along(q, 5, a, b, MOL_INK, 2.5); }); });
 if (d.plinth.on) molWalls(d.plinth.walls, m).forEach(i => {
 const q = g.segs[i]; if (!q || !(q.len > 0)) return;
-const doors = molDoorSpans(m, i, q.len).sort((a, b) => a[0] - b[0]);
+const doors = molPlinthGaps(m, i, q.len).sort((a, b) => a[0] - b[0]);
 let x = 0;
 doors.forEach(([a0, a1]) => { if (a0 > x) s += along(q, 9, x, a0, '#7a5230', 3); x = Math.max(x, a1); });
 if (q.len > x) s += along(q, 9, x, q.len, '#7a5230', 3);
