@@ -340,6 +340,7 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px var(--s-ink); }
 </header>
 
 <div id="publicCompanyBanner" style="display:none; background:linear-gradient(90deg,#14181f,#14181f); color:#fff; border-radius:12px; padding:14px; margin-bottom:14px; text-align:center;"></div>
+<div id="authNotice" style="display:none; background:#fff4d1; color:#14181f; border:1px solid #e3c766; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; line-height:1.45;"></div>
 
 <div class="nav-header">
 <a href="calc.html" class="nav-btn">Личный кабинет для мастера и заказчика</a>
@@ -462,6 +463,8 @@ const DEFAULT_UNITS = ['м²', 'пог. м', 'шт.', 'компл.', 'час', '
 let cloudData = { services: [], users: [], history: [], pirogHistory: [] };
 let isAdmin = false;
 let isCompanyMode = false;
+// почему не показаны кнопки правки: 'expired' — вход истёк, 'offline' — не загрузилось, 'employee' — мастер не в режиме своей компании
+let authNotice = null;
 let publicCompanyName = null;
 let publicCompanyNotFound = false;
 let currentPieNote = '';
@@ -507,6 +510,19 @@ alert('Примечание сохранено!');
 } catch (e) {
 alert('Ошибка сети — не удалось сохранить примечание');
 }
+}
+
+// Почему на странице нет кнопок правки прайса (вошли, но править нельзя)
+function renderAuthNotice() {
+const box = document.getElementById('authNotice');
+if (!box) return;
+const text = {
+expired: 'Вход в кабинет истёк, поэтому показан общий прайс. <a href="calc.html">Войдите в кабинет</a> заново — после этого здесь можно будет править свой прайс-лист.',
+offline: 'Не удалось загрузить ваш прайс-лист — показан общий. Проверьте интернет и обновите страницу.',
+employee: 'Вы вошли как мастер, поэтому показан общий прайс. Чтобы вести <b>свой</b> прайс-лист, выйдите из кабинета и войдите снова, выбрав на экране входа «Своя компания».'
+}[authNotice];
+box.style.display = text ? 'block' : 'none';
+box.innerHTML = text || '';
 }
 
 function showPublicCompanyBanner() {
@@ -581,6 +597,8 @@ cloudData = result.data;
 cloudRev = typeof result.rev === 'number' ? result.rev : null;
 isAdmin = result.role === 'admin';
 isCompanyMode = result.mode === 'company';
+// мастер в обычном режиме правит только счета, а не прайс — подскажем, как вести свой
+if (result.role === 'master' && result.mode !== 'company') authNotice = 'employee';
 cloudData.self = result.self || null;
 currentPieNote = (result.self && result.self.pieNote) || '';
 if (!Array.isArray(cloudData.pirogHistory)) cloudData.pirogHistory = [];
@@ -593,6 +611,8 @@ if (result.role === 'client') {
 await loadPublicData();
 }
 } else {
+// вход истёк или недействителен — показываем общий прайс и говорим почему
+if (res.status === 401) authNotice = 'expired';
 authToken = null;
 localStorage.removeItem('authToken');
 isAdmin = false;
@@ -606,10 +626,12 @@ await loadPublicData();
 }
 } catch (e) {
 console.error("Ошибка загрузки данных:", e);
+if (authToken) authNotice = 'offline';
 isAdmin = false;
 isCompanyMode = false;
 await loadPublicData();
 } finally {
+renderAuthNotice();
 localStorage.setItem('isAdminAuthorized', isAdmin ? 'true' : 'false');
 if (loader) loader.style.display = 'none';
 renderPriceList();
