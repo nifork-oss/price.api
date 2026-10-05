@@ -802,13 +802,14 @@ ${shape && rlView === 'elev' ? `<div class="rl-elev-nav">
 <button type="button" onclick="rulerElevStep(1)" aria-label="Следующая стена">›</button>
 </div>` : ''}
 <div class="rl-sketch${rlFull && rlView === 'plan' ? ' full' : ''}" id="rlSketch"></div>
+<div class="rl-focus" id="rlFocusSlot" style="display:none"></div>
 ${shape && rlView === 'elev' ? '<div class="rl-elev-sum" id="rlElevSum"></div><button type="button" class="mp-link-btn" onclick="openElevPrintForMeasure()">Печать развёрток со всеми размерами (PDF) →</button><div class="rl-ophint">Коснитесь длины, высоты, окна или двери — откроется клавиатура. Окно: ширина → высота → подоконник → отступ.</div>' : ''}
 ${shape ? `<div class="rl-walls">${chips}</div>` : ''}
 ${shape ? underlayBarHtml() : ''}
 ${shape ? (rulerPick
 ? `<div class="rl-pick"><span>${rulerPick.move !== undefined ? 'Куда перенести? Коснитесь стены' : `Коснитесь стены, где ${rulerPick.type === 'door' ? 'дверь' : rulerPick.type === 'balcony' ? 'балконный блок' : 'окно'}`}, или выберите номер:</span> <button type="button" onclick="rulerCancelPick()">Отмена</button></div>
 <div class="rl-walls">${m.walls.map((w, i) => `<button type="button" class="rl-chip" onclick="rulerEdit('wall', ${i})">Стена ${i + 1}</button>`).join('')}</div>`
-: `<div class="rl-opbtns"><button type="button" onclick="rulerStartOpening('window')">+ Окно</button><button type="button" onclick="rulerStartOpening('door')">+ Дверь</button><button type="button" onclick="rulerStartOpening('balcony')">+ Балк. блок</button></div>
+: `<div class="rl-opbtns">${measureAddMenuHtml(null)}</div>
 ${(m.openings || []).some(o => typeof o.wall === 'number') ? '<div class="rl-ophint"><b>⇆</b> Окно или дверь на чертеже: коснитесь — изменить размеры, потяните за ручку вдоль стены — сдвинуть.</div>' : ''}`) : ''}
 <div class="mp-calc" id="mpCalcWalls"></div>
 </section>`;
@@ -964,6 +965,8 @@ const cc = rulerCornerClose(gg);
 if (cc) tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCloseCorner()">Замкнуть углом 90°: ${mFmt(cc.a)} + ${mFmt(cc.b)} м</button>`;
 tools += `<button type="button" class="rl-tool${cc ? '' : ' rl-tool-close'}" onclick="rulerCloseAny()">${cc ? 'По прямой' : 'Замкнуть по месту'}: ${mFmt(gg.closeAny.len)} м, угол ${Math.round(gg.closeAny.interior)}°</button>`;
 }
+// «+ Добавить на стену» — в начале ряда, чтобы не прятался за прокруткой
+tools += measureAddMenuHtml(t.idx, 'rl-tool');
 if (shape === 'free' && t.kind === 'wall') {
 const tr = rlTurns()[t.idx] === 'L' ? 'L' : 'R';
 const ang = Array.isArray(measure.angles) ? mNum(measure.angles[t.idx]) : 0;
@@ -973,9 +976,6 @@ tools += `<span class="rl-turn-label">После стены:</span>
 <button type="button" class="rl-tool${ang && Math.abs(ang - 90) > 0.05 ? ' on' : ''}" onclick="rulerEdit('angle', ${t.idx})">Угол ${ang ? mFmt(ang) : 90}°</button>`;
 }
 tools += `<button type="button" class="rl-tool${t.kind === 'wallH' ? ' on' : ''}" onclick="rulerEdit('${t.kind === 'wallH' ? 'wall' : 'wallH'}', ${t.idx})">Своя высота</button>
-<button type="button" class="rl-tool" onclick="rulerAddOpening('window')">+ Окно</button>
-<button type="button" class="rl-tool" onclick="rulerAddOpening('door')">+ Дверь</button>
-<button type="button" class="rl-tool" onclick="rulerAddOpening('balcony')">+ Балк. блок</button>
 ${shape === 'free' && measure.walls.length > 1 ? `<button type="button" class="rl-tool rl-tool-del" onclick="rulerRemoveWall()">Убрать стену</button>` : ''}`;
 }
 if (t.kind === 'angle') {
