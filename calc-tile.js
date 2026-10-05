@@ -233,17 +233,31 @@ return out;
 }
 const tileClipArea = (subject, clip) => { const p = tileClipPoly(subject, clip); return p.length > 2 ? Math.abs(tilePolyArea(p)) : 0; };
 // Ширина куска поперёк самой узкой стороны, в долях плитки: размах куска вдоль сторон плитки
-function tilePieceFrac(piece, t) {
+// Размер куска вдоль сторон плитки, в долях плитки: [вдоль первой стороны, вдоль второй]
+function tilePieceFracs(piece, t) {
 const ax = [[t[0], t[1]], [t[0], t[3]]].map(([a, b]) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy); return { ux: dx / L, uy: dy / L, L }; });
-return Math.min(...ax.map(({ ux, uy, L }) => { const pr = piece.map(p => p[0] * ux + p[1] * uy); return (Math.max(...pr) - Math.min(...pr)) / L; }));
+return ax.map(({ ux, uy, L }) => { const pr = piece.map(p => p[0] * ux + p[1] * uy); return Math.min(1, (Math.max(...pr) - Math.min(...pr)) / L); });
 }
-// Сколько плиток уходит на участок region (без дыр holes) при раскладке от origin:
-// целые, подрезные и из них узкие (шириной до трети плитки). Слишком мелкая плитка — null.
+// Сколько плиток уйдёт на подрезные куски, если брать их из обрезков других плиток.
+// Прямая раскладка и со смещением: кусок режется полосой вдоль одной стороны плитки,
+// остаток той же полосы годится под следующий кусок (по узкой стороне куска).
+// Диагональ и ёлочка — грубо, по площади кусков. На рез — запас 1% плитки.
+function tileReuseCount(pieces, byAxes) {
+const KERF = 0.01;
+const items = pieces.map(p => byAxes ? (p.fu <= p.fv ? ['u', p.fu] : ['v', p.fv]) : ['a', p.f]).sort((a, b) => b[1] - a[1]);
+const bins = { u: [], v: [], a: [] };
+items.forEach(([k, x]) => {
+const need = Math.min(1, x + KERF), b = bins[k];
+const i = b.findIndex(rest => rest >= need - 1e-9);
+if (i >= 0) b[i] -= need; else b.push(1 - need);
+});
+return bins.u.length + bins.v.length + bins.a.length;
+}
 function tileLayoutCount(s, region, holes, origin) {
 const xs = region.map(p => p[0]), ys = region.map(p => p[1]);
 const tiles = tilePolys(s, Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys), 40000, origin);
 if (!tiles) return null;
-const res = { whole: 0, cut: 0, narrow: 0 };
+const res = { whole: 0, cut: 0, narrow: 0, pieces: [] };
 tiles.forEach(t => {
 const full = Math.abs(tilePolyArea(t));
 if (!(full > 0)) return;
@@ -252,7 +266,12 @@ let a = piece.length > 2 ? Math.abs(tilePolyArea(piece)) : 0;
 if (a > 0) holes.forEach(h => { a -= tileClipArea(h, t); });
 const f = a / full;
 if (f > 0.995) res.whole++;
-else if (f > 0.01) { res.cut++; if (tilePieceFrac(piece, t) < 0.34) res.narrow++; }
+else if (f > 0.01) {
+const [fu, fv] = tilePieceFracs(piece, t);
+res.cut++;
+if (Math.min(fu, fv) < 0.34) res.narrow++;
+res.pieces.push({ fu, fv, f });
+}
 });
 res.pcs = res.whole + res.cut;
 return res;
@@ -262,8 +281,13 @@ const tileRect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
 function tileLayoutLine(what, s, c, cnt, extra, codes) {
 const { w, l } = tileSize(s);
 const add = extra > 0 && w > 0 && l > 0 ? Math.ceil(extra / (w * l) - 1e-9) : 0;
-const total = c.pcs + add;
+let total = c.pcs + add;
 let t = `Плитка ${what} по раскладке: ${c.whole} целых + ${c.cut} подрезных${add ? ` + облицовка ${codes} ${add}` : ''} = ${total} шт. без запаса на бой`;
+if (s.reuse && c.cut) {
+c.reuseTiles = tileReuseCount(c.pieces, ['straight', 'offset'].includes(tileLayout(s).key));
+total = c.whole + c.reuseTiles + add;
+t += `; с обрезками: ${c.whole} целых + ${c.reuseTiles} на ${c.cut} подрезных${add ? ` + ${add}` : ''} = ${total} шт.${['straight', 'offset'].includes(tileLayout(s).key) ? '' : ' (примерно, по площади кусков)'}`;
+}
 if (c.narrow) t += `; узких кусков (до трети плитки): ${c.narrow}`;
 if (cnt && cnt.pcs && total > cnt.pcs) t += `. По раскладке плиток больше, чем с запасом ${mFmt(cnt.waste)}% (${cnt.pcs} шт.) — увеличьте запас или сдвиньте раскладку`;
 return t;
@@ -281,7 +305,7 @@ const lens = (m.walls || []).map(mNum);
 const ws = molWalls(d.walls.walls, m);
 const parts = [];
 let gross = 0, cut = 0, hid = 0;
-let lay = { whole: 0, cut: 0, narrow: 0, pcs: 0 };
+let lay = { whole: 0, cut: 0, narrow: 0, pcs: 0, pieces: [] };
 ws.forEach(wi => {
 const L = lens[wi], Ht = tileWallH(m, d.walls, wi);
 if (!(L > 0) || !(Ht > 0)) return;
@@ -293,7 +317,7 @@ parts.push(`${mFmt(L)}×${mFmt(Ht)}`);
 if (lay && tileSize(d.walls).w > 0 && tileSize(d.walls).l > 0) {
 const holes = [...tileWallCuts(m, wi, L, Ht).filter(c => c.area > 0).map(c => tileRect(c.a0, Math.max(0, c.y0), c.a1, Math.min(Ht, c.y1))), ...bl.hidden.filter(p => p.wall === wi).map(p => tileRect(p.span[0], 0, p.span[1], Math.min(p.h, Ht)))];
 const c = tileLayoutCount(d.walls, tileRect(0, 0, L, Ht), holes, tileWallLayout(m, d.walls, wi, L, Ht).origin);
-if (c) { lay.whole += c.whole; lay.cut += c.cut; lay.narrow += c.narrow; lay.pcs += c.pcs; } else lay = null;
+if (c) { lay.whole += c.whole; lay.cut += c.cut; lay.narrow += c.narrow; lay.pcs += c.pcs; lay.pieces.push(...c.pieces); } else lay = null;
 }
 });
 const hidBy = [...new Set(bl.hidden.filter(p => ws.includes(p.wall)).map(p => p.code))].join(', ');
@@ -572,6 +596,7 @@ const label = axis === 'ax' ? x.h : (kind === 'walls' ? x.vWall : x.vFloor);
 const on = tileAlign(s[axis]) === x.key;
 return `<button type="button" class="mp-ce-wall${on ? ' on' : ''}" onclick="tileSetAlign('${kind}', '${axis}', '${x.key}')" aria-pressed="${on}">${label}</button>`;
 }).join('')}</div>`).join('')}
+<label class="mp-check mp-ce-light" style="margin-top:6px;"><input type="checkbox" ${s.reuse ? 'checked' : ''} onchange="tileSetReuse('${kind}', this.checked)"><span>Учитывать обрезки: подрезные куски из остатков других плиток</span></label>
 <div class="mp-dims mp-dims-2" style="margin-top:6px;">
 <label>Запас, %${mIn(`tile.${kind}.waste`, s.waste, String(tileLayout(s).waste))}</label><span class="mp-x">·</span>
 <label>В упаковке, м²${mIn(`tile.${kind}.pack`, s.pack, '1,44')}</label>
@@ -715,6 +740,12 @@ renderMeasure();
 function tileSetAlign(kind, axis, key) {
 const d = tileEnsure();
 d[kind] = { ...d[kind], [axis]: key };
+saveMeasureDraft();
+renderMeasure();
+}
+function tileSetReuse(kind, on) {
+const d = tileEnsure();
+d[kind] = { ...d[kind], reuse: !!on };
 saveMeasureDraft();
 renderMeasure();
 }
