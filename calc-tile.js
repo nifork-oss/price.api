@@ -293,6 +293,48 @@ if (cnt && cnt.pcs && total > cnt.pcs) t += `. По раскладке плит�
 return t;
 }
 
+/* ---------- расход материалов: клей, затирка, грунт, гидроизоляция ---------- */
+// В настройках плитки: mat — считать материалы, glue — клей, кг/м² (пусто — по размеру плитки),
+// bag — мешок клея, кг, th — толщина плитки, мм, gpack — упаковка затирки, кг,
+// hydro (пол) — гидроизоляция с заходом на стены 20 см в два слоя.
+// Затирка: (A + B) / (A × B) × толщина × шов × 1,6 кг/м² (A, B — стороны плитки, мм).
+const TILE_PRIMER = 0.15, TILE_HYDRO = 1, TILE_HYDRO_UP = 0.2;
+function tileGlueRate(s) {
+const v = mNum(s.glue);
+if (v > 0) return v;
+const big = Math.max(mNum(s.w), mNum(s.l));
+return big <= 100 ? 2.5 : big <= 300 ? 4 : big <= 600 ? 5.5 : 7;
+}
+function tileGroutRate(s, kind) {
+const A = mNum(s.w), B = mNum(s.l), j = Math.max(0, evalMeasureExpr(s.joint) || 0);
+const th = mNum(s.th) || (kind === 'floor' ? 9 : 8);
+return A > 0 && B > 0 && j > 0 ? (A + B) / (A * B) * th * j * 1.6 : 0;
+}
+// area — площадь плитки, м²; per — периметр комнаты (для гидроизоляции пола), floorArea — пол по контуру
+function tileMaterials(s, kind, area, per, floorArea) {
+if (!s.mat || !(area > 0)) return null;
+const out = { lines: [] };
+const ceil = v => Math.ceil(v - 1e-9);
+const glue = tileGlueRate(s), bag = mNum(s.bag) || 25;
+out.glue = area * glue;
+out.lines.push(`клей ${mFmt(glue)} кг/м²${mNum(s.glue) > 0 ? '' : ' (по размеру плитки)'} → ${mFmt(Math.round(out.glue * 10) / 10)} кг = ${ceil(out.glue / bag)} меш. по ${mFmt(bag)} кг`);
+const gr = tileGroutRate(s, kind);
+if (gr > 0) {
+const gp = mNum(s.gpack) || 2;
+out.grout = area * gr;
+out.lines.push(`затирка ${mFmt(Math.round(gr * 1000) / 1000)} кг/м² (толщина плитки ${mFmt(mNum(s.th) || (kind === 'floor' ? 9 : 8))} мм) → ${mFmt(Math.round(out.grout * 10) / 10)} кг = ${ceil(out.grout / gp)} уп. по ${mFmt(gp)} кг`);
+} else out.lines.push('затирка: укажите размер плитки и шов');
+out.primer = area * TILE_PRIMER;
+out.lines.push(`грунт ~${mFmt(TILE_PRIMER)} л/м² → ${mFmt(Math.round(out.primer * 10) / 10)} л`);
+if (kind === 'floor' && s.hydro && floorArea > 0) {
+const ha = floorArea + per * TILE_HYDRO_UP;
+out.hydro = ha * TILE_HYDRO * 2;
+out.tape = per;
+out.lines.push(`гидроизоляция: пол ${mFmt(floorArea)} + заход на стены ${mFmt(per)} × ${mFmt(TILE_HYDRO_UP)} = ${mFmt(Math.round(ha * 1000) / 1000)} м², 2 слоя по ${mFmt(TILE_HYDRO)} кг/м² → ${mFmt(Math.round(out.hydro * 10) / 10)} кг, лента в угол пол–стена ${mFmt(per)} пог. м`);
+}
+return out;
+}
+
 function tileCompute(m, r) {
 const d = tileGet(m);
 const out = { walls: 0, floor: 0, wallsCount: null, floorCount: null, lines: {} };
@@ -354,6 +396,17 @@ if (out.floorLayout) out.lines.floorLayout = tileLayoutLine('на полу', d.f
 if (blW.length) out.lines.blocksWalls = blW.map(b => b.line).join('\n');
 if (blF.length) out.lines.blocksFloor = blF.map(b => b.line).join('\n');
 if (bl.list.length) out.lines.blocks = `Подиумы, короба, экраны — облицовка ${mFmt(bl.walls + bl.floor)} м², наружные углы ${mFmt(bl.edges)} пог. м`;
+// материалы — на площадь плитки (с облицовкой подиумов и коробов), без запаса
+{
+const lens = (m.walls || []).map(mNum);
+const per = lens.every(v => v > 0) ? lens.reduce((a, v) => a + v, 0) : 0;
+const fa = d.floor.on ? tileFloorArea(m, r).area : 0;
+const mw = d.walls.on ? tileMaterials(d.walls, 'walls', out.walls, per, fa) : null;
+const mf = d.floor.on ? tileMaterials(d.floor, 'floor', out.floor, per, fa) : null;
+out.matWalls = mw; out.matFloor = mf;
+if (mw) out.lines.matWalls = `Материалы на стены (${mFmt(out.walls)} м²): ${mw.lines.join('; ')}`;
+if (mf) out.lines.matFloor = `Материалы на пол (${mFmt(out.floor)} м²): ${mf.lines.join('; ')}`;
+}
 if (out.walls > 0 && out.floor > 0) out.lines.all = `Плитка всего: ${mFmt(out.walls)} + ${mFmt(out.floor)} = ${mFmt(out.walls + out.floor)} м²`;
 return out;
 }
@@ -596,11 +649,23 @@ const label = axis === 'ax' ? x.h : (kind === 'walls' ? x.vWall : x.vFloor);
 const on = tileAlign(s[axis]) === x.key;
 return `<button type="button" class="mp-ce-wall${on ? ' on' : ''}" onclick="tileSetAlign('${kind}', '${axis}', '${x.key}')" aria-pressed="${on}">${label}</button>`;
 }).join('')}</div>`).join('')}
+<div class="mp-add-row" style="margin-top:6px;"><button type="button" class="mp-add" onclick="tileAutoAlign('${kind}')">Подобрать раскладку: меньше узких кусков</button></div>
 <label class="mp-check mp-ce-light" style="margin-top:6px;"><input type="checkbox" ${s.reuse ? 'checked' : ''} onchange="tileSetReuse('${kind}', this.checked)"><span>Учитывать обрезки: подрезные куски из остатков других плиток</span></label>
 <div class="mp-dims mp-dims-2" style="margin-top:6px;">
 <label>Запас, %${mIn(`tile.${kind}.waste`, s.waste, String(tileLayout(s).waste))}</label><span class="mp-x">·</span>
 <label>В упаковке, м²${mIn(`tile.${kind}.pack`, s.pack, '1,44')}</label>
-</div>`;
+</div>
+<label class="mp-check mp-ce-light" style="margin-top:6px;"><input type="checkbox" ${s.mat ? 'checked' : ''} onchange="tileSetFlag('${kind}', 'mat', this.checked)"><span>Считать материалы: клей, затирку, грунт</span></label>
+${s.mat ? `<div class="mp-dims" style="margin-top:6px;">
+<label>Клей, кг/м²${mIn(`tile.${kind}.glue`, s.glue, mFmt(tileGlueRate({ ...s, glue: '' })))}</label><span class="mp-x">·</span>
+<label>Мешок, кг${mIn(`tile.${kind}.bag`, s.bag, '25')}</label><span class="mp-x">·</span>
+<label>Толщина плитки, мм${mIn(`tile.${kind}.th`, s.th, kind === 'floor' ? '9' : '8')}</label>
+</div>
+<div class="mp-dims mp-dims-2" style="margin-top:6px;">
+<label>Затирка в упаковке, кг${mIn(`tile.${kind}.gpack`, s.gpack, '2')}</label><span></span><span></span>
+</div>
+${kind === 'floor' ? `<label class="mp-check mp-ce-light" style="margin-top:6px;"><input type="checkbox" ${s.hydro ? 'checked' : ''} onchange="tileSetFlag('floor', 'hydro', this.checked)"><span>Гидроизоляция пола с заходом на стены 20 см</span></label>` : ''}
+<div class="mp-calc" id="mpCalcTileMat_${kind}"></div>` : ''}`;
 const toggle = (kind, on, label) => `<label class="mp-check mp-ce-light"><input type="checkbox" ${on ? 'checked' : ''} onchange="tileSet('${kind}', this.checked)"><span>${label}</span></label>`;
 const chips = () => {
 const ws = molWalls(d.walls.walls, m);
@@ -723,6 +788,8 @@ const fl = tileFloorLayout(d.floor, Math.min(...xs), Math.min(...ys), Math.max(.
 const txt = tilePiecesTxt(fl.ex, tileSize(d.floor).w, fl.ey, tileSize(d.floor).l, ['слева', 'справа', 'сверху', 'снизу']);
 set('mpTileFloorCuts', txt ? `Крайние куски на плане: ${escapeHtml(txt)}` : '');
 } else set('mpTileFloorCuts', '');
+set('mpCalcTileMat_walls', t.lines.matWalls ? escapeHtml(t.lines.matWalls) : '');
+set('mpCalcTileMat_floor', t.lines.matFloor ? escapeHtml(t.lines.matFloor) : '');
 set('mpCalcTileFloor', [t.lines.floor, t.lines.floorLayout, t.lines.floorBad, t.lines.all].filter(Boolean).map(escapeHtml).join('<br>'));
 (Array.isArray(measure.blocks) ? measure.blocks : []).forEach((el, i) => {
 const b = t.blocks && t.blocks.list.find(x => x.idx === i);
@@ -742,6 +809,39 @@ const d = tileEnsure();
 d[kind] = { ...d[kind], [axis]: key };
 saveMeasureDraft();
 renderMeasure();
+}
+function tileSetFlag(kind, key, on) {
+const d = tileEnsure();
+d[kind] = { ...d[kind], [key]: !!on };
+saveMeasureDraft();
+renderMeasure();
+}
+// Подобрать, откуда идёт целая плитка (↔ и ↕), чтобы узких кусков было меньше всего,
+// при равенстве — меньше плиток по раскладке
+function tileAutoPick(m, kind) {
+const d = tileGet(m);
+const r = computeMeasure(m);
+let best = null;
+TILE_ALIGN.forEach(x => TILE_ALIGN.forEach(y => {
+const s = { ...d[kind], ax: x.key, ay: y.key };
+const t = tileCompute({ ...m, tile: { ...d, [kind]: s } }, r);
+const c = kind === 'walls' ? t.wallsLayout : t.floorLayout;
+if (!c) return;
+const score = [c.narrow, c.pcs];
+if (!best || score[0] < best.score[0] || (score[0] === best.score[0] && score[1] < best.score[1])) best = { ax: x.key, ay: y.key, score };
+}));
+return best;
+}
+function tileAutoAlign(kind) {
+const d = tileEnsure();
+const before = kind === 'walls' ? (tileCompute(measure, computeMeasure(measure)).wallsLayout || {}) : (tileCompute(measure, computeMeasure(measure)).floorLayout || {});
+const best = tileAutoPick(measure, kind);
+if (!best) { showAddToast('Нужны стены, размер плитки и включённая плитка'); return; }
+d[kind] = { ...d[kind], ax: best.ax, ay: best.ay };
+saveMeasureDraft();
+renderMeasure();
+const lbl = TILE_ALIGN.find(x => x.key === best.ax).h, lblV = TILE_ALIGN.find(x => x.key === best.ay)[kind === 'walls' ? 'vWall' : 'vFloor'];
+showAddToast(`Целая плитка ↔ ${lbl.toLowerCase()}, ↕ ${lblV.toLowerCase()}: узких кусков ${before.narrow != null ? `${before.narrow} → ` : ''}${best.score[0]}`);
 }
 function tileSetReuse(kind, on) {
 const d = tileEnsure();

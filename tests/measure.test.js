@@ -152,3 +152,27 @@ test('плитка по раскладке с обрезками', () => {
   run('measure.tile.floor.reuse = false');
   assert.doesNotMatch(run('tileCompute(measure, computeMeasure(measure))').lines.floorLayout, /с обрезками/);
 });
+
+test('материалы к плитке: клей, затирка, грунт, гидроизоляция', () => {
+  const { run } = setup({ shape: 'rect', height: '2,7', walls: ['2', '2', '2', '2'],
+    tile: { floor: { on: true, w: '300', l: '300', joint: '2', layout: 'straight', mat: true, th: '9', hydro: true } } });
+  const t = run('tileCompute(measure, computeMeasure(measure))');
+  near(t.matFloor.glue, 4 * 4);                         // плитка 300 — 4 кг/м²
+  near(t.matFloor.grout, 4 * (600 / 90000) * 9 * 2 * 1.6);
+  near(t.matFloor.primer, 4 * 0.15);
+  near(t.matFloor.hydro, (4 + 8 * 0.2) * 2);            // заход на стены 20 см, два слоя
+  near(t.matFloor.tape, 8);
+  assert.match(t.lines.matFloor, /16 кг = 1 меш\. по 25 кг/);
+  // без галочки материалы не считаются
+  run('measure.tile.floor.mat = false');
+  assert.strictEqual(run('tileCompute(measure, computeMeasure(measure))').matFloor, null);
+});
+
+test('подбор раскладки: меньше узких кусков', () => {
+  // пол 1 × 0,95, плитка 300×300 от угла — узкие полосы 100 и 50 мм; со швом по центру их нет
+  const { run } = setup({ shape: 'rect', height: '2,7', walls: ['1', '0,95', '1', '0,95'],
+    tile: { floor: { on: true, w: '300', l: '300', joint: '0', layout: 'straight', ax: 'start', ay: 'start' } } });
+  assert.ok(run('tileCompute(measure, computeMeasure(measure)).floorLayout.narrow') > 0);
+  const best = run('tileAutoPick(measure, "floor")');
+  assert.strictEqual(best.score[0], 0);
+});
