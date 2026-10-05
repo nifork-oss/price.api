@@ -1028,7 +1028,7 @@ tools += `<span class="rl-turn-label">После стены:</span>
 <button type="button" class="rl-tool rl-turn${tr === 'L' ? ' on' : ''}" onclick="rulerTurn('L')">↰ Налево</button>
 <button type="button" class="rl-tool${ang && Math.abs(ang - 90) > 0.05 ? ' on' : ''}" onclick="rulerEdit('angle', ${t.idx})">Угол ${ang ? mFmt(ang) : 90}°</button>`;
 }
-if (t.kind === 'wall' && rlView === 'plan' && rulerCheckReady(measure)) tools += `<button type="button" class="rl-tool" onclick="rulerEdit('chk', ${t.idx})">⟂ Замер от углов до стены напротив</button>`;
+if (t.kind === 'wall' && rlView === 'plan' && rulerCheckReady(measure)) tools += `<button type="button" class="rl-tool" onclick="rulerEdit('chk', ${t.idx})">⟂ Замер от углов: до стены или диагональ</button>`;
 tools += `<button type="button" class="rl-tool${t.kind === 'wallH' ? ' on' : ''}" onclick="rulerEdit('${t.kind === 'wallH' ? 'wall' : 'wallH'}', ${t.idx})">Своя высота</button>
 ${shape === 'free' && measure.walls.length > 1 ? `<button type="button" class="rl-tool rl-tool-del" onclick="rulerRemoveWall()">Убрать стену</button>` : ''}`;
 }
@@ -1603,11 +1603,28 @@ function rlCheckOpp(c, f) {
 const v = f === 'a' ? c.oppA : c.oppB;
 return typeof v === 'number' ? v : c.opp; // c.opp — замеры, сделанные до раздельного выбора
 }
+// Диагональ: от угла выбранной стены до угла комнаты напротив (номер точки — начало стены k)
+function rlCheckDiag(c, f) {
+const v = f === 'a' ? c.diagA : c.diagB;
+return typeof v === 'number' ? v : null;
+}
+// Углы, до которых можно мерить диагональ: кроме углов самой стены и угла,
+// к которому едет её угол (тогда это не диагональ, а длина соседней стены)
+function rulerDiagCandidates(m, i, f) {
+const n = m.walls.length;
+const skip = [i, (i + 1) % n, f === 'a' ? (i - 1 + n) % n : (i + 2) % n];
+const out = [];
+for (let k = 0; k < n; k++) if (!skip.includes(k)) out.push(k);
+return out;
+}
+// Угол k — между стенами k и k+1 по номерам (стены считаются с 1)
+function rlCornerName(n, k) { return `${(k - 1 + n) % n + 1}–${k + 1}`; }
 function rulerCheckValid(m, c) {
 const n = m.walls.length;
 if (!c || c.n !== n || c.wall >= n) return false;
 const cand = rulerCheckCandidates(m, c.wall);
-return cand.includes(rlCheckOpp(c, 'a')) && cand.includes(rlCheckOpp(c, 'b'));
+const ok = f => rlCheckDiag(c, f) !== null ? rulerDiagCandidates(m, c.wall, f).includes(rlCheckDiag(c, f)) : cand.includes(rlCheckOpp(c, f));
+return ok('a') && ok('b');
 }
 function rulerCheckOf(m, i) {
 const c = (m.wallChecks || []).find(x => x.wall === i);
@@ -1652,6 +1669,13 @@ ends.sort((e1, e2) => f === 'a' ? e1.s - e2.s : e2.s - e1.s);
 const Q = ends[0].Q, s = ends[0].s;
 return { mode: 'pt', p: [A[0] + ui[0] * s, A[1] + ui[1] * s], q: Q, dist: rlDistToLine(Q, P, h, i), s };
 }
+// Где мерить у угла f с учётом того, до чего мерим: до стены или до угла (диагональ)
+function rulerCheckSpotFor(P, h, L, c, f) {
+const k = rlCheckDiag(c, f);
+if (k === null) return rulerCheckSpot(P, h, L, c.wall, rlCheckOpp(c, f), f);
+const X = f === 'a' ? P[c.wall] : P[c.wall + 1];
+return { mode: 'diag', p: X, q: P[k], dist: Math.hypot(P[k][0] - X[0], P[k][1] - X[1]), k };
+}
 function rlCheckGeom(m) {
 const g = rulerGeometry(m);
 return { g, L: m.walls.map(mNum), h: g.segs.map(s => s.heading * Math.PI / 180), P: [[0, 0], ...g.segs.map(s => [s.x2, s.y2])] };
@@ -1689,7 +1713,8 @@ const slot = f => {
 const d = mNum(c[f]);
 if (!(d > 0)) return null;
 const j = rlCheckOpp(c, f);
-const sp = rulerCheckSpot(P, h, L, i, j, f);
+const sp = rulerCheckSpotFor(P, h, L, c, f);
+if (sp.mode === 'diag') return (A, B) => { const X = f === 'a' ? A : B; return Math.hypot(sp.q[0] - X[0], sp.q[1] - X[1]) - d; };
 const uj = [Math.cos(h[j]), Math.sin(h[j])];
 if (sp.mode === 'corner') {
 const sg = rlSide(P[j], uj, sp.p) < 0 ? -1 : 1;
@@ -1724,6 +1749,52 @@ deg[i] = Math.atan2(B[1] - A[1], B[0] - A[0]) * 180 / Math.PI;
 return { L: newL, deg, changed: [prev, i, next].filter((k, q, arr) => arr.indexOf(k) === q && Math.abs(newL[k] - L[k]) >= 0.0005) };
 }
 
+// Что не так с планом перед сохранением: комната не сошлась или замер от угла
+// расходится с чертежом больше чем на 1 см. Пустая строка — всё в порядке.
+function rulerPlanWarning(m) {
+if (!m || !Array.isArray(m.walls)) return '';
+const shape = rlShape(m);
+if (!shape || shape === 'rect') return '';
+const g = rulerGeometry(m);
+const out = [];
+if (g.checkable && !g.checkClosed) out.push(`план не сходится на ${mFmt(Math.round(g.checkGap * 100))} см`);
+if (g.closed) {
+const { L, h, P } = rlCheckGeom(m);
+(m.wallChecks || []).filter(c => rulerCheckValid(m, c)).forEach(c => ['a', 'b'].forEach(f => {
+const v = mNum(c[f]);
+if (!(v > 0)) return;
+const d = Math.abs(rulerCheckSpotFor(P, h, L, c, f).dist - v);
+if (d > 0.01) out.push(`замер ${f === 'a' ? 'А' : 'Б'} у стены ${c.wall + 1} расходится с планом на ${mFmt(Math.round(d * 100))} см`);
+}));
+}
+return out.length ? out.join('; ') : '';
+}
+// Спросить, сохранять ли план с расхождениями. true — сохранять.
+function rulerConfirmPlanSave(m) {
+const w = rulerPlanWarning(m);
+return !w || confirm(w.charAt(0).toUpperCase() + w.slice(1) + '. Сохранить так?');
+}
+
+// Стена wall стала длиннее на delta, а её конец fixed ('start' | 'end') стоит на месте.
+// Что привязано отступом к сдвинутому углу — окна, двери, ниши, мебель, участки, —
+// получает отступ больше на delta, чтобы остаться там же, где было на объекте.
+// Без отступа (по центру) — не трогаем.
+function rulerKeepWallEls(m, wall, delta, fixed) {
+if (Math.abs(delta) < 0.0005) return;
+const fmt = v => String(Math.round(v * 1000) / 1000).replace('.', ',');
+const els = [...(m.openings || []), ...(m.radNiches || []), ...(m.covers || []), ...(m.parts || [])];
+els.forEach(el => {
+if (!el || el.wall !== wall) return;
+const raw = String(el.off == null ? '' : el.off).trim();
+if (raw === '') return;
+const fromMoved = fixed === 'start' ? el.from === 'end' : el.from !== 'end';
+if (!fromMoved) return;
+const v = evalMeasureExpr(raw);
+if (!isFinite(v)) return;
+el.off = fmt(Math.max(0, v + delta));
+});
+}
+
 // Записать длины и направления стен в замер: начальное направление, повороты и углы
 function rulerCheckWrite(m, L, deg) {
 const n = m.walls.length;
@@ -1752,6 +1823,11 @@ const g0 = rulerGeometry(m);
 rulerSnapshot();
 rulerStartEditSession();
 const before = m.walls.map(mNum);
+// окна, двери, ниши и мебель на соседних стенах остаются на месте:
+// у предыдущей стены неподвижно начало, у следующей — конец
+const prev = (c.wall - 1 + n) % n, next = (c.wall + 1) % n;
+rulerKeepWallEls(m, prev, res.L[prev] - before[prev], 'start');
+rulerKeepWallEls(m, next, res.L[next] - before[next], 'end');
 rulerCheckWrite(m, res.L, res.deg);
 // стены, которые не трогали, остаются на том же месте чертежа
 const keep = (c.wall + 2) % n;
@@ -1772,10 +1848,24 @@ const t = rulerTarget; if (!t || t.kind !== 'chk') return;
 rulerCheckEnsure(t.idx);
 const c = measure.wallChecks.find(x => x.wall === t.idx);
 const key = t.field === 'b' ? 'oppB' : 'oppA';
-if (rlCheckOpp(c, t.field) === j && typeof c[key] === 'number') return;
+if (rlCheckOpp(c, t.field) === j && typeof c[key] === 'number' && rlCheckDiag(c, t.field) === null) return;
 rulerSnapshot();
 c.oppA = rlCheckOpp(c, 'a'); c.oppB = rlCheckOpp(c, 'b'); delete c.opp;
 c[key] = j;
+delete c[t.field === 'b' ? 'diagB' : 'diagA'];
+saveMeasureDraft();
+rulerBuf = rulerFieldValue(t);
+renderRulerSketch();
+renderRulerPad();
+}
+// Диагональ до угла k для того угла, у которого сейчас замер
+function rulerCheckSetDiag(k) {
+const t = rulerTarget; if (!t || t.kind !== 'chk') return;
+rulerCheckEnsure(t.idx);
+const c = measure.wallChecks.find(x => x.wall === t.idx);
+if (rlCheckDiag(c, t.field) === k) return;
+rulerSnapshot();
+c[t.field === 'b' ? 'diagB' : 'diagA'] = k;
 saveMeasureDraft();
 rulerBuf = rulerFieldValue(t);
 renderRulerSketch();
@@ -1794,9 +1884,10 @@ const c = rulerCheckOf(measure, t.idx);
 if (!c) return `Стена ${t.idx + 1} · нет стены напротив`;
 const j = rlCheckOpp(c, t.field);
 const { L, h, P } = rlCheckGeom(measure);
-const sp = rulerCheckSpot(P, h, L, t.idx, j, t.field);
+const sp = rulerCheckSpotFor(P, h, L, c, t.field);
 const plan = mFmt(Math.round(sp.dist * 1000) / 1000);
 const letter = t.field === 'a' ? 'А' : 'Б';
+if (sp.mode === 'diag') return `Замер ${letter}: диагональ от угла ${letter} до угла ${rlCornerName(L.length, sp.k)} · по плану ${plan}`;
 return sp.mode === 'pt'
 ? `Замер ${letter}: от стены ${t.idx + 1} до угла стены ${j + 1} (синий пунктир) · по плану ${plan}`
 : `Замер ${letter}: от угла ${letter} до стены ${j + 1} · по плану ${plan}`;
@@ -1806,9 +1897,14 @@ const c = rulerCheckOf(measure, t.idx);
 let tools = `<button type="button" class="rl-tool rl-turn${t.field === 'a' ? ' on' : ''}" onclick="rulerEdit('chk', ${t.idx}, 'a')">У угла А</button>
 <button type="button" class="rl-tool rl-turn${t.field === 'b' ? ' on' : ''}" onclick="rulerEdit('chk', ${t.idx}, 'b')">У угла Б</button>`;
 const cand = rulerCheckCandidates(measure, t.idx);
-if (c && cand.length > 1) {
-const cur = rlCheckOpp(c, t.field);
+if (c && (cand.length > 1 || rlCheckDiag(c, t.field) !== null)) {
+const cur = rlCheckDiag(c, t.field) === null ? rlCheckOpp(c, t.field) : -1;
 tools += `<span class="rl-turn-label">До стены (или коснитесь её):</span>` + cand.map(k => `<button type="button" class="rl-tool rl-turn${cur === k ? ' on' : ''}" onclick="rulerCheckSetOpp(${k})">${k + 1}</button>`).join('');
+}
+if (c) {
+const n = measure.walls.length, dk = rlCheckDiag(c, t.field);
+const dc = rulerDiagCandidates(measure, t.idx, t.field);
+if (dc.length) tools += `<span class="rl-turn-label">Диагональ до угла:</span>` + dc.map(k => `<button type="button" class="rl-tool rl-turn${dk === k ? ' on' : ''}" onclick="rulerCheckSetDiag(${k})">${rlCornerName(n, k)}</button>`).join('');
 }
 if (c && (mNum(c.a) > 0 || mNum(c.b) > 0)) tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCheckApply()">Подправить план</button>`;
 tools += `<button type="button" class="rl-tool rl-tool-del" onclick="rulerCheckRemove()">Убрать замер</button>`;
@@ -1834,8 +1930,9 @@ const on = active && t.field === f;
 if (!active && !(val > 0)) return;
 const j = rlCheckOpp(c, f);
 const q = g.segs[j];
-if (on) out += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="#2f6fc0" stroke-width="9" stroke-linecap="square" opacity=".35"/>`;
-const sp = rulerCheckSpot(P, h, L, c.wall, j, f);
+const sp = rulerCheckSpotFor(P, h, L, c, f);
+if (on && sp.mode !== 'diag') out += `<path d="M${X(q.x1)} ${Y(q.y1)}L${X(q.x2)} ${Y(q.y2)}" stroke="#2f6fc0" stroke-width="9" stroke-linecap="square" opacity=".35"/>`;
+if (on && sp.mode === 'diag') out += `<circle cx="${X(sp.q[0])}" cy="${Y(sp.q[1])}" r="8" fill="#2f6fc0" opacity=".35"/>`;
 const off = val > 0 && Math.abs(sp.dist - val) > 0.01;
 const [p, qq] = [sp.p, sp.q];
 out += `<path d="M${X(p[0])} ${Y(p[1])}L${X(qq[0])} ${Y(qq[1])}" stroke="#2f6fc0" stroke-width="${on ? 2.5 : 1.6}" stroke-dasharray="5 4"/>`;
@@ -1845,7 +1942,7 @@ const wd = sp.mode === 'pt' ? [s.dx, s.dy] : [Math.cos(h[j]), Math.sin(h[j])];
 const vx = from[0] - foot[0], vy = from[1] - foot[1], vl = Math.hypot(vx, vy) || 1;
 const sq = 7 / ppm;
 const ax = foot[0] + vx / vl * sq, ay = foot[1] + vy / vl * sq;
-out += `<path d="M${X(ax)} ${Y(ay)}L${X(ax + wd[0] * sq)} ${Y(ay + wd[1] * sq)}L${X(foot[0] + wd[0] * sq)} ${Y(foot[1] + wd[1] * sq)}" fill="none" stroke="#2f6fc0" stroke-width="1.2"/>`;
+if (sp.mode !== 'diag') out += `<path d="M${X(ax)} ${Y(ay)}L${X(ax + wd[0] * sq)} ${Y(ay + wd[1] * sq)}L${X(foot[0] + wd[0] * sq)} ${Y(foot[1] + wd[1] * sq)}" fill="none" stroke="#2f6fc0" stroke-width="1.2"/>`;
 // подпись — ближе к выбранной стене и в сторону середины стены
 const ui = [s.dx, s.dy], inw = f === 'a' ? 1 : -1;
 const ix = ui[0] * inw, iy = ui[1] * inw;

@@ -2924,7 +2924,10 @@ if (typeof currentObjectId !== 'undefined' && currentObjectId) renderObjectDetai
 return ok;
 }
 
-function saveMeasurementClick() { saveMeasurement(); }
+function saveMeasurementClick() {
+if (typeof rulerConfirmPlanSave === 'function' && !rulerConfirmPlanSave(measure)) return;
+saveMeasurement();
+}
 
 /* ---------- вставить / скопировать ---------- */
 function unitForKind(unit) {

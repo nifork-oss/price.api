@@ -263,6 +263,7 @@ return false;
 }
 const obj = (cloudData.objects || []).find(o => o.id === measureTarget.objectId);
 if (!obj) { alert('Объект не найден.'); return false; }
+if (typeof rulerConfirmPlanSave === 'function' && !rulerConfirmPlanSave(measure)) return false;
 measure.room = name;
 measure.objectId = obj.id;
 const snapshot = JSON.parse(JSON.stringify(measure));
