@@ -41,6 +41,23 @@ body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
 .pay-list { margin-top: 8px; padding-top: 8px; border-top: 1px dashed currentColor; font-size: 13px; }
 .pay-list-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
 .item-rooms { font-size: 12px; color: #14181f; margin-top: 2px; }
+/* где выполняются работы: план и развёртки с подсветкой */
+.vw-tabs, .vw-items { display: flex; gap: 6px; flex-wrap: wrap; }
+.vw-tabs { margin-bottom: 10px; }
+.vw-chip { border: 1px solid #cfd5dd; background: #fff; color: #33404f; border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.vw-chip.on { background: #14181f; border-color: #14181f; color: #fff; }
+.vw-item { border: 1px solid #dfe3e8; background: #fff; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 12.5px; color: #33404f; cursor: pointer; text-align: left; }
+.vw-item small { display: block; color: #8d97a5; font-size: 11.5px; margin-top: 2px; }
+.vw-item.on { border-color: #ff8a00; box-shadow: 0 0 0 2px #ff8a00; background: #fff8ef; }
+.vw-mode { display: flex; border: 1px solid #14181f; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+.vw-mode button { flex: 1; min-height: 38px; border: none; background: #fff; font: inherit; font-size: 13.5px; font-weight: 600; color: #33404f; cursor: pointer; }
+.vw-mode button.on { background: #14181f; color: #fff; }
+.vw-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+.vw-nav button { width: 40px; height: 34px; border: 1px solid #14181f; border-radius: 8px; background: #fff; font-size: 18px; cursor: pointer; }
+.vw-svg svg { display: block; width: 100%; max-height: 52vh; }
+.vw-legend { font-size: 12.5px; color: #5d6878; margin: 6px 0 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vw-dot { width: 12px; height: 12px; border-radius: 3px; background: #ff8a00; display: inline-block; }
+.item-where { border: none; background: none; padding: 0; margin-top: 3px; font: inherit; font-size: 12px; color: #c26a00; font-weight: 600; cursor: pointer; }
 .footer-link { display: block; text-align: center; font-size: 12px; color: #8d97a5; margin-top: 18px; text-decoration: none; }
 
 /* ===== Оформление «Сметный документ» =====
@@ -224,6 +241,12 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 <div id="contentState" style="display:none;"></div>
 </div>
 
+<!-- чертежи помещений: те же расчёт и рисунки, что в кабинете мастера -->
+<script src="calc-measure.js?v=9c377d1e"></script>
+<script src="calc-ruler.js?v=bec780a7"></script>
+<script src="calc-molding.js?v=fbcfe7fe"></script>
+<script src="calc-tile.js?v=aa965ba3"></script>
+<script src="calc-wpview.js?v=bdb4677c"></script>
 <script>
 const WORKER_URL = "https://price-api.nifork.workers.dev";
 
@@ -385,11 +408,11 @@ document.getElementById('loadingState').style.display = 'none';
 const isEstimate = rec.docType === 'estimate';
 const items = rec.items || [];
 let rows = '';
-items.forEach(i => {
+items.forEach((i, idx) => {
 const sum = (Number(i.qty) || 0) * (Number(i.price) || 0);
 rows += `
 <div class="item-row">
-<div class="item-name">${escapeHtml(i.name)}<div class="item-meta">${Number(i.qty).toLocaleString('ru-RU', { maximumFractionDigits: 3 })} ${escapeHtml(i.unit)} × ${Number(i.price).toLocaleString('ru-RU')} ₽${i.location && !roomsLine(i) ? ` · ${escapeHtml(i.location)}` : ''}</div>${roomsLine(i) ? `<div class="item-rooms">${escapeHtml(roomsLine(i))}</div>` : ''}</div>
+<div class="item-name">${escapeHtml(i.name)}<div class="item-meta">${Number(i.qty).toLocaleString('ru-RU', { maximumFractionDigits: 3 })} ${escapeHtml(i.unit)} × ${Number(i.price).toLocaleString('ru-RU')} ₽${i.location && !roomsLine(i) ? ` · ${escapeHtml(i.location)}` : ''}</div>${roomsLine(i) ? `<div class="item-rooms">${escapeHtml(roomsLine(i))}</div>` : ''}${vwItemOk(rec, idx) ? `<button type="button" class="item-where" onclick="vwShowItem(${idx})">📍 Показать на плане</button>` : ''}</div>
 <div class="item-sum">${sum.toLocaleString('ru-RU')} ₽</div>
 </div>`;
 });
@@ -414,6 +437,8 @@ ${rec.note ? `<div class="note-box">${escapeHtml(rec.note)}</div>` : ''}
 ${renderTotalsHtml(rec, isEstimate)}
 </div>
 
+<div class="card" id="vwCard" style="display:none;"></div>
+
 ${Array.isArray(rec.attachments) && rec.attachments.length > 0 ? `
 <div class="card">
 <div style="font-weight:700; font-size:13px; color:#33404f; margin-bottom:4px;">Фото и файлы отчёта</div>
@@ -422,7 +447,89 @@ ${renderAttachmentsHtml(rec.attachments)}
 ` : ''}
 `;
 content.style.display = 'block';
+vwInit(rec);
 }
+
+/* ---------- где выполняются работы: план и развёртки помещений ---------- */
+// Те же чертежи, что мастер видит при выборе работы: нажали на работу —
+// её место подсвечено оранжевым на плане или развёртке стены.
+let vwRec = null;
+const vw = { room: 0, mode: 'plan', wall: 0, item: null };
+const vwDrawOk = () => typeof wpPlanSvg === 'function' && typeof computeMeasure === 'function';
+function vwRooms() { return vwRec && Array.isArray(vwRec.rooms) ? vwRec.rooms.filter(r => r && r.measure && Array.isArray(r.measure.walls)) : []; }
+// у работы есть место на чертеже: поверхность из замера и помещение с замером
+function vwItemOk(rec, idx) {
+const it = (rec.items || [])[idx];
+if (!it || !it.surface || it.surface === 'manual' || !Array.isArray(it.rooms) || !vwDrawOk()) return false;
+const ids = new Set((rec.rooms || []).map(r => r.id));
+return it.rooms.some(r => ids.has(r.roomId));
+}
+function vwRoomItems(roomId) {
+return (vwRec.items || []).map((it, idx) => ({ it, idx })).filter(({ it, idx }) => vwItemOk(vwRec, idx) && it.rooms.some(r => r.roomId === roomId));
+}
+function vwInit(rec) {
+vwRec = rec;
+const rooms = vwRooms();
+const card = document.getElementById('vwCard');
+if (!card || !rooms.length || !vwDrawOk()) return;
+const first = (rec.items || []).findIndex((it, idx) => vwItemOk(rec, idx));
+if (first < 0) return;
+vw.item = first;
+const rid = rec.items[first].rooms.find(r => rooms.some(x => x.id === r.roomId)).roomId;
+vw.room = Math.max(0, rooms.findIndex(r => r.id === rid));
+card.style.display = '';
+vwRender();
+}
+// на развёртке — к стене, где есть место выбранной работы
+function vwJump() {
+const room = vwRooms()[vw.room];
+const it = vwRec.items[vw.item];
+if (!room || !it || vw.mode !== 'elev') return;
+const m = room.measure, n = (m.walls || []).length;
+if (wpWallHas(m, vw.wall, it.surface)) return;
+for (let j = 0; j < n; j++) if (wpWallHas(m, j, it.surface)) { vw.wall = j; return; }
+}
+function vwRender() {
+const card = document.getElementById('vwCard');
+const rooms = vwRooms();
+const room = rooms[vw.room];
+if (!card || !room) return;
+const m = room.measure, n = (m.walls || []).length;
+if (vw.wall >= n) vw.wall = 0;
+const list = vwRoomItems(room.id);
+if (!list.some(x => x.idx === vw.item) && list.length) vw.item = list[0].idx;
+const it = (vwRec.items || [])[vw.item];
+const key = it ? it.surface : null;
+let svg = '';
+try { svg = vw.mode === 'elev' ? wpElevSvg(m, vw.wall, key) : wpPlanSvg(m, key); } catch (e) { svg = '<div style="color:#8d97a5;font-size:13px;">Чертёж недоступен</div>'; }
+const label = key ? (SURFACE_LABELS[key] || '') : '';
+card.innerHTML = `<div style="font-weight:700; font-size:15px; margin-bottom:10px;">Где выполняются работы</div>
+${rooms.length > 1 ? `<div class="vw-tabs">${rooms.map((r, j) => `<button type="button" class="vw-chip${j === vw.room ? ' on' : ''}" onclick="vwSetRoom(${j})">${escapeHtml(r.measure.room || 'Помещение')}</button>`).join('')}</div>` : `<div style="font-size:13px; color:#5d6878; margin-bottom:8px;">${escapeHtml(m.room || 'Помещение')}</div>`}
+<div class="vw-mode"><button type="button" class="${vw.mode === 'plan' ? 'on' : ''}" onclick="vwSetMode('plan')">План</button><button type="button" class="${vw.mode === 'elev' ? 'on' : ''}" onclick="vwSetMode('elev')">Развёртки стен</button></div>
+${vw.mode === 'elev' && n ? `<div class="vw-nav"><button type="button" onclick="vwStep(-1)" aria-label="Предыдущая стена">‹</button><span>Стена ${vw.wall + 1} из ${n}</span><button type="button" onclick="vwStep(1)" aria-label="Следующая стена">›</button></div>` : ''}
+<div class="vw-svg">${svg}</div>
+<div class="vw-legend">${label ? `<span class="vw-dot"></span>${escapeHtml(it.name)} — <b>${escapeHtml(label.toLowerCase())}</b>` : ''}</div>
+<div class="vw-items">${list.map(({ it: x, idx }) => {
+const rq = x.rooms.find(r => r.roomId === room.id);
+return `<button type="button" class="vw-item${idx === vw.item ? ' on' : ''}" onclick="vwPick(${idx})">${escapeHtml(x.name)}<small>${escapeHtml(SURFACE_LABELS[x.surface] || '')}${rq ? ` · ${Number(rq.qty).toLocaleString('ru-RU', { maximumFractionDigits: 3 })} ${escapeHtml(x.unit || '')}` : ''}</small></button>`;
+}).join('')}</div>`;
+}
+function vwSetRoom(j) { vw.room = j; vw.wall = 0; vwJump(); vwRender(); }
+function vwSetMode(mode) { vw.mode = mode; vwJump(); vwRender(); }
+function vwStep(d) { const room = vwRooms()[vw.room]; const n = room ? room.measure.walls.length : 0; if (!n) return; vw.wall = (vw.wall + d + n) % n; vwRender(); }
+function vwPick(idx) { vw.item = idx; vwJump(); vwRender(); }
+// из списка работ: показать место этой работы на чертеже
+function vwShowItem(idx) {
+const it = vwRec.items[idx], rooms = vwRooms();
+const j = rooms.findIndex(r => it.rooms.some(x => x.roomId === r.id));
+if (j < 0) return;
+if (!rooms[vw.room] || !it.rooms.some(x => x.roomId === rooms[vw.room].id)) { vw.room = j; vw.wall = 0; }
+vw.item = idx;
+vwJump();
+vwRender();
+document.getElementById('vwCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 
 async function loadInvoice() {
 const id = getIdFromUrl();
