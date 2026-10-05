@@ -522,13 +522,13 @@ s += `<rect x="${xl}" y="${Yh(r.y1)}" width="${Math.abs(XA(r.x1) - XA(r.x0))}" h
 }));
 lay.lines.forEach(l => { s += `<line x1="${XA(l.x0)}" y1="${Yh(l.y)}" x2="${XA(l.x1)}" y2="${Yh(l.y)}" stroke="#5b2d86" stroke-width="0.35"/>`; });
 // закрыто мебелью — штриховкой
-const covs = typeof coversCompute === 'function' ? coversCompute(m).list.filter(e => e.wall === wi && e.span) : [];
+const covs = typeof coversCompute === 'function' ? coversCompute(m).pieces.filter(e => e.wall === wi) : [];
 if (covs.length) s += `<defs><pattern id="plCovHatch${wi}" width="1.6" height="1.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1.6" stroke="#777" stroke-width="0.25"/></pattern></defs>`;
 covs.forEach(e => {
 const xl = Math.min(XA(e.span[0]), XA(e.span[1])), w = Math.abs(XA(e.span[1]) - XA(e.span[0]));
 s += `<rect x="${xl}" y="${Yh(e.top)}" width="${w}" height="${e.h * k}" fill="url(#plCovHatch${wi})" stroke="#000" stroke-width="0.3"/>`;
 s += `<rect x="${xl + w / 2 - Math.min(w / 2 - 0.5, 9)}" y="${Yh((e.top + e.bottom) / 2) - 2}" width="${Math.max(1, Math.min(w - 1, 18))}" height="3.2" fill="#fff"/>`;
-s += T(xl + w / 2, Yh((e.top + e.bottom) / 2) + 0.4, e.code + (e.name && w > 20 ? ' ' + e.name : ''), 2.1, 700);
+s += T(xl + w / 2, Yh((e.top + e.bottom) / 2) + 0.4, e.code + (e.side ? (w > 8 ? ' бок' : '') : (e.name && w > 20 ? ' ' + e.name : '')), 2.1, 700);
 });
 // ниши в стенах
 const niches = typeof radNichesCompute === 'function' ? radNichesCompute(m).list.filter(e => e.wall === wi && e.span) : [];
@@ -597,7 +597,7 @@ s += vChain([0, Hh], x0 - 7, 2.6);
 const net = ops.reduce((a, { o }) => a + (o.type === 'balcony' ? mNum(o.w) * winH(o) + mNum(o.dw) * mNum(o.dh) : mNum(o.w) * mNum(o.h)) * (mCount(o.n) || 1), 0);
 const covA = L < 1 ? 0 : covs.reduce((a, e) => a + e.area, 0);
 s += T(box.x, yF + 20, `${plMm(L)} × ${plMm(Hh)} мм · стена ${plM2(L * Hh)} м²${net > 0 ? ` − проёмы ${plM2(net)}` : ''}${covA > 0 ? ` − мебель ${plM2(covA)}` : ''}${net > 0 || covA > 0 ? ` = ${plM2(Math.max(0, L * Hh - net - covA))} м²` : ''} · М 1:${sc}`, 2.5, 400, 'start', '#222');
-const notes = [...covs.map(e => `${e.code}${e.name ? ' ' + e.name : ''}: закрыто ${plMm(e.w)}×${plMm(e.h)}${e.bottom > 0.005 ? `, от пола ${plMm(e.bottom)}` : ''}`), ...niches.map(e => `${e.code}: ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}`)];
+const notes = [...covs.map(e => `${e.code}${e.side ? ' бок' : e.name ? ' ' + e.name : ''}: закрыто ${plMm(e.w)}×${plMm(e.h)}${e.bottom > 0.005 ? `, от пола ${plMm(e.bottom)}` : ''}`), ...niches.map(e => `${e.code}: ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}`)];
 if (notes.length) s += T(box.x, yF + 24, notes.join('; '), 2.2, 400, 'start', '#444');
 return { svg: s, scale: sc };
 }
