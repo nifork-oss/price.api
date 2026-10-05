@@ -222,12 +222,32 @@ lay.lines.forEach(l => { s += `<path d="M${XA(l.x0)} ${Yh(l.y)}H${XA(l.x1)}" str
 (m.openings || []).filter(o => o.wall === i && openingWidth(o) > 0).forEach(o => {
 const [a0, a1] = openingSpan(o, L);
 const v = openingVert(o, Hh);
-const on = kind === 'slopes' && o.slopes !== false;
-const col = on ? WP_HL : '#14181f', sw = on ? 3 : 1.2;
+const col = '#14181f', sw = 1.2;
+let bp = null;
 if (o.type === 'balcony') {
-const bp = balconyParts(o, a0, a1);
+bp = balconyParts(o, a0, a1);
 s += rect(bp.door[0], bp.door[1], 0, v.door[1], '#fff7dc', col, sw) + rect(bp.win[0], bp.win[1], v.y0, v.y1, '#eef4ff', col, sw);
 } else s += rect(a0, a1, v.y0, v.y1, o.type === 'door' ? '#fff7dc' : '#eef4ff', col, sw);
+// откосы — только отмеченные стороны
+if (kind === 'slopes' && o.slopes !== false && typeof slopeSides === 'function') {
+const vl = (a, y0, y1) => `<path d="M${XA(a)} ${Yh(y0)}V${Yh(y1)}" stroke="${WP_HL}" stroke-width="5"/>`;
+const hz = (x0, x1, y) => `<path d="M${XA(x0)} ${Yh(y)}H${XA(x1)}" stroke="${WP_HL}" stroke-width="5"/>`;
+slopeSides(m, o).filter(x => x.on).forEach(x => {
+if (bp) {
+const doorAtA = o.side !== 'end';
+const dOuter = doorAtA ? bp.door[0] : bp.door[1], wOuter = doorAtA ? bp.win[1] : bp.win[0], mid = doorAtA ? bp.door[1] : bp.door[0];
+if (x.key === 'door') s += vl(dOuter, 0, v.door[1]);
+if (x.key === 'win') s += vl(wOuter, v.y0, v.y1);
+if (x.key === 'under') s += vl(mid, 0, v.y0);
+if (x.key === 'top') s += hz(a0, a1, Math.max(v.y1, v.door[1]));
+} else {
+if (x.key === 'a') s += vl(a0, v.y0, v.y1);
+if (x.key === 'b') s += vl(a1, v.y0, v.y1);
+if (x.key === 'top') s += hz(a0, a1, v.y1);
+if (x.key === 'sill') s += hz(a0, a1, v.y0);
+}
+});
+}
 });
 // потолок, пол, карниз, плинтус
 const band = (y0, y1) => rect(0, L, y0, y1, WP_HL);
