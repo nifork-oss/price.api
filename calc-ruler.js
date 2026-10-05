@@ -226,6 +226,26 @@ out += `<path d="M${hx} ${Yh(e.bottom)}V${Yh(e.top)}M${hx - 3} ${Yh(e.top)}h6" s
 out += `<text x="${hx - 3}" y="${Yh(e.top) + 11}" text-anchor="end" font-size="10" fill="#33404f" paint-order="stroke" stroke="#eceff2" stroke-width="3">↕${mFmt(e.h)}</text>`;
 }
 });
+// участки стен (плитка, фартук, панели) — голубой заливкой с синей штриховой рамкой
+const partHere = typeof partsCompute === 'function' ? partsCompute(m).filter(e => e.wall === i && e.span) : [];
+partHere.forEach(e => {
+const xL = Math.min(XA(e.span[0]), XA(e.span[1])), xR = Math.max(XA(e.span[0]), XA(e.span[1]));
+out += `<rect x="${xL}" y="${Yh(e.top)}" width="${xR - xL}" height="${e.h * k}" fill="#2f6fc0" fill-opacity=".12" stroke="#2f6fc0" stroke-width="1.4" stroke-dasharray="6 3"/>`;
+const lbl = e.code + (e.name ? ' ' + e.name : '');
+out += `<text x="${xL + 4}" y="${Yh(e.top) + 12}" font-size="10.5" font-weight="700" fill="#1f4f8f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${escapeHtml(xR - xL < lbl.length * 6 ? e.code : lbl)}</text>`;
+// высота участка — справа внутри, если он не до потолка
+if (!e.toCeil && e.h * k > 22) {
+const hx = xR - 5;
+out += `<path d="M${hx} ${Yh(e.bottom)}V${Yh(e.top)}M${hx - 3} ${Yh(e.top)}h6M${hx - 3} ${Yh(e.bottom)}h6" stroke="#1f4f8f" stroke-width="1"/>`;
+out += `<text x="${hx - 3}" y="${Yh((e.top + e.bottom) / 2) + 4}" text-anchor="end" font-size="10" fill="#1f4f8f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${mFmt(e.h)}</text>`;
+}
+// низ выше пола — размер от пола у левого края
+if (e.bottom > 0.005 && e.bottom * k > 14) {
+const dx = xL + 6;
+out += `<path d="M${dx} ${yF}V${Yh(e.bottom)}M${dx - 3} ${Yh(e.bottom)}h6" stroke="#1f4f8f" stroke-width="1"/>`;
+out += `<text x="${dx + 4}" y="${(yF + Yh(e.bottom)) / 2 + 4}" font-size="10" fill="#1f4f8f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${mFmt(e.bottom)}</text>`;
+}
+});
 // ниши в стенах — штриховой рамкой, с кодом и глубиной
 const radHere = typeof radNichesCompute === 'function' ? radNichesCompute(m).list.filter(e => e.wall === i && e.span) : [];
 radHere.forEach(e => {
@@ -247,6 +267,7 @@ const edges = [0, L];
 // края ниш в стенах — в цепочку размеров (у ниши под окном совпадают с окном или рядом)
 radHere.forEach(e => edges.push(e.span[0], e.span[1]));
 covHere.forEach(e => edges.push(e.span[0], e.span[1]));
+partHere.forEach(e => { if (!e.full) edges.push(e.span[0], e.span[1]); });
 ops.forEach(({ o, oi }) => {
 const [a0, a1] = openingSpan(o, L);
 edges.push(a0, a1);
@@ -446,6 +467,16 @@ if (e.d > 0) {
 const cx = pts.reduce((a, p) => a + p[0], 0) / 4, cy = pts.reduce((a, p) => a + p[1], 0) / 4;
 out += `<text x="${cx}" y="${cy + 3.5}" text-anchor="middle" font-size="10" font-weight="700" fill="#33404f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${e.code}</text>`;
 }
+});
+}
+// участки стен — синей линией вдоль стены изнутри
+if (Array.isArray(m.parts) && m.parts.length && typeof partsCompute === 'function') {
+partsCompute(m).filter(e => e.span && g.segs[e.wall]).forEach(e => {
+const s = g.segs[e.wall];
+const nx = -s.dy * o2, ny = s.dx * o2, d = 5;
+const P2 = a => [X(s.x1 + s.dx * a) + nx * d, Y(s.y1 + s.dy * a) + ny * d];
+const [ax, ay] = P2(e.span[0]), [bx, by] = P2(e.span[1]);
+out += `<path d="M${ax} ${ay}L${bx} ${by}" stroke="#2f6fc0" stroke-width="3" stroke-dasharray="6 3" stroke-linecap="butt"/>`;
 });
 }
 const wh = Array.isArray(m.wallHeights) ? m.wallHeights : [];
