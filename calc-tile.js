@@ -211,6 +211,64 @@ return [p0, p1, [p1[0] + nx * b.d, p1[1] + ny * b.d], [p0[0] + nx * b.d, p0[1] +
 }
 const BLOCK_FILL = '#f4e3c3', BLOCK_INK = '#9a6a12';
 
+/* ---------- подсчёт по раскладке: целые и подрезные плитки ---------- */
+const tilePolyArea = pts => pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
+// Пересечение многоугольника subject (любого) с выпуклым clip (плитка)
+function tileClipPoly(subject, clip) {
+const o = tilePolyArea(clip) < 0 ? -1 : 1;
+let out = subject;
+for (let i = 0; i < clip.length && out.length; i++) {
+const a = clip[i], b = clip[(i + 1) % clip.length];
+const side = p => o * ((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]));
+const inp = out;
+out = [];
+for (let k = 0; k < inp.length; k++) {
+const p = inp[k], q = inp[(k + 1) % inp.length];
+const sp = side(p), sq = side(q);
+if (sp >= 0) out.push(p);
+if ((sp >= 0) !== (sq >= 0)) { const t = sp / (sp - sq); out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]); }
+}
+}
+return out;
+}
+const tileClipArea = (subject, clip) => { const p = tileClipPoly(subject, clip); return p.length > 2 ? Math.abs(tilePolyArea(p)) : 0; };
+// Ширина куска поперёк самой узкой стороны, в долях плитки: размах куска вдоль сторон плитки
+function tilePieceFrac(piece, t) {
+const ax = [[t[0], t[1]], [t[0], t[3]]].map(([a, b]) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy); return { ux: dx / L, uy: dy / L, L }; });
+return Math.min(...ax.map(({ ux, uy, L }) => { const pr = piece.map(p => p[0] * ux + p[1] * uy); return (Math.max(...pr) - Math.min(...pr)) / L; }));
+}
+// Сколько плиток уходит на участок region (без дыр holes) при раскладке от origin:
+// целые, подрезные и из них узкие (шириной до трети плитки). Слишком мелкая плитка — null.
+function tileLayoutCount(s, region, holes, origin) {
+const xs = region.map(p => p[0]), ys = region.map(p => p[1]);
+const tiles = tilePolys(s, Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys), 40000, origin);
+if (!tiles) return null;
+const res = { whole: 0, cut: 0, narrow: 0 };
+tiles.forEach(t => {
+const full = Math.abs(tilePolyArea(t));
+if (!(full > 0)) return;
+const piece = tileClipPoly(region, t);
+let a = piece.length > 2 ? Math.abs(tilePolyArea(piece)) : 0;
+if (a > 0) holes.forEach(h => { a -= tileClipArea(h, t); });
+const f = a / full;
+if (f > 0.995) res.whole++;
+else if (f > 0.01) { res.cut++; if (tilePieceFrac(piece, t) < 0.34) res.narrow++; }
+});
+res.pcs = res.whole + res.cut;
+return res;
+}
+const tileRect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+// Строка «по раскладке» для стен или пола; extra — облицовка элементов по площади, м²
+function tileLayoutLine(what, s, c, cnt, extra, codes) {
+const { w, l } = tileSize(s);
+const add = extra > 0 && w > 0 && l > 0 ? Math.ceil(extra / (w * l) - 1e-9) : 0;
+const total = c.pcs + add;
+let t = `Плитка ${what} по раскладке: ${c.whole} целых + ${c.cut} подрезных${add ? ` + облицовка ${codes} ${add}` : ''} = ${total} шт. без запаса на бой`;
+if (c.narrow) t += `; узких кусков (до трети плитки): ${c.narrow}`;
+if (cnt && cnt.pcs && total > cnt.pcs) t += `. По раскладке плиток больше, чем с запасом ${mFmt(cnt.waste)}% (${cnt.pcs} шт.) — увеличьте запас или сдвиньте раскладку`;
+return t;
+}
+
 function tileCompute(m, r) {
 const d = tileGet(m);
 const out = { walls: 0, floor: 0, wallsCount: null, floorCount: null, lines: {} };
@@ -223,6 +281,7 @@ const lens = (m.walls || []).map(mNum);
 const ws = molWalls(d.walls.walls, m);
 const parts = [];
 let gross = 0, cut = 0, hid = 0;
+let lay = { whole: 0, cut: 0, narrow: 0, pcs: 0 };
 ws.forEach(wi => {
 const L = lens[wi], Ht = tileWallH(m, d.walls, wi);
 if (!(L > 0) || !(Ht > 0)) return;
@@ -230,6 +289,12 @@ gross += L * Ht;
 cut += tileWallCuts(m, wi, L, Ht).reduce((a, c) => a + c.area, 0);
 hid += blocksHiddenOn(bl, wi, Ht);
 parts.push(`${mFmt(L)}×${mFmt(Ht)}`);
+// по раскладке: проёмы и стена за подиумами и коробами — дыры
+if (lay && tileSize(d.walls).w > 0 && tileSize(d.walls).l > 0) {
+const holes = [...tileWallCuts(m, wi, L, Ht).filter(c => c.area > 0).map(c => tileRect(c.a0, Math.max(0, c.y0), c.a1, Math.min(Ht, c.y1))), ...bl.hidden.filter(p => p.wall === wi).map(p => tileRect(p.span[0], 0, p.span[1], Math.min(p.h, Ht)))];
+const c = tileLayoutCount(d.walls, tileRect(0, 0, L, Ht), holes, tileWallLayout(m, d.walls, wi, L, Ht).origin);
+if (c) { lay.whole += c.whole; lay.cut += c.cut; lay.narrow += c.narrow; lay.pcs += c.pcs; } else lay = null;
+}
 });
 const hidBy = [...new Set(bl.hidden.filter(p => ws.includes(p.wall)).map(p => p.code))].join(', ');
 out.walls = Math.max(0, gross - cut - hid) + bl.walls;
@@ -237,6 +302,8 @@ if (out.walls > 0) {
 const all = ws.length === lens.filter(v => v > 0).length;
 out.wallsCount = tileCount(out.walls, d.walls);
 out.lines.walls = `Плитка на стенах (${all ? 'все стены' : `${ws.length > 1 ? 'стены' : 'стена'} ${ws.map(i => i + 1).join(', ')}`}${mNum(d.walls.h) > 0 ? `, до ${mFmt(mNum(d.walls.h))} м` : ', до потолка'}): ${parts.join(' + ')}${cut > 0 ? ` − проёмы ${mFmt(cut)}` : ''}${hid > 0.0005 ? ` − за ${hidBy} ${mFmt(hid)}` : ''}${bl.walls > 0 ? ` + облицовка ${codes(blW)} ${mFmt(bl.walls)}` : ''} = ${mFmt(out.walls)} м²; ${tileCountTxt(d.walls, out.wallsCount)}`;
+out.wallsLayout = lay && lay.pcs ? lay : null;
+if (out.wallsLayout) out.lines.wallsLayout = tileLayoutLine('на стенах', d.walls, lay, out.wallsCount, bl.walls, codes(blW));
 }
 } else if (blW.length) out.lines.blocksBad = `${codes(blW)}: плитка как на стенах — включите «Плитка на стенах», чтобы посчитать`;
 if (d.floor.on) {
@@ -245,7 +312,19 @@ if (f.area > 0) {
 out.floor = Math.max(0, f.area - bl.foot) + bl.floor;
 out.floorCount = tileCount(out.floor, d.floor);
 const extra = bl.foot > 0.0005 || bl.floor > 0;
+let g = null;
+try { g = molGeom(m); } catch (e) { g = null; }
+if (g && g.closed && tileSize(d.floor).w > 0 && tileSize(d.floor).l > 0) {
+const pts = [[0, 0], ...g.segs.map(q => [q.x2, q.y2])];
+const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+const fl = tileFloorLayout(d.floor, Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+const c = tileLayoutCount(d.floor, pts, bl.list.map(b => blockPlanPoly(g, b)).filter(Boolean), fl.origin);
+if (c && c.pcs) {
+out.floorLayout = c;
+}
+}
 out.lines.floor = `Плитка на полу (${f.how}): ${mFmt(f.area)}${bl.foot > 0.0005 ? ` − под ${codes(bl.list)} ${mFmt(bl.foot)}` : ''}${bl.floor > 0 ? ` + облицовка ${codes(blF)} ${mFmt(bl.floor)}` : ''}${extra ? ` = ${mFmt(out.floor)}` : ''} м²; ${tileCountTxt(d.floor, out.floorCount)}`;
+if (out.floorLayout) out.lines.floorLayout = tileLayoutLine('на полу', d.floor, out.floorLayout, out.floorCount, bl.floor, codes(blF));
 } else out.lines.floorBad = 'Плитка на полу: нужна площадь — замкните комнату на вкладке «Стены» или введите потолок участками';
 } else if (blF.length) out.lines.blocksBad = [out.lines.blocksBad, `${codes(blF)}: плитка как на полу — включите «Плитка на полу», чтобы посчитать`].filter(Boolean).join('\n');
 if (blW.length) out.lines.blocksWalls = blW.map(b => b.line).join('\n');
@@ -601,7 +680,7 @@ function updateTileOutputs(r) {
 const set = (id, v) => { const el = document.getElementById(id); if (el) el.innerHTML = v; };
 const t = r.tile || tileCompute(measure, r);
 renderTileViews();
-set('mpCalcTileWalls', t.lines.walls ? escapeHtml(t.lines.walls) : '');
+set('mpCalcTileWalls', [t.lines.walls, t.lines.wallsLayout].filter(Boolean).map(escapeHtml).join('<br>'));
 const d = tileGet(measure);
 // крайние куски: на стене с развёртки и на полу
 const wi = tileElevWall, L = mNum((measure.walls || [])[wi]);
@@ -619,7 +698,7 @@ const fl = tileFloorLayout(d.floor, Math.min(...xs), Math.min(...ys), Math.max(.
 const txt = tilePiecesTxt(fl.ex, tileSize(d.floor).w, fl.ey, tileSize(d.floor).l, ['слева', 'справа', 'сверху', 'снизу']);
 set('mpTileFloorCuts', txt ? `Крайние куски на плане: ${escapeHtml(txt)}` : '');
 } else set('mpTileFloorCuts', '');
-set('mpCalcTileFloor', [t.lines.floor, t.lines.floorBad, t.lines.all].filter(Boolean).map(escapeHtml).join('<br>'));
+set('mpCalcTileFloor', [t.lines.floor, t.lines.floorLayout, t.lines.floorBad, t.lines.all].filter(Boolean).map(escapeHtml).join('<br>'));
 (Array.isArray(measure.blocks) ? measure.blocks : []).forEach((el, i) => {
 const b = t.blocks && t.blocks.list.find(x => x.idx === i);
 set('mpBlockRes' + i, b ? `${mFmt(b.area)} м²` : '');

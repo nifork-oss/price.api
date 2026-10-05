@@ -122,3 +122,20 @@ test('подиум и короб: облицовка, стена за ними �
   near(e.area, 4 * 0.6);
   near(q.area, 4 * 0.2 + 1);
 });
+
+test('плитка по раскладке: целые, подрезные и узкие куски', () => {
+  // стена 1 м × 0,7 м, плитка 300×300 без шва от левого нижнего угла:
+  // по ширине 3 целых + кусок 100 мм, по высоте 2 целых + кусок 100 мм
+  const { run } = setup({ shape: 'rect', height: '0,7', walls: ['1', '0,9', '1', '0,9'],
+    tile: { walls: { on: true, walls: [0], w: '300', l: '300', joint: '0', layout: 'straight', ax: 'start', ay: 'start' },
+            floor: { on: true, w: '300', l: '300', joint: '0', layout: 'straight', ax: 'start', ay: 'start' } } });
+  const t = run('tileCompute(measure, computeMeasure(measure))');
+  assert.deepStrictEqual({ ...t.wallsLayout }, { whole: 6, cut: 6, narrow: 6, pcs: 12 });
+  // пол 1 × 0,9: 3 × 3 целых и полоса из трёх кусков по 100 мм
+  assert.deepStrictEqual({ ...t.floorLayout }, { whole: 9, cut: 3, narrow: 3, pcs: 12 });
+  assert.match(t.lines.floorLayout, /9 целых \+ 3 подрезных = 12 шт\. без запаса на бой; узких кусков \(до трети плитки\): 3/);
+  // окно 0,6 × 0,3 вырезает две целые плитки
+  run('measure.openings = [{ type: "window", w: "0,6", h: "0,3", sill: "0", wall: 0, off: "0", from: "start" }]');
+  const t2 = run('tileCompute(measure, computeMeasure(measure))');
+  assert.strictEqual(t2.wallsLayout.whole, 4);
+});
