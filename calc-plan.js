@@ -462,7 +462,7 @@ return s;
 // ниши), общая длина и высота, у каждого проёма — подоконник, высота и до потолка,
 // у ниш — от пола и высота, у лепнины — рамки с отступами. По две стены на лист.
 const PL_DIM = '#000';
-function plElevDrawing(m, wi, box, title) {
+function plElevDrawing(m, wi, box, title, withTile = false) {
 const T = (x, y, text, size = 2.5, weight = 400, anchor = 'middle', fill = '#000', rot = false) =>
 `<text x="${x}" y="${y}" font-family="${PL_FONT}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" fill="${fill}"${rot ? ` transform="rotate(-90 ${x} ${y})"` : ''}>${plEsc(text)}</text>`;
 let s = T(box.x, box.y + 4, title, 3.4, 700, 'start');
@@ -470,7 +470,9 @@ const L = mNum((m.walls || [])[wi]), Hh = wallHeightOf(m, wi);
 if (!(L > 0) || !(Hh > 0)) return { svg: s + T(box.x, box.y + 10, 'Нет длины или высоты стены — развёртку не построить', 2.8, 400, 'start', '#a33'), scale: 0 };
 let g = null;
 try { g = rulerGeometry(m); } catch (e) { g = null; }
-const padL = 18, padR = 14, padT = 14, padB = 26;
+const td = withTile && typeof tileGet === 'function' ? tileGet(m).walls : null;
+const tileOn = !!td && td.on && molWalls(td.walls, m).includes(wi) && tileSize(td).w > 0 && tileSize(td).l > 0;
+const padL = 18, padR = 14, padT = 14, padB = tileOn ? 34 : 26;
 let sc = PL_SCALES[PL_SCALES.length - 1];
 for (const v of PL_SCALES) { if (L * 1000 / v <= box.w - padL - padR && Hh * 1000 / v <= box.h - padT - padB) { sc = v; break; } }
 const k = 1000 / sc;
@@ -511,6 +513,27 @@ return o;
 // стена и пол
 s += `<rect x="${x0}" y="${yTop}" width="${L * k}" height="${Hh * k}" fill="#fff" stroke="#000" stroke-width="0.5"/>`;
 s += line(x0 - 3, yF, x0 + L * k + 3, yF, 0.9);
+// раскладка плитки: плитки до высоты укладки, подиумы и короба у стены; проёмы ложатся поверх
+let tileNote = '';
+if (tileOn) {
+const Ht = tileWallH(m, td, wi);
+const wl = tileWallLayout(m, td, wi, L, Ht);
+const tiles = tilePolys(td, 0, 0, L, Ht, 6000, wl.origin);
+const cid = `plTileClip${wi}_${Math.round(box.y)}`;
+s += `<clipPath id="${cid}"><rect x="${Math.min(XA(0), XA(L))}" y="${Yh(Ht)}" width="${L * k}" height="${Ht * k}"/></clipPath>`;
+if (tiles) s += `<g clip-path="url(#${cid})">${tiles.map(t => `<path d="M${t.map(([a, h]) => `${XA(a).toFixed(2)} ${Yh(h).toFixed(2)}`).join('L')}Z" fill="#e6f2f4" stroke="#1f7a8c" stroke-width="0.12"/>`).join('')}</g>`;
+else s += `<rect x="${Math.min(XA(0), XA(L))}" y="${Yh(Ht)}" width="${L * k}" height="${Ht * k}" fill="#e6f2f4"/>`;
+if (Ht < Hh - 0.005) s += line(x0, Yh(Ht), x0 + L * k, Yh(Ht), 0.35) + T(x0 + L * k + 1, Yh(Ht) + 1, plMm(Ht), 2.1, 700, 'start', '#1f7a8c');
+blocksCompute(m).hidden.filter(p => p.wall === wi).sort((a, b) => b.h - a.h).forEach(p => {
+const xl = Math.min(XA(p.span[0]), XA(p.span[1])), w = Math.abs(XA(p.span[1]) - XA(p.span[0]));
+s += `<rect x="${xl}" y="${Yh(p.h)}" width="${w}" height="${p.h * k}" fill="${p.side ? '#fbf3e3' : '#f4e3c3'}" stroke="#9a6a12" stroke-width="0.3"${p.side ? ' stroke-dasharray="1.2 0.8"' : ''}/>`;
+if (p.h * k > 3 && w > 6) s += T(xl + w / 2, Yh(p.h / 2) + 0.8, p.code + (p.side ? ' бок' : ''), 2, 700, 'middle', '#9a6a12');
+});
+const { w: tw, l: tl, j: tj } = tileSize(td);
+const c = tileWallLayoutCount(m, td, wi);
+const pcs = tileWallPiecesTxt(m, td, wi);
+tileNote = `Плитка ${Math.round(tw * 1000)}×${Math.round(tl * 1000)} мм, шов ${mFmt(tj * 1000)} мм, ${tileLayout(td).label.toLowerCase()}${Ht < Hh - 0.005 ? `, до ${plMm(Ht)} мм` : ''}${pcs ? ` · крайние куски: ${pcs}` : ''}${c ? ` · ${c.whole} целых + ${c.cut} подрезных = ${c.pcs} шт.${c.narrow ? `, узких ${c.narrow}` : ''}` : ''}`;
+}
 // углы А и Б
 [[0, 'А'], [L, 'Б']].forEach(([a, t]) => { s += `<circle cx="${XA(a)}" cy="${yTop - 3.2}" r="1.9" fill="#fff" stroke="#000" stroke-width="0.25"/>` + T(XA(a), yTop - 2.3, t, 2.3, 700); });
 // лепнина: карниз и плинтус полосами, рамки и линии молдингов
@@ -616,7 +639,9 @@ const net = ops.reduce((a, { o }) => a + (o.type === 'balcony' ? mNum(o.w) * win
 const covA = L < 1 ? 0 : covs.reduce((a, e) => a + e.area, 0);
 s += T(box.x, yF + 20, `${plMm(L)} × ${plMm(Hh)} мм · стена ${plM2(L * Hh)} м²${net > 0 ? ` − проёмы ${plM2(net)}` : ''}${covA > 0 ? ` − мебель ${plM2(covA)}` : ''}${net > 0 || covA > 0 ? ` = ${plM2(Math.max(0, L * Hh - net - covA))} м²` : ''} · М 1:${sc}`, 2.5, 400, 'start', '#222');
 const notes = [...partsW.map(e => `${e.code}${e.name ? ' ' + e.name : ''}: ${plMm(e.w)}×${plMm(e.h)}${e.bottom > 0.005 ? `, от пола ${plMm(e.bottom)}` : ''} = ${plM2(e.area)} м²`), ...covs.map(e => `${e.code}${e.side ? ' бок' : e.name ? ' ' + e.name : ''}: закрыто ${plMm(e.w)}×${plMm(e.h)}${e.bottom > 0.005 ? `, от пола ${plMm(e.bottom)}` : ''}`), ...niches.map(e => `${e.code}: ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}`)];
-if (notes.length) s += T(box.x, yF + 24, notes.join('; '), 2.2, 400, 'start', '#444');
+const tl = tileNote ? plWrap(tileNote, 120) : [];
+tl.forEach((t, i) => { s += T(box.x, yF + 24 + i * 3.2, t, 2.2, 700, 'start', '#1f7a8c'); });
+if (notes.length) s += T(box.x, yF + 24 + tl.length * 3.2 + (tl.length ? 0.8 : 0), notes.join('; '), 2.2, 400, 'start', '#444');
 return { svg: s, scale: sc };
 }
 
@@ -627,14 +652,14 @@ let s = '';
 const scales = [];
 items.forEach((it, i) => {
 const box = { x: 27, y: top + i * (boxH + 6), w: PL_W - 27 - 9, h: boxH };
-const d = plElevDrawing(it.m, it.wi, box, it.title);
+const d = plElevDrawing(it.m, it.wi, box, it.title, !!it.tile);
 s += d.svg;
 if (d.scale) scales.push(d.scale);
 if (i === 0 && items.length > 1) s += `<line x1="25" y1="${box.y + boxH + 3}" x2="${PL_W - 7}" y2="${box.y + boxH + 3}" stroke="#bbb" stroke-width="0.2" stroke-dasharray="2 1.5"/>`;
 });
 const uniq = [...new Set(scales)];
 const names = [...new Set(items.map(it => it.room))].join(', ');
-s += plFrame({ ...info, scaleNote: uniq.length === 1 ? `1:${uniq[0]}` : (uniq.length ? 'у чертежей' : '—') }, sheetNo, sheetCount, names, 'Развёртки стен');
+s += plFrame({ ...info, scaleNote: uniq.length === 1 ? `1:${uniq[0]}` : (uniq.length ? 'у чертежей' : '—') }, sheetNo, sheetCount, names, items.some(it => it.tile) ? 'Раскладка плитки' : 'Развёртки стен');
 return s;
 }
 
@@ -651,18 +676,18 @@ const png = await plSvgToPng(plElevPage(pages[i], info, i + 1, pages.length));
 pdf.addImage(png, 'PNG', 0, 0, PL_W, PL_H, undefined, 'FAST');
 }
 const safe = String(fileBase || 'zamer').replace(/[^\wа-яё\- ]+/gi, '').trim().replace(/\s+/g, '_');
-return { pdfBlob: pdf.output('blob'), fileName: `Razvertki_${safe || 'zamer'}.pdf` };
+return { pdfBlob: pdf.output('blob'), fileName: `${items.some(it => it.tile) ? 'Plitka' : 'Razvertki'}_${safe || 'zamer'}.pdf` };
 }
 
 /* ---------- выбор развёрток для печати ---------- */
 // rooms: [{ name, m }]; sel[i] — набор номеров стен помещения i
 let elevPrint = null;
 const elevWallsOf = m => (Array.isArray(m.walls) ? m.walls : []).map((w, i) => mNum(w) > 0 ? i : -1).filter(i => i >= 0);
-function openElevPrint(rooms, info, fileBase, preset) {
+function openElevPrint(rooms, info, fileBase, preset, tile = false) {
 rooms = rooms.filter(r => r.m && elevWallsOf(r.m).length);
 if (!rooms.length) { showAddToast('Нет стен с длиной — введите стены на вкладке «Стены»'); return; }
-elevPrint = { rooms, info, fileBase, sel: rooms.map((r, i) => new Set(preset && preset[i] ? preset[i] : elevWallsOf(r.m))) };
-document.getElementById('sheetTitle').textContent = 'Развёртки стен — PDF со всеми размерами';
+elevPrint = { rooms, info, fileBase, tile: !!tile, sel: rooms.map((r, i) => new Set(preset && preset[i] ? preset[i] : elevWallsOf(r.m))) };
+document.getElementById('sheetTitle').textContent = tile ? 'Раскладка плитки по стенам — PDF' : 'Развёртки стен — PDF со всеми размерами';
 renderElevPrint();
 document.getElementById('sheet').classList.add('open');
 document.getElementById('sheetOverlay').classList.add('open');
@@ -680,9 +705,15 @@ return `<div class="ep-room"><div class="ep-name">${plEsc(r.name)}</div>
 <div class="mp-ce-walls"><span class="mp-ce-walls-label">Стены:</span>${ws.map(w => `<button type="button" class="mp-ce-wall${st.sel[i].has(w) ? ' on' : ''}" onclick="elevPrintToggle(${i}, ${w})" aria-pressed="${st.sel[i].has(w)}">${w + 1}</button>`).join('')}<button type="button" class="mp-ce-wall mp-ce-all${all ? ' on' : ''}" onclick="elevPrintAll(${i})">все</button></div></div>`;
 }).join('')}
 </div>
+${st.rooms.some(r => typeof tileGet === 'function' && tileGet(r.m).walls.on) ? `<div class="mp-ce-walls"><span class="mp-ce-walls-label">Плитка:</span><button type="button" class="mp-ce-wall${st.tile ? ' on' : ''}" onclick="elevPrintTile()" aria-pressed="${st.tile}">с раскладкой плитки</button></div>` : ''}
 <div class="ep-count">${n ? `Выбрано развёрток: ${n} · листов A4: ${Math.ceil(n / 2)}` : 'Отметьте стены'}</div>
 <button type="button" class="sheet-item" onclick="elevPrintGo('share')"${n ? '' : ' disabled'}><span class="sheet-item-icon" aria-hidden="true">${sheetIconHtml('📤')}</span>Отправить PDF</button>
 <button type="button" class="sheet-item" onclick="elevPrintGo('download')"${n ? '' : ' disabled'}><span class="sheet-item-icon" aria-hidden="true">${sheetIconHtml('⬇️')}</span>Скачать PDF</button>`;
+}
+function elevPrintTile() {
+if (!elevPrint) return;
+elevPrint.tile = !elevPrint.tile;
+renderElevPrint();
 }
 function elevPrintToggle(i, w) {
 const set = elevPrint && elevPrint.sel[i];
@@ -701,7 +732,7 @@ async function elevPrintGo(mode) {
 const st = elevPrint;
 if (!st) return;
 const items = [];
-st.rooms.forEach((r, i) => [...st.sel[i]].sort((a, b) => a - b).forEach(wi => items.push({ m: r.m, wi, room: r.name, title: `${r.name} — стена ${wi + 1}` })));
+st.rooms.forEach((r, i) => [...st.sel[i]].sort((a, b) => a - b).forEach(wi => items.push({ m: r.m, wi, room: r.name, title: `${r.name} — стена ${wi + 1}`, tile: st.tile })));
 if (!items.length) return;
 closeSheet();
 showAddToast('Готовлю развёртки…');
@@ -729,11 +760,13 @@ const obj = (cloudData.objects || []).find(o => o.id === objectId);
 openElevPrint(objectRooms(obj).map(room => ({ name: roomName(room), m: room.measure })), plObjectInfo(obj), obj && obj.name);
 }
 // Текущий замер (в том числе несохранённый): отмечена стена с развёртки
-function openElevPrintForMeasure() {
+// tile — раскладка плитки: отмечены стены с плиткой
+function openElevPrintForMeasure(tile = false) {
 if (!measure) return;
 const obj = measure.objectId ? (cloudData.objects || []).find(o => o.id === measure.objectId) : null;
 const name = (measure.room || '').trim() || 'Помещение';
 const cur = typeof rlElevWall === 'number' ? rlElevWall : 0;
+if (tile && typeof tileGet === 'function' && tileGet(measure).walls.on) { openElevPrint([{ name, m: measure }], plObjectInfo(obj), obj ? `${obj.name}_${name}` : name, [molWalls(tileGet(measure).walls.walls, measure)], true); return; }
 openElevPrint([{ name, m: measure }], plObjectInfo(obj), obj ? `${obj.name}_${name}` : name, [mNum((measure.walls || [])[cur]) > 0 ? [cur] : null]);
 }
 

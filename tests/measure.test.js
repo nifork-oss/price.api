@@ -176,3 +176,16 @@ test('подбор раскладки: меньше узких кусков', ()
   const best = run('tileAutoPick(measure, "floor")');
   assert.strictEqual(best.score[0], 0);
 });
+
+test('наружные углы под плитку: углы стен и короба, уголок или запил', () => {
+  // Г-образная комната — один наружный угол; короб у стены 1 в углу — один открытый бок
+  const { run } = setup({ shape: 'free', height: '2,7', walls: ['4', '2', '2', '3', '2', '5'], turns: ['R', 'R', 'L', 'R', 'R', 'R'], angles: [],
+    tile: { walls: { on: true, walls: null, w: '300', l: '600', joint: '2' } },
+    blocks: [{ type: 'box', wall: 0, off: '0', from: 'start', w: '0,3', d: '0,25', h: '' }] });
+  const t = run('tileCompute(measure, computeMeasure(measure))');
+  near(t.edges.len, 2.7 + 2.7);
+  assert.strictEqual(t.edges.profiles, 3);
+  assert.match(t.lines.edges, /уголок: 3 шт\. по 2,5 м/);
+  run('measure.tile.walls.edge = "cut45"');
+  assert.match(run('tileCompute(measure, computeMeasure(measure))').lines.edges, /запил 45°/);
+});
