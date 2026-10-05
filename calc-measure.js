@@ -1033,9 +1033,9 @@ text: [r.lines.walls, r.lines.openings, r.lines.net, r.lines.covers, r.lines.wal
 if (tab === 'molCornice') return { value: r.molCornice || 0, unit: 'пог. м', label: 'Карниз', text: r.lines.mol_cornice || '' };
 if (tab === 'molPlinth') return { value: r.molPlinth || 0, unit: 'пог. м', label: 'Плинтус', text: r.lines.mol_plinth || '' };
 if (tab === 'molCeil') return { value: r.molCeil || 0, unit: 'пог. м', label: 'Молдинг на потолке', text: r.lines.mol_ceil || '' };
-if (tab === 'tileWalls') return { value: r.tileWalls || 0, unit: 'м²', label: 'Плитка: стены', text: [r.lines.tile_walls, r.lines.tile_wallsLayout, r.lines.tile_blocksWalls, r.lines.tile_matWalls].filter(Boolean).join('\n') };
+if (tab === 'tileWalls') return { value: r.tileWalls || 0, unit: 'м²', label: 'Плитка: стены', text: [r.lines.tile_walls, r.lines.tile_wallsLayout, r.lines.tile_blocksWalls, r.lines.tile_edges, r.lines.tile_matWalls].filter(Boolean).join('\n') };
 if (tab === 'tileFloor') return { value: r.tileFloor || 0, unit: 'м²', label: 'Плитка: пол', text: [r.lines.tile_floor, r.lines.tile_floorLayout, r.lines.tile_blocksFloor, r.lines.tile_matFloor].filter(Boolean).join('\n') };
-if (tab === 'tileAll') return { value: r.tileAll || 0, unit: 'м²', label: 'Плитка: всего', text: [r.lines.tile_walls, r.lines.tile_wallsLayout, r.lines.tile_floor, r.lines.tile_floorLayout, r.lines.tile_all, r.lines.tile_blocksWalls, r.lines.tile_blocksFloor, r.lines.tile_blocks, r.lines.tile_matWalls, r.lines.tile_matFloor].filter(Boolean).join('\n') };
+if (tab === 'tileAll') return { value: r.tileAll || 0, unit: 'м²', label: 'Плитка: всего', text: [r.lines.tile_walls, r.lines.tile_wallsLayout, r.lines.tile_floor, r.lines.tile_floorLayout, r.lines.tile_all, r.lines.tile_blocksWalls, r.lines.tile_blocksFloor, r.lines.tile_blocks, r.lines.tile_edges, r.lines.tile_matWalls, r.lines.tile_matFloor].filter(Boolean).join('\n') };
 if (tab === 'molWall') return { value: r.molWall || 0, unit: 'пог. м', label: 'Молдинг на стенах', text: r.lines.mol_wall || '' };
 if (tab === 'corners' || tab === 'cornersOut' || tab === 'cornersIn') {
 const cmin = r.cornersMin ? MIN_NOTE : '';
