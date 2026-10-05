@@ -1776,13 +1776,13 @@ return !w || confirm(w.charAt(0).toUpperCase() + w.slice(1) + '. Сохрани�
 }
 
 // Стена wall стала длиннее на delta, а её конец fixed ('start' | 'end') стоит на месте.
-// Что привязано отступом к сдвинутому углу — окна, двери, ниши, мебель, участки, —
+// Что привязано отступом к сдвинутому углу — окна, двери, ниши, мебель, участки, подиумы, —
 // получает отступ больше на delta, чтобы остаться там же, где было на объекте.
 // Без отступа (по центру) — не трогаем.
 function rulerKeepWallEls(m, wall, delta, fixed) {
 if (Math.abs(delta) < 0.0005) return;
 const fmt = v => String(Math.round(v * 1000) / 1000).replace('.', ',');
-const els = [...(m.openings || []), ...(m.radNiches || []), ...(m.covers || []), ...(m.parts || [])];
+const els = [...(m.openings || []), ...(m.radNiches || []), ...(m.covers || []), ...(m.parts || []), ...(m.blocks || [])];
 els.forEach(el => {
 if (!el || el.wall !== wall) return;
 const raw = String(el.off == null ? '' : el.off).trim();

@@ -185,7 +185,7 @@ return `${e.code} — ниша${e.where ? ` (${e.where})` : ''}, ${plMm(e.w)}×$
 return [...ceilLines, ...radLines];
 }
 const clean = t => String(t || '').replace(/\n\* .*$/s, '');
-if (mode === 'floor') return [r.lines.tile_floor, r.lines.mol_plinth].filter(Boolean).map(clean).flatMap(t => plWrap(t));
+if (mode === 'floor') return [r.lines.tile_floor, r.lines.tile_blocksFloor, r.lines.tile_blocksWalls, r.lines.mol_plinth].filter(Boolean).map(clean).flatMap(t => plWrap(t));
 // потолок: площадь, ниши и короба, рамки молдингов, карниз
 return [r.lines.ceilingNet || r.lines.ceiling, ...ceilLines, r.lines.mol_ceil, r.lines.mol_cornice].filter(Boolean).map(clean).flatMap(t => plWrap(t));
 }
@@ -244,6 +244,13 @@ s += tiles.map(t => `<path d="M${t.map(([x, y]) => `${X(x).toFixed(2)} ${Y(y).to
 s += '</g>';
 }
 }
+if (typeof blocksCompute === 'function') blocksCompute(m).list.forEach(b => {
+const pp = blockPlanPoly(g, b);
+if (!pp) return;
+const cx = pp.reduce((a, p) => a + X(p[0]), 0) / 4, cy = pp.reduce((a, p) => a + Y(p[1]), 0) / 4;
+s += `<path d="M${pp.map(([x, y]) => `${X(x).toFixed(2)} ${Y(y).toFixed(2)}`).join('L')}Z" fill="#f4e3c3" stroke="#9a6a12" stroke-width="0.3"/>`;
+s += T(cx, cy + 1, b.code, 2.8, 700, 'middle', '#9a6a12');
+});
 }
 // план потолка: рамки молдингов (пунктир) и их отступ от стен
 if (mode === 'ceiling' && typeof moldingCompute === 'function') {
