@@ -684,6 +684,36 @@ return out;
 // Что можно отметить на вкладке «Углы». Длины — с других вкладок:
 // углы стен — по высоте, углы откосов — по контуру проёма, стыки — по периметру,
 // ниши и короба — по их рёбрам. Каждый кусок короче метра — за 1 пог. м.
+/* ---------- откосы проёма: какие стороны обрабатываются ---------- */
+// o.sl = { a, b, top, sill } (балконный блок: { door, win, under, top }) — вкл/выкл.
+// Не задано — по умолчанию: боковые и верх — да, низ окна (под подоконником) — нет;
+// сторона впритык к углу стены или к потолку (проём на стене) — нет, откоса там нет.
+function slopeSides(m, o) {
+const isB = o.type === 'balcony';
+const w = mNum(o.w), h = winH(o), dw = mNum(o.dw), dh = mNum(o.dh);
+let touch = {};
+if (typeof o.wall === 'number' && typeof openingSpan === 'function') {
+const L = mNum((m.walls || [])[o.wall]), Hh = wallHeightOf(m, o.wall);
+if (L > 0) {
+const [a0, a1] = openingSpan(o, L);
+const v = openingVert(o, Hh || 2.7);
+const atA = a0 < 0.02, atB = a1 > L - 0.02, atTop = Hh > 0 && (isB ? Math.max(v.y1, dh) : v.y1) > Hh - 0.02;
+// у балконного блока дверь у угла А (side start) или Б
+const doorAtA = o.side !== 'end';
+touch = isB ? { door: doorAtA ? atA : atB, win: doorAtA ? atB : atA, top: atTop } : { a: atA, b: atB, top: atTop };
+}
+}
+const list = isB
+? [{ key: 'door', label: 'стойка у двери', len: dh }, { key: 'win', label: 'стойка у окна', len: h }, { key: 'under', label: 'под окном', len: Math.max(0, dh - h) }, { key: 'top', label: 'верх', len: w + dw }]
+: [{ key: 'a', label: 'у угла А', len: mNum(o.h) }, { key: 'b', label: 'у угла Б', len: mNum(o.h) }, { key: 'top', label: 'верх', len: w },
+...(o.type === 'door' ? [] : [{ key: 'sill', label: 'низ (под подоконником)', len: w, defOff: true }])];
+const sl = o.sl && typeof o.sl === 'object' ? o.sl : {};
+return list.filter(x => x.len > 0.0005).map(x => {
+const t = !!touch[x.key];
+const on = typeof sl[x.key] === 'boolean' ? sl[x.key] : !(t || x.defOff);
+return { ...x, touch: t, on };
+});
+}
 function cornerItemsList(m, r) {
 const items = [];
 const H = mNum(m.height);
@@ -712,7 +742,8 @@ items.push({ key: 'wc' + i, group: 'walls', kind: c * o > 0 ? 'in' : 'out', labe
 const w = mNum(o.w), h = winH(o), dw = mNum(o.dw), dh = mNum(o.dh), cnt = Math.max(1, Math.round(mCount(o.n)));
 const ok = o.type === 'balcony' ? w > 0 && h > 0 && dw > 0 && dh > 0 : w > 0 && mNum(o.h) > 0;
 if (!ok) return;
-const one = o.type === 'balcony' ? [dh, h, Math.max(0, dh - h), w + dw].filter(v => v > 0.0005) : [mNum(o.h), mNum(o.h), w];
+const one = slopeSides(m, o).filter(x => x.on).map(x => x.len);
+if (!one.length) return;
 const pieces = [];
 for (let k = 0; k < cnt; k++) pieces.push(...one);
 const code = opCode(o, oi) + (cnt > 1 ? ` ×${cnt}` : '');
@@ -819,7 +850,7 @@ r.lines.walls = `Стены: ${partsText.join(' + ')} = ${mFmt(r.wallsGross)} м
 r.lines.walls = `Периметр: ${allWalls.map(w => mFmt(w.l)).join(' + ')} = ${mFmt(perim)} м · укажите высоту стен`;
 }
 
-const ops = m.openings.map(o => ({ type: o.type, w: mNum(o.w), h: winH(o), dw: mNum(o.dw), dh: mNum(o.dh), n: mCount(o.n), slopes: o.slopes !== false }))
+const ops = m.openings.map(o => ({ type: o.type, w: mNum(o.w), h: winH(o), dw: mNum(o.dw), dh: mNum(o.dh), n: mCount(o.n), slopes: o.slopes !== false, src: o }))
 .filter(o => o.w > 0 && o.h > 0 && o.n > 0 && (o.type !== 'balcony' || (o.dw > 0 && o.dh > 0)));
 // Балконный блок: площадь окна + площадь двери
 const opArea = o => o.type === 'balcony' ? o.w * o.h + o.dw * o.dh : o.w * o.h;
@@ -869,9 +900,9 @@ ops.filter(o => o.slopes).forEach(o => {
 // Каждый откос — отдельный кусок. У окна и двери: левый + правый + верх.
 // У балконного блока откосы общие: стойка у двери, стойка у окна,
 // кусок под окном до пола (дверь выше окна) и общий верх.
-const pieces = o.type === 'balcony'
-? [o.dh, o.h, Math.max(0, o.dh - o.h), o.w + o.dw].filter(v => v > 0.0005)
-: [o.h, o.h, o.w];
+// какие стороны обрабатываются — отмечено у проёма (впритык к стене/потолку — без откоса)
+const pieces = slopeSides(m, o.src).filter(x => x.on).map(x => x.len);
+if (!pieces.length) return;
 if (pieces.some(v => v < 1)) r.slopesHasMin = true;
 r.slopesLen += pieces.reduce((a, v) => a + minLen(v), 0) * o.n;
 slopeParts.push(`${typeLabel(o.type)} (${pieces.map(fmtMin).join(' + ')})${o.n !== 1 ? ` × ${mFmt(o.n)} шт.` : ''}`);
@@ -1262,7 +1293,7 @@ html += `<section class="mp-sec"><div class="mp-empty">Откосы считаю
 } else {
 html += `<section class="mp-sec">
 <div class="mp-sec-title">Какие проёмы с откосами</div>
-<div class="mp-hint">Каждый откос отдельно: левый + правый + верх. Откос короче метра считается за 1 пог. м.</div>
+<div class="mp-hint">Каждый откос отдельно. Отметьте, какие стороны обрабатываются: если окно стоит впритык к стене или потолку, откоса с той стороны нет — такие стороны выключены сами (для проёмов, поставленных на стену). Откос короче метра считается за 1 пог. м.</div>
 ${valid.map(({ o, i }) => {
 const n = mCount(o.n);
 let title, pieces;
@@ -1272,14 +1303,21 @@ title = `Балконный блок: окно ${mFmt(w)}×${mFmt(h)} + двер
 // откосы общие: стойка у двери, стойка у окна, кусок под окном до пола, общий верх
 pieces = [dh, h, Math.max(0, dh - h), w + dw].filter(v => v > 0.0005);
 } else {
-title = `${o.type === 'door' ? 'Дверь' : 'Окно'} ширина ${mFmt(mNum(o.w))}, высота ${mFmt(mNum(o.h))}`;
-pieces = [mNum(o.h), mNum(o.h), mNum(o.w)];
+title = `${opCode(o, i)} ${o.type === 'door' ? 'Дверь' : 'Окно'} ширина ${mFmt(mNum(o.w))}, высота ${mFmt(mNum(o.h))}${typeof o.wall === 'number' ? ` · стена ${o.wall + 1}` : ''}`;
 }
-const text = pieces.map(v => v < 1 ? '1*' : mFmt(v)).join(' + ');
+const sides = slopeSides(m, o);
+pieces = sides.filter(x => x.on).map(x => x.len);
+const text = pieces.length ? pieces.map(v => v < 1 ? '1*' : mFmt(v)).join(' + ') : '—';
 const sum = pieces.reduce((a, v) => a + minLen(v), 0) * n;
-return `<label class="mp-check"><input type="checkbox" ${o.slopes !== false ? 'checked' : ''} onchange="setOpeningSlopes(${i}, this.checked)">
+const onAll = o.slopes !== false;
+return `<div class="mp-open">
+<label class="mp-check" style="margin:0;"><input type="checkbox" ${onAll ? 'checked' : ''} onchange="setOpeningSlopes(${i}, this.checked)">
 <span>${title}${n !== 1 ? `, ${mFmt(n)} шт.` : ''}<br>
-откосы: ${text}${n !== 1 ? ` × ${mFmt(n)}` : ''} = <b>${mFmt(sum)} пог. м</b></span></label>`;
+откосы: ${text}${n !== 1 ? ` × ${mFmt(n)}` : ''} = <b>${onAll ? mFmt(sum) : 0} пог. м</b></span></label>
+${onAll ? `<div class="mp-ce-walls mp-ce-faces"><span class="mp-ce-walls-label">Обрабатываем:</span>
+${sides.map(x => `<button type="button" class="mp-ce-wall${x.on ? ' on' : ''}" onclick="toggleSlopeSide(${i}, '${x.key}')" aria-pressed="${x.on}">${x.label} ${mFmt(x.len)}${x.touch ? ' · впритык' : ''}</button>`).join('')}
+</div>` : ''}
+</div>`;
 }).join('')}
 <div class="mp-calc" id="mpCalcSlopes"></div>
 </section>`;
@@ -1623,10 +1661,19 @@ saveMeasureDraft();
 renderMeasure();
 }
 
+function toggleSlopeSide(i, key) {
+const o = measure.openings[i];
+if (!o) return;
+const x = slopeSides(measure, o).find(q => q.key === key);
+if (!x) return;
+o.sl = { ...(o.sl || {}), [key]: !x.on };
+saveMeasureDraft();
+renderMeasure();
+}
 function setOpeningSlopes(i, on) {
 measure.openings[i].slopes = on;
 saveMeasureDraft();
-updateMeasureOutputs();
+renderMeasure();
 }
 
 /* ---------- ниши в стенах: ввод ---------- */
