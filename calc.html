@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=2a825e97">
+<link rel="stylesheet" href="calc.css?v=f9dfcf05">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -125,6 +125,13 @@
 <button type="button" class="menu-item" role="menuitem" onclick="toggleUserMenu(false); openPriceDirectory()">Прайсы</button>
 <button type="button" class="menu-item" role="menuitem" id="tabUsersBtn" onclick="switchTab('users')" style="display: none;">Мастера</button>
 <button type="button" class="menu-item" role="menuitem" id="tabStatsBtn" onclick="switchTab('stats')" style="display: none;">Статистика и копии</button>
+<div class="menu-mode" id="userModeSwitch" style="display:none;">
+<div class="menu-mode-label">Режим</div>
+<div class="menu-mode-row">
+<button type="button" id="menuModeEmployeeBtn" class="role-toggle-btn" onclick="switchUserMode('employee')">Сотрудник</button>
+<button type="button" id="menuModeCompanyBtn" class="role-toggle-btn" onclick="switchUserMode('company')">Своя компания</button>
+</div>
+</div>
 <div class="menu-sep" id="userMenuSep"></div>
 <button type="button" class="menu-item menu-item-danger" role="menuitem" onclick="toggleUserMenu(false); handleLogout()">Выйти</button>
 </div>
@@ -132,7 +139,7 @@
 </div>
 
 <div id="companyModePromo" style="display:none; background:linear-gradient(90deg,#14181f,#14181f); color:#fff; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; font-weight:600;">
-🆕 Новинка! Попробуй создать прайс под свою компанию — в следующий раз выбери «Своя компания» на экране входа.
+🆕 Новинка! Попробуй создать прайс под свою компанию — нажми на своё имя вверху и выбери режим «Своя компания».
 </div>
 
 <div class="measure-panel" id="measurePanel" role="dialog" aria-modal="true" aria-label="Замер помещения">
@@ -565,7 +572,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=3c51abb6"></script>
+<script src="calc-app.js?v=e4f0b1b4"></script>
 
 <script src="calc-measure.js?v=1cb9e28d"></script>
 
