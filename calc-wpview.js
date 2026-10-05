@@ -108,6 +108,15 @@ base += line(s, a0, a1, 0, '#ffffff', 5) + line(s, a0, a1, 0, op.type === 'door'
 });
 // подсветка вдоль стен
 const tw = wpTileWalls(m);
+// мебель на плане: контур шкафа с глубиной (или полоса вдоль стены), бока — полосой
+const cov = typeof coversCompute === 'function' ? coversCompute(m) : { list: [], pieces: [], narrowCut: {} };
+const narrowHidden = i => (cov.narrowCut[i] || 0) >= (wallHeightOf(m, i) || 0) - 0.005;
+cov.list.filter(e => e.span && g.segs[e.wall]).forEach(e => {
+const s = g.segs[e.wall], nx = -s.dy * o, ny = s.dx * o, d = e.d > 0 ? e.d : 0.12;
+const P = (a, t) => `${X(s.x1 + s.dx * a + nx * t)} ${Y(s.y1 + s.dy * a + ny * t)}`;
+const t0 = 2.5 / k;
+base += `<path d="M${P(e.span[0], t0)}L${P(e.span[1], t0)}L${P(e.span[1], d)}L${P(e.span[0], d)}Z" fill="#dfe3e8" stroke="#8a939d" stroke-width="1"/>`;
+});
 const coverCuts = i => (typeof coversCompute === 'function' ? coversCompute(m).pieces : []).filter(p => p.wall === i && !p.narrow && p.toCeil && p.bottom < 0.005).map(p => p.span);
 g.segs.forEach((s, i) => {
 if (!(s.len > 0)) return;
@@ -117,7 +126,7 @@ const parts = kind === 'wallsMinus' ? partsCompute(m).filter(e => e.wall === i &
 free(i, [...coverCuts(i), ...parts]).forEach(([a, b]) => { hl += line(s, a, b, 5, WP_HL, 5); });
 }
 if ((kind === 'tileWalls' || kind === 'tileAll') && tw.includes(i)) free(i).forEach(([a, b]) => { hl += line(s, a, b, 5, WP_HL, 5); });
-if (kind === 'narrow' && narrow) hl += line(s, 0, s.len, 5, WP_HL, 6);
+if (kind === 'narrow' && narrow && !narrowHidden(i)) hl += line(s, 0, s.len, 5, WP_HL, 6);
 if (kind === 'parts') partsCompute(m).filter(e => e.wall === i && e.span).forEach(e => { hl += line(s, e.span[0], e.span[1], 5, WP_HL, 5); });
 if (kind === 'rad') radNichesCompute(m).list.filter(e => e.wall === i && e.span).forEach(e => { hl += line(s, e.span[0], e.span[1], 5, WP_HL, 6); });
 if (kind === 'molWall' && wpWallHas(m, i, 'molWall')) hl += line(s, 0, s.len, 5, WP_HL, 3, '6 3');
@@ -143,14 +152,10 @@ if (s.len > x) hl += line(s, x, s.len, 6, WP_HL, 3.5);
 // углы
 if (kind.startsWith('corners')) {
 const want = kind.split(':')[1];
-g.segs.forEach((q, i) => {
-const j = i + 1 < g.segs.length ? i + 1 : 0;
-const q2 = g.segs[j];
-const c = q.dx * q2.dy - q.dy * q2.dx;
-if (Math.abs(c) < 0.02) return;
-const t = c * o > 0 ? 'in' : 'out';
-if (want && want !== t) return;
-hl += `<circle cx="${X(q.x2)}" cy="${Y(q.y2)}" r="6" fill="${WP_HL}" stroke="#ffffff" stroke-width="1.5"/>`;
+// углы, которые считаются: отмеченные и не спрятанные за мебелью
+(r.cornerItems || []).filter(it => it.group === 'walls' && it.on && it.pieces.length && (!want || it.kind === want)).forEach(it => {
+const q = g.segs[it.wall];
+if (q) hl += `<circle cx="${X(q.x2)}" cy="${Y(q.y2)}" r="6" fill="${WP_HL}" stroke="#ffffff" stroke-width="1.5"/>`;
 });
 }
 // номера стен
@@ -239,14 +244,14 @@ if (L > x) s += rect(x, L, 0, 0.08, WP_HL);
 }
 }
 }
-// углы — вертикальные рёбра по краям стены
+// углы — вертикальные рёбра по краям стены (кроме выключенных и спрятанных за мебелью)
 if (kind.startsWith('corners') && g) {
-const want = kind.split(':')[1], o = g.orient || 1, n = g.segs.length;
-const corner = (q, q2) => { const c = q.dx * q2.dy - q.dy * q2.dx; return Math.abs(c) < 0.02 ? null : (c * o > 0 ? 'in' : 'out'); };
-const prev = g.segs[(i - 1 + n) % n], cur = g.segs[i], next = g.segs[(i + 1) % n];
-[[0, corner(prev, cur)], [L, corner(cur, next)]].forEach(([a, t]) => {
-if (!t || (want && want !== t)) return;
-s += `<path d="M${XA(a)} ${yF}V${Yh(Hh)}" stroke="${WP_HL}" stroke-width="5"/>`;
+const want = kind.split(':')[1], n = g.segs.length;
+const items = computeMeasure(m).cornerItems || [];
+const at = w => items.find(it => it.group === 'walls' && it.wall === w);
+[[0, at((i - 1 + n) % n)], [L, at(i)]].forEach(([a, it]) => {
+if (!it || !it.on || !it.pieces.length || (want && want !== it.kind)) return;
+s += `<path d="M${XA(a)} ${yF}V${Yh(Math.min(Hh, it.pieces[0]))}" stroke="${WP_HL}" stroke-width="5"/>`;
 });
 }
 s += `<path d="M${x0 - 6} ${yF}H${x0 + L * k + 6}" stroke="#14181f" stroke-width="3"/>`;

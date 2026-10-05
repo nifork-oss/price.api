@@ -523,6 +523,17 @@ if (gm.span[0] < 0.03 && prev >= 0) tryCorner('A', 'А', prev, -g.segs[prev].dx,
 if (gm.span[1] > gm.L - 0.03 && next >= 0) tryCorner('B', 'Б', next, g.segs[next].dx, g.segs[next].dy);
 return res;
 }
+// Какую высоту угла между стеной i (её конец) и стеной j (её начало) закрывает мебель:
+// угол спрятан, только если мебель вплотную к углу с обеих сторон
+function coverCornerCut(m, i, j) {
+const pcs = coversCompute(m).pieces;
+const Li = mNum((m.walls || [])[i]);
+const a = pcs.filter(p => p.wall === i && p.span[1] >= Li - 0.005);
+const b = pcs.filter(p => p.wall === j && p.span[0] <= 0.005);
+let best = 0;
+a.forEach(pa => b.forEach(pb => { best = Math.max(best, Math.min(pa.top, pb.top) - Math.max(pa.bottom, pb.bottom)); }));
+return best;
+}
 function coversCompute(m) {
 // pieces — все закрытые куски по стенам (сам шкаф и стены за его боками) для чертежей
 const out = { list: [], area: 0, narrowCut: {}, pieces: [] };
@@ -659,8 +670,12 @@ const q2 = g.segs[j];
 if (!(q.len > 0) || !(q2.len > 0)) return;
 const c = q.dx * q2.dy - q.dy * q2.dx;
 if (Math.abs(c) < 0.02) return;                    // на одной прямой — угла нет
-const hh = Math.min(wallHeightOf(m, i) || H, wallHeightOf(m, j) || H);
-items.push({ key: 'wc' + i, group: 'walls', kind: c * o > 0 ? 'in' : 'out', label: `${i + 1}–${j + 1}`, pieces: hh > 0 ? [hh] : [], def: true, noLen: !(hh > 0) });
+const hFull = Math.min(wallHeightOf(m, i) || H, wallHeightOf(m, j) || H);
+// угол за шкафом (мебель с обеих сторон угла) не обрабатываем — минус закрытая высота
+const cut = typeof coverCornerCut === 'function' ? coverCornerCut(m, i, j) : 0;
+const hh = hFull > 0 ? Math.max(0, hFull - cut) : 0;
+const hidden = hFull > 0 && hh < 0.005;
+items.push({ key: 'wc' + i, group: 'walls', kind: c * o > 0 ? 'in' : 'out', label: `${i + 1}–${j + 1}${hidden ? ' (за мебелью)' : ''}`, pieces: hh > 0.005 ? [hh] : [], def: true, noLen: !(hFull > 0), hidden, wall: i });
 });
 }
 // углы откосов: наружные (откос — стена) и примыкание к раме
