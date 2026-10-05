@@ -120,6 +120,12 @@ h2 { font-size: 16px; }
 body.sheet-open { overflow: hidden; }
 /* Несохранённые изменения прайса */
 .unsaved-dot { display: none; }
+.admin-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 8px 12px; border-radius: 8px; border: 1px dashed #b8c0ca; background: #fff; color: #33404f; font-size: 13px; font-weight: 600; cursor: pointer; }
+.admin-toggle::before { content: "✎"; font-size: 14px; }
+.admin-toggle-caret { font-size: 11px; transition: transform .15s; }
+.admin-toggle[aria-expanded="true"] { border-style: solid; border-color: #14181f; background: #14181f; color: #fff; }
+.admin-toggle[aria-expanded="true"] .admin-toggle-caret { transform: rotate(180deg); }
+body.price-unsaved .admin-toggle .unsaved-dot { color: #e0a800; font-weight: 700; }
 body.price-unsaved .unsaved-dot { display: inline; }
 body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px #ecd9a6; }
 
@@ -353,7 +359,7 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px var(--s-ink); }
 <div class="nav-header">
 <a href="calc.html" class="nav-btn">Личный кабинет для мастера и заказчика</a>
 <button type="button" class="nav-btn" onclick="openPriceDirectory()">Прайсы мастеров</button>
-<div id="adminBadge" style="font-size:12px; font-weight:500; color:#5a6470; display:none;">Режим редактирования</div>
+<button type="button" id="adminBadge" class="admin-toggle" aria-expanded="false" aria-controls="adminPanel" onclick="toggleAdminPanel()" style="display:none;"><span id="adminBadgeText">Режим редактирования</span><span class="admin-toggle-caret" aria-hidden="true">▾</span><span class="unsaved-dot"> •</span></button>
 </div>
 
 <div class="tab-menu">
@@ -797,11 +803,34 @@ console.error("Ошибка удаления записи из облака:", e
 }
 }
 
+// Панель «Управление прайсом» прячется за кнопкой «Режим редактирования»,
+// чтобы прайс выглядел чисто. Последнее состояние запоминаем.
+function setAdminPanelOpen(open, remember) {
+const panel = document.getElementById('adminPanel');
+const btn = document.getElementById('adminBadge');
+if (!panel || !btn) return;
+panel.style.display = open ? 'block' : 'none';
+btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+if (remember) { try { localStorage.setItem('pricePanelOpen', open ? '1' : '0'); } catch (e) { /* пусто */ } }
+}
+
+function toggleAdminPanel() {
+const open = document.getElementById('adminPanel').style.display !== 'block';
+// с несохранёнными правками не прячем кнопку «Сохранить в облако»
+if (!open && typeof priceUnsaved !== 'undefined' && priceUnsaved) {
+alert('Есть несохранённые изменения прайса — сначала нажмите «Сохранить в облако».');
+return;
+}
+setAdminPanelOpen(open, true);
+}
+
 function checkAdminMode() {
 if (isAdmin || isCompanyMode) {
-document.getElementById('adminPanel').style.display = 'block';
-document.getElementById('adminBadge').style.display = 'block';
-document.getElementById('adminBadge').textContent = isCompanyMode ? 'Свой прайс-лист' : 'Режим редактирования';
+document.getElementById('adminBadge').style.display = 'inline-flex';
+document.getElementById('adminBadgeText').textContent = isCompanyMode ? 'Свой прайс-лист' : 'Режим редактирования';
+let open = false;
+try { open = localStorage.getItem('pricePanelOpen') === '1'; } catch (e) { /* пусто */ }
+setAdminPanelOpen(open);
 }
 if (isAdmin) {
 document.getElementById('adminHistorySection').style.display = 'block';
@@ -1673,6 +1702,7 @@ let priceUnsaved = false;
 function setPriceUnsaved(value) {
 priceUnsaved = value;
 document.body.classList.toggle('price-unsaved', value);
+if (value && typeof setAdminPanelOpen === 'function') setAdminPanelOpen(true);
 }
 ['confirmPriceImport', 'addCategoryPrompt', 'addItemPrompt', 'addItemToCategoryPrompt', 'editItem', 'deleteItem', 'deleteCategory'].forEach(name => {
 const original = window[name];
