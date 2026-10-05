@@ -451,6 +451,35 @@ a += cut(bp.door[0], bp.door[1], 0, v.door[1]) + cut(bp.win[0], bp.win[1], v.y0,
 });
 return a;
 }
+// Узкие (меньше метра) полосы стены вокруг участков: снизу до пола, сверху до потолка,
+// сбоку до угла или до соседнего участка. Полоса между двумя участками считается один раз.
+function partStripsCompute(m, parts) {
+const out = { list: [], len: 0, area: 0 };
+const onWall = parts.filter(p => p.wall != null && p.span);
+onWall.forEach(e => {
+const Hh = wallHeightOf(m, e.wall) || e.top, L = e.L;
+const same = onWall.filter(q => q !== e && q.wall === e.wall);
+const ovX = q => Math.min(q.span[1], e.span[1]) - Math.max(q.span[0], e.span[0]) > 0.005;
+const ovY = q => Math.min(q.top, e.top) - Math.max(q.bottom, e.bottom) > 0.005;
+const add = (gap, len, where) => {
+if (!(gap > 0.005 && gap < 1 - 1e-9 && len > 0.005)) return;
+out.list.push({ wall: e.wall, label: `${e.code} ${where}`, gap, len, e, where });
+out.len += minLen(len); out.area += gap * len;
+};
+// снизу: до пола или до участка ниже (полосу между участками считает верхний)
+const below = Math.max(0, ...same.filter(q => ovX(q) && q.top <= e.bottom + 0.005).map(q => q.top));
+add(e.bottom - below, e.w, 'снизу');
+// сверху: только до потолка (до участка выше — посчитает он)
+if (!same.some(q => ovX(q) && q.bottom >= e.top - 0.005)) add(Hh - e.top, e.w, 'сверху');
+// слева: до угла или до участка левее; справа — только до угла
+const left = Math.max(0, ...same.filter(q => ovY(q) && q.span[1] <= e.span[0] + 0.005).map(q => q.span[1]));
+add(e.span[0] - left, e.h, 'у угла А');
+if (!same.some(q => ovY(q) && q.span[0] >= e.span[1] - 0.005)) add(L - e.span[1], e.h, 'у угла Б');
+});
+// у угла А/Б — по развёртке; «у угла А» между участками — значит слева от участка
+out.list.forEach(x => { if (x.where === 'у угла А' && x.e.span[0] - x.gap > 0.005) x.label = `${x.e.code} слева`; });
+return out;
+}
 function partsCompute(m) {
 const out = [];
 (Array.isArray(m.parts) ? m.parts : []).forEach((p, idx) => {
@@ -858,10 +887,17 @@ r.parts = parts.reduce((a, p) => a + p.area, 0);
 if (parts.length) {
 r.lines.parts = parts.length > 1 ? `Участки стен: ${parts.map(p => p.line).join('; ')} — всего ${mFmt(r.parts)} м²` : `Участки стен: ${parts[0].line}`;
 }
+// полосы стены уже метра между участком и полом, потолком, углом или другим участком —
+// по правилу «уже метра — пог. м»: из «Стен без участков» уходят в погонные метры
+const ps = partStripsCompute(m, parts);
+r.partStripsList = ps.list;
+r.partStrips = ps.len;
+r.partStripsArea = ps.area;
+if (ps.list.length) r.lines.partStrips = `Узкие полосы у участков: ${ps.list.map(x => `${x.label} ${fmtMin(x.len)}`).join(' + ')} = ${mFmt(ps.len)} пог. м${ps.list.some(x => x.len < 1) ? MIN_NOTE : ''}`;
 const wallsBase = r.wallsCalc;
-r.wallsMinusParts = Math.max(0, wallsBase - r.parts);
+r.wallsMinusParts = Math.max(0, wallsBase - r.parts - ps.area);
 if (parts.length && wallsBase > 0) {
-r.lines.wallsMinusParts = `Стены без участков: ${mFmt(wallsBase)} − ${mFmt(r.parts)} = ${mFmt(r.wallsMinusParts)} м²`;
+r.lines.wallsMinusParts = `Стены без участков: ${mFmt(wallsBase)} − ${mFmt(r.parts)}${ps.area > 0 ? ` − узкие полосы ${mFmt(ps.area)} (в пог. м)` : ''} = ${mFmt(r.wallsMinusParts)} м²`;
 }
 
 const ceil = m.ceiling.map(c => ({ l: mNum(c.l), w: mNum(c.w) })).filter(c => c.l > 0 && c.w > 0);
@@ -977,9 +1013,10 @@ if (tab === 'cornersIn') return { value: r.cornersIn, unit: 'пог. м', label:
 return { value: r.corners, unit: 'пог. м', label: 'Углы', text: [r.lines.cornersOut, r.lines.cornersIn, r.lines.cornersTotal].filter(Boolean).join('\n') + cmin };
 }
 if (tab === 'parts') return { value: r.parts, unit: 'м²', label: 'Участки стен', text: r.lines.parts || '' };
+if (tab === 'partStrips') return { value: r.partStrips || 0, unit: 'пог. м', label: 'Узкие полосы у участков', text: r.lines.partStrips || '' };
 if (tab === 'wallsMinus') {
 return { value: r.parts > 0 ? r.wallsMinusParts : 0, unit: 'м²', label: 'Стены без участков',
-text: [r.lines.walls, r.lines.openings, r.lines.net, r.lines.covers, r.lines.wallsCovered, r.lines.parts, r.lines.wallsMinusParts].filter(Boolean).join('\n') };
+text: [r.lines.walls, r.lines.openings, r.lines.net, r.lines.covers, r.lines.wallsCovered, r.lines.parts, r.lines.wallsMinusParts, r.lines.partStrips].filter(Boolean).join('\n') };
 }
 if (tab === 'ceiling') return { value: r.ceiling, unit: 'м²', label: 'Потолок', text: r.lines.ceiling || '' };
 if (tab === 'ceilingNet') return { value: r.ceilingNet, unit: 'м²', label: 'Потолок без ниш и коробов', text: [r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet].filter(Boolean).join('\n') };
@@ -1280,7 +1317,7 @@ set('mpCalcCeiling', r.lines.ceiling ? escapeHtml(r.lines.ceiling) : '');
 set('mpCeilAuto', r.ceilingAuto
 ? `Комната сошлась — площадь потолка посчитана по контуру стен: <b>${mFmt(r.ceiling)} м²</b>. Если потолок сложный (короба, уровни), введите участки ниже — тогда посчитается по ним.`
 : '');
-set('mpCalcParts', [r.lines.parts, r.lines.wallsMinusParts].filter(Boolean).map(escapeHtml).join('<br>'));
+set('mpCalcParts', [r.lines.parts, r.lines.wallsMinusParts, r.lines.partStrips].filter(Boolean).map(escapeHtml).join('<br>'));
 set('mpCalcCovers', [r.lines.covers ? r.lines.covers.replace(/; /g, '\n') : '', r.lines.wallsCovered].filter(Boolean).map(escapeHtml).join('<br>').replace(/\n/g, '<br>'));
 (measure.covers || []).forEach((el, i) => {
 const e = (r.covers || []).find(x => x.idx === i);
@@ -1350,7 +1387,7 @@ const v = measureValueForTab(r, effTab);
 let main = '', sub = '', pick = '';
 if (measureTab === 'walls' && wallsPicks.length > 1 && measureTarget.kind !== 'room') {
 const opt = (key, label, val, unit = '') => wallsPicks.includes(key) ? `<button type="button" class="${measureWallsPick === key ? 'active' : ''}" onclick="setWallsPick('${key}')">${label}<br><b>${mFmt(val)}</b>${unit ? ' ' + unit : ''}</button>` : '';
-pick = `<div class="mp-pick">${opt('walls', 'Стены', r.wallsCalc)}${opt('parts', 'Участки', r.parts)}${opt('wallsMinus', 'Стены − участки', r.wallsMinusParts)}${opt('radFin', 'Ниши в стенах', r.radFin, 'пог. м')}${opt('radFinArea', 'Ниши в стенах', r.radFinArea, 'м²')}</div>`;
+pick = `<div class="mp-pick">${opt('walls', 'Стены', r.wallsCalc)}${opt('parts', 'Участки', r.parts)}${opt('wallsMinus', 'Стены − участки', r.wallsMinusParts)}${opt('partStrips', 'Полосы у участков', r.partStrips, 'пог. м')}${opt('radFin', 'Ниши в стенах', r.radFin, 'пог. м')}${opt('radFinArea', 'Ниши в стенах', r.radFinArea, 'м²')}</div>`;
 } else if (measureTab === 'ceiling' && ceilHasEls && measureTarget.kind !== 'room') {
 const opt = (key, label, val, unit) => `<button type="button" class="${measureCeilPick === key ? 'active' : ''}" onclick="setCeilPick('${key}')">${label}<br><b>${mFmt(val)}</b> ${unit}</button>`;
 pick = `<div class="mp-pick">${opt('ceiling', 'Потолок', r.ceiling, 'м²')}${r.ceilingNet > 0 ? opt('ceilingNet', 'Без ниш/коробов', r.ceilingNet, 'м²') : ''}${r.ceilNiche > 0 ? opt('ceilNiche', 'Ниши', r.ceilNiche, 'пог. м') : ''}${r.ceilBox > 0 ? opt('ceilBox', 'Короба', r.ceilBox, 'пог. м') : ''}${r.ceilFin > 0 ? opt('ceilFin', 'Обработка', r.ceilFin, 'пог. м') : ''}${r.ceilFinArea > 0 ? opt('ceilFinArea', 'Обработка', r.ceilFinArea, 'м²') : ''}${r.ceilLight > 0 ? opt('ceilLight', 'Подсветка', r.ceilLight, 'пог. м') : ''}</div>`;
@@ -1389,7 +1426,7 @@ btn.textContent = measureTarget.roomId ? 'Сохранить замер' : 'До
 let measureWallsPick = 'walls';
 // что можно вставить с вкладки «Стены»: стены, участки, обработка ниш в стенах
 function measureWallsPicks(r) {
-return ['walls', ...(r.parts > 0 ? ['parts', 'wallsMinus'] : []), ...(r.radFin > 0 ? ['radFin'] : []), ...(r.radFinArea > 0 ? ['radFinArea'] : [])];
+return ['walls', ...(r.parts > 0 ? ['parts', 'wallsMinus'] : []), ...(r.partStrips > 0 ? ['partStrips'] : []), ...(r.radFin > 0 ? ['radFin'] : []), ...(r.radFinArea > 0 ? ['radFinArea'] : [])];
 }
 function setWallsPick(p) { measureWallsPick = p; updateMeasureOutputs(); }
 let measureCeilPick = 'ceiling';
@@ -2722,7 +2759,7 @@ return list.sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedA
 
 function measureSummaryLines(m) {
 const r = computeMeasure(m);
-return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.covers, r.lines.wallsCovered, r.lines.parts, r.lines.wallsMinusParts, r.lines.radNiches, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn, r.lines.mol_cornice, r.lines.mol_plinth, r.lines.mol_ceil, r.lines.mol_wall, r.lines.tile_walls, r.lines.tile_floor].filter(Boolean);
+return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.covers, r.lines.wallsCovered, r.lines.parts, r.lines.wallsMinusParts, r.lines.partStrips, r.lines.radNiches, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn, r.lines.mol_cornice, r.lines.mol_plinth, r.lines.mol_ceil, r.lines.mol_wall, r.lines.tile_walls, r.lines.tile_floor].filter(Boolean);
 }
 
 function measurePills(m) {
