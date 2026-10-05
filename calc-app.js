@@ -29,7 +29,7 @@ let objectHistorySubTab = 'invoice';
 function escapeHtml(str) {
 return String(str ?? '')
 .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;").replace(/'/g, "&#14181f;");
+.replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -320,6 +320,7 @@ document.getElementById('companyModePromo').style.display =
 document.getElementById('tabUsersBtn').style.display = (isCurrentAdmin() && !isCompanyMode()) ? 'block' : 'none';
 document.getElementById('tabStatsBtn').style.display = (isCurrentAdmin() && !isCompanyMode()) ? 'block' : 'none';
 document.getElementById('editPriceListLink').style.display = isCompanyMode() ? 'inline-flex' : 'none';
+updateModeSwitch();
 document.getElementById('tabCalcBtn').style.display = isCurrentClient() ? 'none' : 'block';
 document.getElementById('tabHistoryBtn').style.display = isCurrentClient() ? 'none' : 'block';
 document.getElementById('tabProfileBtn').style.display = isCurrentClient() ? 'none' : 'block';
@@ -330,6 +331,47 @@ switchTab('objects');
 populateObjectSelect();
 renderHistory();
 offerDraftRestore();
+}
+}
+
+function updateModeSwitch() {
+const box = document.getElementById('userModeSwitch');
+if (!box) return;
+box.style.display = isCurrentClient() ? 'none' : 'block';
+document.getElementById('menuModeEmployeeBtn').classList.toggle('active', !isCompanyMode());
+document.getElementById('menuModeCompanyBtn').classList.toggle('active', isCompanyMode());
+}
+
+// Переключение «Сотрудник» ⇄ «Своя компания» без выхода: сервер выдаёт новый
+// токен с другим режимом, а страница перезагружается уже с данными этого режима.
+async function switchUserMode(mode) {
+if (isCurrentClient() || !authToken) return;
+if (mode === currentUserMode) { toggleUserMenu(false); return; }
+const btns = [document.getElementById('menuModeEmployeeBtn'), document.getElementById('menuModeCompanyBtn')];
+btns.forEach(b => b.disabled = true);
+try {
+const res = await fetch(`${WORKER_URL}/switch-mode`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+body: JSON.stringify({ mode })
+});
+const result = await res.json().catch(() => ({}));
+if (!res.ok) {
+if (res.status === 401) { alert('Вход истёк — войдите заново.'); handleLogout(); return; }
+alert(result.error || 'Не удалось переключить режим, попробуйте ещё раз.');
+return;
+}
+saveDraftNow();
+localStorage.setItem('authToken', result.token);
+localStorage.setItem('currentUser', result.login);
+localStorage.setItem('currentUserRole', result.role);
+localStorage.setItem('currentUserMode', result.mode || 'employee');
+localStorage.setItem('currentUserHasTriedCompanyMode', String(!!result.hasTriedCompanyMode));
+location.reload();
+} catch (e) {
+alert('Ошибка сети, попробуйте ещё раз.');
+} finally {
+btns.forEach(b => b.disabled = false);
 }
 }
 

@@ -712,6 +712,28 @@ const handler = {
       }
 
       // Получение данных приложения (пароли никогда не отдаются клиенту)
+      // Переключение режима "сотрудник" / "своя компания" без повторного
+      // ввода пароля: выдаём новый токен с тем же логином и другим режимом.
+      // Роль берём заново из аккаунта, а не из старого токена.
+      if (path === "/switch-mode" && request.method === "POST") {
+        let body;
+        try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        const record = await readBin(env);
+        const user = record.users.find((u) => u.login === auth.login);
+        if (!user) return json({ error: "Требуется вход" }, 401);
+        const role = user.role === "admin" || user.login === "admin" ? "admin" : (user.role === "client" ? "client" : "master");
+        if (role === "client") return json({ error: "У заказчика один режим" }, 403);
+        const mode = body && body.mode === "company" ? "company" : "employee";
+        let hasTriedCompanyMode = !!user.hasTriedCompanyMode;
+        if (mode === "company" && !hasTriedCompanyMode) {
+          user.hasTriedCompanyMode = true;
+          hasTriedCompanyMode = true;
+          await writeBin(env, record);
+        }
+        const token = await signToken({ login: user.login, role, mode, exp: Date.now() + TOKEN_LIFETIME_MS }, env);
+        return json({ token, login: user.login, role, mode, hasTriedCompanyMode });
+      }
+
       if (path === "/appdata" && request.method === "GET") {
         const record = await readBin(env);
         const selfUser = record.users.find((u) => u.login === auth.login);

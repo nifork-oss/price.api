@@ -527,7 +527,7 @@ if (!box) return;
 const text = {
 expired: 'Вход в кабинет истёк, поэтому показан общий прайс. <a href="calc.html">Войдите в кабинет</a> заново — после этого здесь можно будет править свой прайс-лист.',
 offline: 'Не удалось загрузить ваш прайс-лист — показан общий. Проверьте интернет и обновите страницу.',
-employee: 'Вы вошли как мастер, поэтому показан общий прайс. Чтобы вести <b>свой</b> прайс-лист, выйдите из кабинета и войдите снова, выбрав на экране входа «Своя компания».'
+employee: 'Вы вошли как сотрудник, поэтому показан общий прайс. Чтобы вести <b>свой</b> прайс-лист, переключитесь в режим «Своя компания».<div style="margin-top:8px;"><button type="button" id="switchToCompanyBtn" onclick="switchToCompanyMode()" style="padding:8px 14px; border-radius:10px; border:none; background:#14181f; color:#fff; font-weight:600; font-size:13px; cursor:pointer;">Перейти в «Своя компания»</button></div>'
 }[authNotice];
 box.style.display = text ? 'block' : 'none';
 box.innerHTML = text || '';
@@ -544,6 +544,32 @@ return `<div class="biz-card"><div class="biz-card-frame">
 <div class="biz-card-rule"></div>
 <div class="biz-card-note">${escapeHtml(note)}</div>
 </div></div>`;
+}
+
+// Тот же переключатель режима, что и в меню кабинета: новый токен с режимом
+// «своя компания», затем перезагрузка — страница откроет свой прайс-лист.
+async function switchToCompanyMode() {
+const btn = document.getElementById('switchToCompanyBtn');
+if (btn) btn.disabled = true;
+try {
+const res = await fetch(`${WORKER_URL}/switch-mode`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+body: JSON.stringify({ mode: 'company' })
+});
+const result = await res.json().catch(() => ({}));
+if (!res.ok) { alert(result.error || 'Не удалось переключить режим, попробуйте ещё раз.'); return; }
+localStorage.setItem('authToken', result.token);
+localStorage.setItem('currentUser', result.login);
+localStorage.setItem('currentUserRole', result.role);
+localStorage.setItem('currentUserMode', result.mode || 'employee');
+localStorage.setItem('currentUserHasTriedCompanyMode', String(!!result.hasTriedCompanyMode));
+location.reload();
+} catch (e) {
+alert('Ошибка сети, попробуйте ещё раз.');
+} finally {
+if (btn) btn.disabled = false;
+}
 }
 
 function showPublicCompanyBanner() {

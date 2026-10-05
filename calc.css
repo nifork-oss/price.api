@@ -119,6 +119,10 @@ h2 { font-size: 16px; }
 .menu-item.active { background: #fff4d1; color: #14181f; }
 .menu-item-danger { color: #b23a26; }
 .menu-sep { height: 1px; margin: 4px 6px; background: #dfe3e8; }
+.menu-mode { padding: 6px 6px 8px; }
+.menu-mode-label { font-size: 12px; font-weight: 600; color: #5d6878; margin: 0 2px 6px; }
+.menu-mode-row { display: flex; gap: 6px; }
+.menu-mode-row .role-toggle-btn { padding: 9px 8px; font-size: 12.5px; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .user-chip .user-chip-caret { transition: none; } }
 
 /* ---------- Нижняя панель разделов ---------- */
