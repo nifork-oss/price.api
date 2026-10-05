@@ -1230,7 +1230,7 @@ setTimeout(() => showAddToast('Чтобы изменить — коснитес�
 } catch (e) { /* пусто */ }
 }
 if (t.kind === 'angle') { rulerEdit('wall', t.idx + 1); return; }
-if (t.kind === 'chk') { if (t.field === 'a') rulerEdit('chk', t.idx, 'b'); else rulerCheckSolveApply(); return; }
+if (t.kind === 'chk') { if (t.field === 'a') rulerEdit('chk', t.idx, 'b'); else rulerCheckApply(); return; }
 if (t.kind === 'wallH') { rulerEdit('wall', t.idx); return; }
 rulerClose();
 }
@@ -1552,8 +1552,8 @@ showAddToast(rulerFixOption(nb) || rulerFixOption(-1)
 /* ---------- подправка плана замерами от углов ---------- */
 // Углы на объекте точно не измерить. Зато просто измерить рулеткой расстояние
 // от угла стены до стены напротив (кратчайшее, под прямым углом к ней).
-// По этим замерам углы плана подбираются заново: длины стен не меняются,
-// выбранная стена стоит на месте, соседние поворачиваются вслед и не отрываются.
+// По замеру выбранная стена сдвигается: её угол едет вдоль соседней стены,
+// соседняя удлиняется или укорачивается, остальные стены и углы не меняются.
 // measure.wallChecks = [{ wall, opp, a, b, n }]: от угла А и угла Б стены wall
 // до стены opp; n — сколько было стен (иначе замер уже не к тем стенам).
 
@@ -1607,102 +1607,64 @@ m.wallChecks = m.wallChecks.filter(c => rulerCheckValid(m, c));
 if (!m.wallChecks.some(c => c.wall === i)) m.wallChecks.push({ wall: i, opp: rulerOppositeWall(m, i), a: '', b: '', n: m.walls.length });
 }
 
-// Точки углов по направлениям стен (в радианах): P[k] — начало стены k
-function rlCheckPts(L, h) {
-const P = [[0, 0]];
-for (let k = 0; k < L.length; k++) P.push([P[k][0] + L[k] * Math.cos(h[k]), P[k][1] + L[k] * Math.sin(h[k])]);
-return P;
-}
 // Кратчайшее расстояние от точки до прямой, на которой стена j
 function rlDistToLine(p, P, h, j) {
 return Math.abs(Math.cos(h[j]) * (p[1] - P[j][1]) - Math.sin(h[j]) * (p[0] - P[j][0]));
 }
-function rulerCheckList(m) {
-const n = m.walls.length;
-const out = [];
-(m.wallChecks || []).filter(c => rulerCheckValid(m, c)).forEach(c => {
-const a = mNum(c.a), b = mNum(c.b);
-if (a > 0) out.push({ p: c.wall, j: c.opp, d: a });
-if (b > 0) out.push({ p: (c.wall + 1) % n, j: c.opp, d: b });
-});
-return out;
-}
 
-// Подбор направлений стен: комната замкнута, расстояния — как намеряно,
-// углы меняются как можно меньше. Стена anchor не поворачивается.
-function rulerCheckSolve(m, anchor) {
+// Сдвинуть стену по замерам: угол А едет вдоль предыдущей стены, угол Б — вдоль
+// следующей, пока расстояние до стены напротив не станет как намеряно. Соседние
+// стены только удлиняются или укорачиваются, их направления и все остальные стены
+// и углы остаются как были; меняется лишь сама выбранная стена.
+function rulerCheckMove(m, c) {
 const n = m.walls.length;
+const g = rulerGeometry(m);
 const L = m.walls.map(mNum);
-const h0 = rulerGeometry(m).segs.map(s => s.heading * Math.PI / 180);
-const list = rulerCheckList(m);
-const vars = [];
-for (let k = 0; k < n; k++) if (k !== anchor) vars.push(k);
-const resid = h => {
-const P = rlCheckPts(L, h);
-const r = [10 * P[n][0], 10 * P[n][1]];
-list.forEach(c => r.push(rlDistToLine(P[c.p], P, h, c.j) - c.d));
-vars.forEach(k => r.push(0.002 * (h[k] - h0[k])));
-return r;
+const h = g.segs.map(s => s.heading * Math.PI / 180);
+const P = [[0, 0], ...g.segs.map(s => [s.x2, s.y2])];
+const i = c.wall, prev = (i - 1 + n) % n, next = (i + 1) % n, j = c.opp;
+const uj = [Math.cos(h[j]), Math.sin(h[j])];
+const side = p => uj[0] * (p[1] - P[j][1]) - uj[1] * (p[0] - P[j][0]); // со знаком: с какой стороны стены j
+// точка base + u·t, на расстоянии d от стены j с той же стороны, что и сейчас
+const slide = (base, u, cur, d) => {
+const k = uj[0] * u[1] - uj[1] * u[0];
+if (Math.abs(k) < 0.05) return null; // стена едет параллельно стене напротив — расстояние не меняется
+const want = (side(cur) < 0 ? -1 : 1) * d;
+return (want - side(base)) / k;
 };
-const cost = r => r.reduce((a, v) => a + v * v, 0);
-let h = h0.slice(), r = resid(h), c0 = cost(r), mu = 1e-3;
-const nv = vars.length;
-for (let it = 0; it < 200 && c0 > 1e-14; it++) {
-// якобиан численно — стен немного
-const J = r.map(() => new Array(nv).fill(0));
-vars.forEach((k, vi) => {
-const hh = h.slice(); hh[k] += 1e-7;
-resid(hh).forEach((v, ri) => { J[ri][vi] = (v - r[ri]) / 1e-7; });
-});
-const A = [], gv = new Array(nv).fill(0);
-for (let a = 0; a < nv; a++) {
-A.push(new Array(nv).fill(0));
-for (let ri = 0; ri < r.length; ri++) gv[a] -= J[ri][a] * r[ri];
-for (let b = 0; b < nv; b++) for (let ri = 0; ri < r.length; ri++) A[a][b] += J[ri][a] * J[ri][b];
+const newL = L.slice();
+let A = P[i], B = P[i + 1];
+const a = mNum(c.a), b = mNum(c.b);
+if (a > 0) {
+const u = [Math.cos(h[prev]), Math.sin(h[prev])];
+const t = slide(P[prev], u, A, a);
+if (t === null) return { err: `Стена ${prev + 1} идёт вдоль стены ${j + 1} — от угла А так не подправить` };
+if (t < 0.05) return { err: `Стене ${prev + 1} пришлось бы стать короче 5 см — проверьте замер от угла А` };
+newL[prev] = t; A = [P[prev][0] + u[0] * t, P[prev][1] + u[1] * t];
 }
-let moved = false;
-for (let tries = 0; tries < 12; tries++) {
-const M = A.map((row, a) => row.map((v, b) => v + (a === b ? mu * (1 + v) : 0)));
-const dlt = rlSolveLinear(M, gv.slice());
-if (!dlt) { mu *= 10; continue; }
-const hh = h.slice();
-vars.forEach((k, vi) => { hh[k] += dlt[vi]; });
-const rr = resid(hh), cc = cost(rr);
-if (cc < c0) { h = hh; r = rr; moved = c0 - cc > 1e-16; c0 = cc; mu = Math.max(mu / 3, 1e-9); break; }
-mu *= 4;
+if (b > 0) {
+const u = [Math.cos(h[next]), Math.sin(h[next])];
+const end = P[next + 1];
+// конец следующей стены стоит на месте, угол Б едет вдоль неё
+const t = slide(end, [-u[0], -u[1]], B, b);
+if (t === null) return { err: `Стена ${next + 1} идёт вдоль стены ${j + 1} — от угла Б так не подправить` };
+if (t < 0.05) return { err: `Стене ${next + 1} пришлось бы стать короче 5 см — проверьте замер от угла Б` };
+newL[next] = t; B = [end[0] - u[0] * t, end[1] - u[1] * t];
 }
-if (!moved) break;
-}
-const P = rlCheckPts(L, h);
-const worst = list.reduce((w, c) => Math.max(w, Math.abs(rlDistToLine(P[c.p], P, h, c.j) - c.d)), 0);
-return { h, h0, gap: Math.hypot(P[n][0], P[n][1]), worst, count: list.length };
-}
-function rlSolveLinear(A, b) {
-const n = b.length;
-for (let c = 0; c < n; c++) {
-let piv = c;
-for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
-if (Math.abs(A[piv][c]) < 1e-15) return null;
-[A[c], A[piv]] = [A[piv], A[c]]; [b[c], b[piv]] = [b[piv], b[c]];
-for (let r = c + 1; r < n; r++) {
-const f = A[r][c] / A[c][c];
-for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
-b[r] -= f * b[c];
-}
-}
-const x = new Array(n).fill(0);
-for (let r = n - 1; r >= 0; r--) {
-let v = b[r];
-for (let k = r + 1; k < n; k++) v -= A[r][k] * x[k];
-x[r] = v / A[r][r];
-}
-return x;
+const li = Math.hypot(B[0] - A[0], B[1] - A[1]);
+if (li < 0.05) return { err: 'Стена стянулась бы в точку — проверьте замеры' };
+newL[i] = li;
+const deg = h.map(v => v * 180 / Math.PI);
+deg[i] = Math.atan2(B[1] - A[1], B[0] - A[0]) * 180 / Math.PI;
+return { L: newL, deg, changed: [prev, i, next].filter((k, q, arr) => arr.indexOf(k) === q && Math.abs(newL[k] - L[k]) >= 0.0005) };
 }
 
-// Записать подобранные направления стен в замер: начальное направление, повороты и углы
-function rulerCheckWriteHeadings(m, deg) {
+// Записать длины и направления стен в замер: начальное направление, повороты и углы
+function rulerCheckWrite(m, L, deg) {
 const n = m.walls.length;
+const fmt = v => String(Math.round(v * 1000) / 1000).replace('.', ',');
 m.shape = 'free';
+m.walls = L.map(fmt);
 m.startHeading = rlNormDeg(deg[0]);
 m.turns = []; m.angles = [];
 for (let k = 0; k < n; k++) {
@@ -1713,41 +1675,30 @@ m.angles[k] = Math.abs(interior - 90) < 0.005 ? '' : String(Math.round(interior 
 }
 }
 
-function rulerCheckSolveApply() {
+function rulerCheckApply() {
 const t = rulerTarget;
 const m = measure;
-const i = t && t.kind === 'chk' ? t.idx : -1;
-if (i < 0 || !rulerCheckReady(m) || !rulerCheckList(m).length) { rulerClose(); return; }
+const c = t && t.kind === 'chk' ? rulerCheckOf(m, t.idx) : null;
+if (!c || !rulerCheckReady(m) || !(mNum(c.a) > 0 || mNum(c.b) > 0)) { rulerClose(); return; }
+const res = rulerCheckMove(m, c);
+if (res.err) { showAddToast(res.err); return; }
+const n = m.walls.length;
 const g0 = rulerGeometry(m);
-const res = rulerCheckSolve(m, i);
-// углы при подгонке меняются на градусы, не на десятки: иначе замер не от того угла или не до той стены
-const turn = res.h.reduce((w, v, k) => Math.max(w, Math.abs(rlNormDeg((v - res.h0[k]) * 180 / Math.PI))), 0);
-if (res.gap > 0.01 || res.worst > 0.03 || turn > 15) {
-showAddToast(res.gap > 0.01 ? 'С такими расстояниями комната не строится — проверьте замеры и длины стен'
-: res.worst > 0.03 ? `Замеры не сходятся с длинами стен на ${Math.round(res.worst * 100)} см — перемерьте`
-: `Такой замер сильно ломает план (стена поворачивается на ${Math.round(turn)}°) — проверьте, от какого угла и до какой стены мерили`);
-return;
-}
 rulerSnapshot();
 rulerStartEditSession();
-const n = m.walls.length;
-const oldInt = g0.segs.map((s, k) => 180 - Math.abs(rlNormDeg(g0.segs[(k + 1) % n].heading - s.heading)));
-rulerCheckWriteHeadings(m, res.h.map(v => v * 180 / Math.PI));
+const before = m.walls.map(mNum);
+rulerCheckWrite(m, res.L, res.deg);
+// стены, которые не трогали, остаются на том же месте чертежа
+const keep = (c.wall + 2) % n;
 const g1 = rulerGeometry(m);
-const changed = [];
-g1.segs.forEach((s, k) => {
-const interior = 180 - Math.abs(rlNormDeg(g1.segs[(k + 1) % n].heading - s.heading));
-if (Math.abs(interior - oldInt[k]) >= 0.05) changed.push(`${k + 1}–${(k + 1) % n + 1}: ${mFmt(Math.round(interior * 10) / 10)}°`);
-});
-// выбранная стена остаётся на том же месте чертежа
-const dx = g1.segs[i].x1 - g0.segs[i].x1, dy = g1.segs[i].y1 - g0.segs[i].y1;
+const dx = g1.segs[keep].x1 - g0.segs[keep].x1, dy = g1.segs[keep].y1 - g0.segs[keep].y1;
 if (rlEditBase) rlEditBase.pts = rlEditBase.pts.map(([px, py]) => [px + dx, py + dy]);
 if (rlLastFit) rlLastFit = { ...rlLastFit, ox: rlLastFit.ox - dx * rlLastFit.k, oy: rlLastFit.oy - dy * rlLastFit.k };
 saveMeasureDraft();
 rulerClose();
-let msg = changed.length ? 'План подправлен. Углы ' + changed.join(', ') : 'План и так совпадает с замерами';
-if (res.worst > 0.01) msg += `. Замеры расходятся между собой на ${Math.round(res.worst * 100)} см — стоит перемерить`;
-showAddToast(msg);
+showAddToast(res.changed.length
+? 'Стена сдвинута: ' + res.changed.map(k => `${k + 1}: ${mFmt(Math.round(before[k] * 1000) / 1000)} → ${mFmt(Math.round(res.L[k] * 1000) / 1000)}`).join(', ')
+: 'План и так совпадает с замерами');
 }
 
 function rulerCheckSetOpp(j) {
@@ -1792,7 +1743,7 @@ const cand = rulerCheckCandidates(measure, t.idx);
 if (c && cand.length > 1) {
 tools += `<span class="rl-turn-label">До стены:</span>` + cand.map(k => `<button type="button" class="rl-tool rl-turn${c.opp === k ? ' on' : ''}" onclick="rulerCheckSetOpp(${k})">${k + 1}</button>`).join('');
 }
-if (c && (mNum(c.a) > 0 || mNum(c.b) > 0)) tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCheckSolveApply()">Подправить план</button>`;
+if (c && (mNum(c.a) > 0 || mNum(c.b) > 0)) tools += `<button type="button" class="rl-tool rl-tool-close" onclick="rulerCheckApply()">Подправить план</button>`;
 tools += `<button type="button" class="rl-tool rl-tool-del" onclick="rulerCheckRemove()">Убрать замер</button>`;
 return tools;
 }
