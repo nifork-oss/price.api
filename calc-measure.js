@@ -410,6 +410,63 @@ out.list.push(e);
 return out;
 }
 
+/* ---------- участки стен: плитка, фартук, панели ---------- */
+// measure.parts = [{ name, l, h, wall, off, from, y0 }]: на стене — длина (пусто — вся стена),
+// высота (пусто — до потолка), низ от пола и отступ от угла; проёмы внутри участка вычитаются.
+// Без стены — просто длина × высота, как раньше.
+const partWall = (m, p) => Number.isInteger(p.wall) && p.wall >= 0 && p.wall < (m.walls || []).length && mNum(m.walls[p.wall]) > 0 ? p.wall : null;
+function partGeom(m, p) {
+const wall = partWall(m, p);
+if (wall == null) {
+const l = mNum(p.l), h = mNum(p.h);
+return l > 0 && h > 0 ? { wall: null, w: l, h, bottom: 0, top: h, span: null } : null;
+}
+const L = mNum(m.walls[wall]), Hh = wallHeightOf(m, wall) || 0;
+const y0 = Math.max(0, radOpt(p.y0) || 0);
+const hIn = mNum(p.h);
+const top = hIn > 0 ? (Hh > 0 ? Math.min(Hh, y0 + hIn) : y0 + hIn) : Hh;
+if (!(top - y0 > 0.005)) return null;
+const lIn = mNum(p.l);
+const ww = lIn > 0 ? Math.min(lIn, L) : L;
+let a0 = (L - ww) / 2, off = null;
+const o2 = radOpt(p.off);
+if (isFinite(o2) && ww < L) { off = Math.min(o2, L - ww); a0 = p.from === 'end' ? L - off - ww : off; }
+const span = [Math.max(0, a0), Math.min(L, a0 + ww)];
+return { wall, L, w: span[1] - span[0], h: top - y0, bottom: y0, top, span, off, full: ww >= L - 0.005, toCeil: top >= Hh - 0.005 };
+}
+// окна и двери на стене, попавшие в прямоугольник [x0, x1] × [y0, y1]: площадь пересечения
+function openingsInRect(m, wall, x0, x1, y0, y1) {
+if (typeof openingSpan !== 'function') return 0;
+const L = mNum((m.walls || [])[wall]), Hh = wallHeightOf(m, wall) || 2.7;
+let a = 0;
+const cut = (p0, p1, q0, q1) => Math.max(0, Math.min(x1, p1) - Math.max(x0, p0)) * Math.max(0, Math.min(y1, q1) - Math.max(y0, q0));
+(m.openings || []).forEach(o => {
+if (o.wall !== wall || !(openingWidth(o) > 0)) return;
+const [s0, s1] = openingSpan(o, L);
+const v = openingVert(o, Hh);
+if (o.type === 'balcony') {
+const bp = balconyParts(o, s0, s1);
+a += cut(bp.door[0], bp.door[1], 0, v.door[1]) + cut(bp.win[0], bp.win[1], v.y0, v.y1);
+} else a += cut(s0, s1, v.y0, v.y1);
+});
+return a;
+}
+function partsCompute(m) {
+const out = [];
+(Array.isArray(m.parts) ? m.parts : []).forEach((p, idx) => {
+const gm = partGeom(m, p);
+if (!gm) return;
+const name = String(p.name || '').trim();
+const gross = gm.w * gm.h;
+const ops = gm.wall != null ? openingsInRect(m, gm.wall, gm.span[0], gm.span[1], gm.bottom, gm.top) : 0;
+const area = Math.max(0, gross - ops);
+const where = gm.wall != null ? ` (стена ${gm.wall + 1}${gm.full ? '' : gm.off != null ? `, от угла ${p.from === 'end' ? 'Б' : 'А'} ${mFmt(gm.off)}` : ', по центру'}${gm.bottom > 0.005 ? `, от пола ${mFmt(gm.bottom)}` : ''})` : '';
+const line = `${name ? name + ' ' : ''}${mFmt(gm.w)}×${mFmt(gm.h)}${where}${ops > 0.0005 ? ` − проёмы ${mFmt(ops)}` : ''} = ${mFmt(area)} м²`;
+out.push({ idx, name, ...gm, gross, ops, area, line, code: 'У-' + (idx + 1) });
+});
+return out;
+}
+
 /* ---------- закрыто мебелью: шкафы, мебельные панели ---------- */
 // measure.covers = [{ name, wall, off, from, w, h, y0, d, sideA, sideB }]:
 //   wall — стена (пусто — без привязки), off/from — отступ от угла А или Б (пусто — по центру),
@@ -780,11 +837,11 @@ r.lines.slopesLen = `Откосы: ${slopeParts.join(' + ')} = ${mFmt(r.slopesLe
 }
 
 // Участки стен: часть стены под отдельную работу (плитка до 1,5 м, фартук…)
-const parts = (Array.isArray(m.parts) ? m.parts : []).map(p => ({ name: String(p.name || '').trim(), l: mNum(p.l), h: mNum(p.h) }))
-.filter(p => p.l > 0 && p.h > 0);
-r.parts = parts.reduce((a, p) => a + p.l * p.h, 0);
+const parts = partsCompute(m);
+r.partsList = parts;
+r.parts = parts.reduce((a, p) => a + p.area, 0);
 if (parts.length) {
-r.lines.parts = `Участки стен: ${parts.map(p => `${p.name ? p.name + ' ' : ''}${mFmt(p.l)}×${mFmt(p.h)}`).join(' + ')} = ${mFmt(r.parts)} м²`;
+r.lines.parts = parts.length > 1 ? `Участки стен: ${parts.map(p => p.line).join('; ')} — всего ${mFmt(r.parts)} м²` : `Участки стен: ${parts[0].line}`;
 }
 const wallsBase = r.wallsCalc;
 r.wallsMinusParts = Math.max(0, wallsBase - r.parts);
@@ -1105,19 +1162,27 @@ ${m.openings.length ? `<button type="button" class="mp-link-btn" onclick="setMea
 </section>
 <section class="mp-sec">
 <div class="mp-sec-title">Участки стен</div>
-<div class="mp-hint">Часть стены под отдельную работу: плитка до 1,5 м, фартук, акцентная стена. Стены при этом не меняются — при выборе работы будут и «Участки», и «Стены без участков».</div>
-${(m.parts || []).map((pt, i) => `<div class="mp-open" data-card="parts.${i}">
+<div class="mp-hint">Часть стены под отдельную работу: плитка, фартук, мебельная или 3D-панель, акцентная стена. Укажите стену — участок встанет на развёртку, а окна и двери внутри него вычтутся. Длина пусто — вся стена, высота пусто — до потолка. Стены при этом не меняются — при выборе работы будут и «Участки», и «Стены без участков».</div>
+${(m.parts || []).map((pt, i) => { const pw = partWall(m, pt); return `<div class="mp-open" data-card="parts.${i}">
 <div class="mp-open-top">
-<input class="mp-name-in" type="text" data-path="parts.${i}.name" value="${escapeHtml(pt.name || '')}" placeholder="Название: плитка, фартук…" autocomplete="off">
+<input class="mp-name-in" type="text" data-path="parts.${i}.name" value="${escapeHtml(pt.name || '')}" placeholder="У-${i + 1}: плитка, фартук, панель…" autocomplete="off">
 <span class="mp-open-area" id="mpPartArea${i}"></span>
 <button type="button" class="mp-tofocus" onclick="measureFocusOn('parts', ${i})" aria-label="Править под чертежом">↑ К плану</button>
 <button type="button" class="mp-del" onclick="removeMeasureRow('parts', ${i})" aria-label="Убрать участок">✕</button>
 </div>
-<div class="mp-dims mp-dims-2">
-<label>Длина ↔${mIn(`parts.${i}.l`, pt.l, '3,2+4,1')}</label><span class="mp-x">×</span>
-<label>Высота ↕${mIn(`parts.${i}.h`, pt.h, '1,5')}</label>
+${m.walls.some(w => mNum(w) > 0) ? `<div class="mp-place"><label>На стене
+<select onchange="setPartWall(${i}, this.value)">
+<option value="">без привязки</option>
+${m.walls.map((w, k) => mNum(w) > 0 ? `<option value="${k}" ${pw === k ? 'selected' : ''}>стена ${k + 1} · ${mFmt(mNum(w))} м</option>` : '').join('')}
+</select></label>
+${pw != null ? `<label>От угла <button type="button" class="mp-ce-corner" onclick="togglePartFrom(${i})" aria-label="Сменить угол">${pt.from === 'end' ? 'Б' : 'А'} ⇄</button>${mIn(`parts.${i}.off`, pt.off, 'по центру')}</label>` : ''}
+</div>` : ''}
+<div class="mp-dims" style="margin-top:6px;">
+<label>Длина ↔${mIn(`parts.${i}.l`, pt.l, pw != null ? 'вся стена' : '3,2+4,1')}</label><span class="mp-x">×</span>
+<label>Высота ↕${mIn(`parts.${i}.h`, pt.h, pw != null ? 'до потолка' : '1,5')}</label><span class="mp-x">·</span>
+${pw != null ? `<label>Низ от пола ↑${mIn(`parts.${i}.y0`, pt.y0, '0')}</label>` : '<span></span>'}
 </div>
-</div>`).join('')}
+</div>`; }).join('')}
 <div class="mp-add-row"><button type="button" class="mp-add" onclick="addMeasureRow('parts')">+ Участок стены</button></div>
 <div class="mp-calc" id="mpCalcParts"></div>
 </section>
@@ -1235,8 +1300,8 @@ if (measureTab === 'corners') renderCnViews(r);
 if (measureTab === 'molding' && typeof updateMoldingOutputs === 'function') updateMoldingOutputs(r);
 if (measureTab === 'tile' && typeof updateTileOutputs === 'function') updateTileOutputs(r);
 (measure.parts || []).forEach((pt, i) => {
-const l = mNum(pt.l), h = mNum(pt.h);
-set('mpPartArea' + i, l && h ? `${mFmt(l * h)} м²` : '');
+const e = (r.partsList || []).find(x => x.idx === i);
+set('mpPartArea' + i, e ? `${mFmt(e.area)} м²` : '');
 });
 set('mpCalcSlopes', r.lines.slopesLen ? escapeHtml(r.lines.slopesLen) : '');
 set('mpCalcNarrow', [r.lines.narrowWalls, r.lines.narrow, r.lines.openStrips, r.lines.narrowTotal].filter(Boolean).map(escapeHtml).join('<br>').replace(/\n/g, '<br>'));
@@ -1455,7 +1520,10 @@ if (kind === 'parts') {
 if (!Array.isArray(measure.parts)) measure.parts = [];
 const prev = measure.parts[measure.parts.length - 1];
 // высота — как у предыдущего участка (обычно одинаковая)
-measure.parts.push({ name: '', l: '', h: prev ? prev.h : '' });
+// на стену, которая сейчас на развёртке (как ниши и мебель)
+const lens = (measure.walls || []).map(mNum);
+const cur = typeof rlElevWall === 'number' && lens[rlElevWall] > 0 ? rlElevWall : lens.findIndex(v => v > 0);
+measure.parts.push({ name: prev ? prev.name || '' : '', l: '', h: prev ? prev.h : '', y0: '', off: '', from: 'start', ...(cur >= 0 ? { wall: cur } : {}) });
 }
 if (kind === 'ceiling') measure.ceiling.push({ l: '', w: '' });
 if (kind === 'narrow') measure.narrow.push('');
@@ -1463,7 +1531,7 @@ saveMeasureDraft();
 renderMeasure();
 const last = measure[kind].length - 1;
 // курсор — в первое поле новой строки (у потолка это длина)
-focusMeasurePath(kind === 'ceiling' ? `ceiling.${last}.l` : kind === 'parts' ? `parts.${last}.name` : `${kind}.${last}`);
+focusMeasurePath(kind === 'ceiling' ? `ceiling.${last}.l` : kind === 'parts' ? `parts.${last}.${measure.parts[last].name ? 'l' : 'name'}` : `${kind}.${last}`);
 }
 
 function removeMeasureRow(kind, i) {
@@ -1679,7 +1747,7 @@ const len = k => (Array.isArray(measure[k]) ? measure[k].length : 0);
 if (kind === 'radWall') { measureFocus = { kind: 'radNiches', idx: len('radNiches') }; rlView = 'elev'; addRadWallNiche(); }
 else if (kind === 'radUnder') { measureFocus = { kind: 'radNiches', idx: len('radNiches') }; rlView = 'elev'; addRadNiches(); }
 else if (kind === 'cover') { measureFocus = { kind: 'covers', idx: len('covers') }; addCover(); }
-else if (kind === 'part') { if (!Array.isArray(measure.parts)) measure.parts = []; measureFocus = { kind: 'parts', idx: len('parts') }; addMeasureRow('parts'); }
+else if (kind === 'part') { if (!Array.isArray(measure.parts)) measure.parts = []; measureFocus = { kind: 'parts', idx: len('parts') }; rlView = 'elev'; addMeasureRow('parts'); }
 if (measureFocus && !(measure[measureFocus.kind] || [])[measureFocus.idx]) measureFocus = null;
 measureFocusScroll();
 }
@@ -1696,7 +1764,8 @@ return;
 if (rulerTarget) rulerClose();
 measureFocus = { kind, idx };
 let wall = null;
-if (kind === 'covers' && Number.isInteger(el.wall)) wall = el.wall;
+if ((kind === 'covers' || kind === 'parts') && Number.isInteger(el.wall)) wall = el.wall;
+if (kind === 'parts' && wall != null) rlView = 'elev';
 if (kind === 'radNiches') {
 rlView = 'elev';
 if (Number.isInteger(el.wall)) wall = el.wall;
@@ -1791,6 +1860,20 @@ measure.covers.push({ name: prev ? prev.name || '' : '', w: '', h: prev ? prev.h
 saveMeasureDraft();
 renderMeasure();
 focusMeasurePath(`covers.${measure.covers.length - 1}.w`);
+}
+function setPartWall(i, v) {
+const p = (measure.parts || [])[i];
+if (!p) return;
+if (v === '') delete p.wall; else p.wall = Number(v);
+saveMeasureDraft();
+renderMeasure();
+}
+function togglePartFrom(i) {
+const p = (measure.parts || [])[i];
+if (!p) return;
+p.from = p.from === 'end' ? 'start' : 'end';
+saveMeasureDraft();
+renderMeasure();
 }
 function toggleCoverSide(i, key) {
 const el = (measure.covers || [])[i];
@@ -1947,7 +2030,7 @@ if (radUnder(el) || !Number.isInteger(el.wall)) return;
 const k = map[el.wall];
 if (Number.isInteger(k) && k >= 0) el.wall = k; else delete el.wall;
 });
-(Array.isArray(m.covers) ? m.covers : []).forEach(el => {
+[...(Array.isArray(m.covers) ? m.covers : []), ...(Array.isArray(m.parts) ? m.parts : [])].forEach(el => {
 if (!Number.isInteger(el.wall)) return;
 const k = map[el.wall];
 if (Number.isInteger(k) && k >= 0) el.wall = k; else delete el.wall;
