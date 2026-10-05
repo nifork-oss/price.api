@@ -91,3 +91,34 @@ test('невозможный замер (диагональ короче, чем
   assert.deepStrictEqual([...run('measure.walls')], ['4', '3', '4', '3']);
   assert.strictEqual(run('measure.shape'), 'rect');
 });
+
+test('подиум и короб: облицовка, стена за ними и пол под ними', () => {
+  const { run } = setup({ shape: 'rect', height: '2,7', walls: ['4', '3', '4', '3'],
+    tile: { walls: { on: true, walls: null, h: '' }, floor: { on: true } },
+    blocks: [
+      { type: 'podium', wall: 0, off: '0', from: 'start', w: '1,7', d: '0,7', h: '0,15' }, // в углу у стены 4
+      { type: 'box', wall: 1, off: '0', from: 'end', w: '0,3', d: '0,25', h: '' },        // в углу у стены 3, до потолка
+    ] });
+  const bl = run('blocksCompute(measure)');
+  const [p, k] = bl.list;
+  assert.strictEqual(p.code, 'П-1');
+  assert.strictEqual(p.openSides, 1);
+  near(p.area, 1.7 * 0.15 + 0.7 * 0.15 + 1.7 * 0.7);
+  near(p.edges, 0.15 + 1.7 + 0.7);
+  assert.strictEqual(k.code, 'К-1');
+  near(k.h, 2.7);
+  near(k.top, 0);
+  near(k.area, 0.3 * 2.7 + 0.25 * 2.7);
+  const t = run('tileCompute(measure, computeMeasure(measure))');
+  // стены: за подиумом и его прижатым боком, за коробом и его боком; плюс облицовка короба
+  near(t.walls, 37.8 - (1.7 + 0.7) * 0.15 - (0.3 + 0.25) * 2.7 + k.area);
+  // пол: минус под подиумом и коробом, плюс облицовка подиума
+  near(t.floor, 12 - 1.7 * 0.7 - 0.3 * 0.25 + p.area);
+  assert.match(t.lines.floor, /под П-1, К-1/);
+  // экран ванны без верха, отдельно стоящий подиум — со всех сторон
+  run('measure.blocks = [{ type: "screen", wall: 2, w: "", d: "0,7", h: "0,6" }, { type: "podium", w: "1", d: "1", h: "0,2" }]');
+  const [e, q] = run('blocksCompute(measure)').list;
+  assert.strictEqual(e.openSides, 0);
+  near(e.area, 4 * 0.6);
+  near(q.area, 4 * 0.2 + 1);
+});

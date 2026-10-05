@@ -1033,9 +1033,9 @@ text: [r.lines.walls, r.lines.openings, r.lines.net, r.lines.covers, r.lines.wal
 if (tab === 'molCornice') return { value: r.molCornice || 0, unit: 'пог. м', label: 'Карниз', text: r.lines.mol_cornice || '' };
 if (tab === 'molPlinth') return { value: r.molPlinth || 0, unit: 'пог. м', label: 'Плинтус', text: r.lines.mol_plinth || '' };
 if (tab === 'molCeil') return { value: r.molCeil || 0, unit: 'пог. м', label: 'Молдинг на потолке', text: r.lines.mol_ceil || '' };
-if (tab === 'tileWalls') return { value: r.tileWalls || 0, unit: 'м²', label: 'Плитка: стены', text: r.lines.tile_walls || '' };
-if (tab === 'tileFloor') return { value: r.tileFloor || 0, unit: 'м²', label: 'Плитка: пол', text: r.lines.tile_floor || '' };
-if (tab === 'tileAll') return { value: r.tileAll || 0, unit: 'м²', label: 'Плитка: всего', text: [r.lines.tile_walls, r.lines.tile_floor, r.lines.tile_all].filter(Boolean).join('\n') };
+if (tab === 'tileWalls') return { value: r.tileWalls || 0, unit: 'м²', label: 'Плитка: стены', text: [r.lines.tile_walls, r.lines.tile_blocksWalls].filter(Boolean).join('\n') };
+if (tab === 'tileFloor') return { value: r.tileFloor || 0, unit: 'м²', label: 'Плитка: пол', text: [r.lines.tile_floor, r.lines.tile_blocksFloor].filter(Boolean).join('\n') };
+if (tab === 'tileAll') return { value: r.tileAll || 0, unit: 'м²', label: 'Плитка: всего', text: [r.lines.tile_walls, r.lines.tile_floor, r.lines.tile_all, r.lines.tile_blocksWalls, r.lines.tile_blocksFloor, r.lines.tile_blocks].filter(Boolean).join('\n') };
 if (tab === 'molWall') return { value: r.molWall || 0, unit: 'пог. м', label: 'Молдинг на стенах', text: r.lines.mol_wall || '' };
 if (tab === 'corners' || tab === 'cornersOut' || tab === 'cornersIn') {
 const cmin = r.cornersMin ? MIN_NOTE : '';
@@ -1629,7 +1629,7 @@ if (measureFocus && measureFocus.kind === kind) measureFocus = null;
 measure[kind].splice(i, 1);
 if (kind === 'openings') remapCeilElOpsAfterRemove(measure, i);
 if (kind === 'walls' && Array.isArray(measure.wallHeights)) measure.wallHeights.splice(i, 1);
-if (kind !== 'openings' && kind !== 'parts' && kind !== 'ceilEls' && kind !== 'radNiches' && kind !== 'covers' && measure[kind].length === 0) measure[kind].push(kind === 'ceiling' ? { l: '', w: '' } : '');
+if (kind !== 'openings' && kind !== 'parts' && kind !== 'ceilEls' && kind !== 'radNiches' && kind !== 'covers' && kind !== 'blocks' && measure[kind].length === 0) measure[kind].push(kind === 'ceiling' ? { l: '', w: '' } : '');
 saveMeasureDraft();
 renderMeasure();
 }
@@ -2129,7 +2129,7 @@ if (radUnder(el) || !Number.isInteger(el.wall)) return;
 const k = map[el.wall];
 if (Number.isInteger(k) && k >= 0) el.wall = k; else delete el.wall;
 });
-[...(Array.isArray(m.covers) ? m.covers : []), ...(Array.isArray(m.parts) ? m.parts : [])].forEach(el => {
+[...(Array.isArray(m.covers) ? m.covers : []), ...(Array.isArray(m.parts) ? m.parts : []), ...(Array.isArray(m.blocks) ? m.blocks : [])].forEach(el => {
 if (!Number.isInteger(el.wall)) return;
 const k = map[el.wall];
 if (Number.isInteger(k) && k >= 0) el.wall = k; else delete el.wall;
