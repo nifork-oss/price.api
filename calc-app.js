@@ -1190,6 +1190,13 @@ const base = window.location.href.replace(/calc\.html.*$/, '');
 return `${base}view.html?id=${encodeURIComponent(id)}`;
 }
 
+// Страница заказчика — так, как он её увидит по ссылке
+function openClientView(id) {
+const url = getInvoiceShareUrl(id);
+const w = window.open(url, '_blank');
+if (!w) location.href = url;
+}
+
 async function shareInvoiceLink(id) {
 const url = getInvoiceShareUrl(id);
 if (navigator.share) {
@@ -1645,7 +1652,7 @@ ${renderAttachmentsHtml(rec.attachments)}
 ${!isEstimate ? renderPaymentSectionHtml(rec, recordId) : ''}
 <div class="hc-actions">
 <button type="button" class="hc-btn hc-btn-primary" onclick="sendHistoryRecordPDF('${recordId}')"><svg class="ic"><use href="#i-send"/></svg> Отправить PDF</button>
-${canShare ? `<button type="button" class="hc-btn" onclick="shareInvoiceLink('${recordId}')" aria-label="Ссылка для заказчика"><svg class="ic"><use href="#i-link"/></svg></button>` : ''}
+${canShare ? `<button type="button" class="hc-btn" onclick="openClientView('${recordId}')" aria-label="Посмотреть, как увидит заказчик" title="Как видит заказчик"><svg class="ic"><use href="#i-eye"/></svg></button><button type="button" class="hc-btn" onclick="shareInvoiceLink('${recordId}')" aria-label="Ссылка для заказчика"><svg class="ic"><use href="#i-link"/></svg></button>` : ''}
 <button type="button" class="hc-btn hc-btn-more" onclick="openRecordActions('${recordId}', '${containerId}')" aria-label="Другие действия">⋯</button>
 </div>
 </div>
@@ -1661,7 +1668,7 @@ return many;
 
 /* ---------- Нижняя шторка с действиями ---------- */
 // Значки в шторке действий — строгие линейные вместо эмодзи
-const SHEET_ICONS = { '⬇️': 'download', '🔗': 'link', '🔒': 'lock', '🔓': 'unlock', '✏️': 'edit', '🗑️': 'trash', '🗑': 'trash',
+const SHEET_ICONS = { '⬇️': 'download', '👁': 'eye', '🔗': 'link', '🔒': 'lock', '🔓': 'unlock', '✏️': 'edit', '🗑️': 'trash', '🗑': 'trash',
 '📤': 'send', '🧹': 'clear', '💬': 'chat', '📋': 'copy', '📏': 'ruler', '➕': 'plus' };
 function sheetIconHtml(icon) {
 const id = SHEET_ICONS[icon];
@@ -1709,6 +1716,7 @@ const items = [
 { icon: '⬇️', label: 'Скачать PDF', onClick: () => downloadHistoryRecordPDF(recordId) },
 ];
 if (rec && rec.id && !rec.shareDisabled) {
+items.push({ icon: '👁', label: 'Посмотреть, как увидит заказчик', onClick: () => openClientView(recordId) });
 items.push({ icon: '🔗', label: 'Ссылка для заказчика', onClick: () => shareInvoiceLink(recordId) });
 }
 if (rec && rec.id && isCurrentAdmin()) {

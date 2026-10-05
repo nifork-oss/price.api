@@ -523,6 +523,13 @@ const handler = {
           items: rec.items || [],
           attachments: rec.attachments || [],
           objectName: obj ? obj.name : null,
+          // Замеры помещений из этого счёта — для планов и развёрток на
+          // странице заказчика (только те комнаты, где есть работы).
+          rooms: (() => {
+            const ids = new Set();
+            (rec.items || []).forEach((it) => (Array.isArray(it && it.rooms) ? it.rooms : []).forEach((r) => r && r.roomId && ids.add(r.roomId)));
+            return (obj && Array.isArray(obj.rooms) ? obj.rooms : []).filter((r) => r && ids.has(r.id) && r.measure).map((r) => ({ id: r.id, measure: r.measure }));
+          })(),
           // Для страницы заказчика — только даты и суммы оплат, без способа
           // оплаты и прочих служебных полей.
           payments: (rec.docType === "estimate" ? [] : rec.payments || []).map((p) => ({
