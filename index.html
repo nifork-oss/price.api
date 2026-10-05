@@ -10,11 +10,19 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
 body { background-color: #f4f6f8; margin: 0; padding: 12px 8px; color: #1f2a37; }
 .container { max-width: 680px; margin: 0 auto; background: #ffffff; padding: 20px 16px; border-radius: 16px; border: 1px solid #dfe3e8; box-shadow: 0 4px 20px rgba(29, 39, 51, 0.05); }
+/* Название компании — визитка над прайсом */
+.biz-card { position: relative; max-width: 420px; aspect-ratio: 85 / 55; margin: 4px auto 0; padding: 14px; border-radius: 14px; color: #f4ecd8; background: radial-gradient(120% 140% at 15% 0%, #2a3240 0%, #14181f 60%, #0d1015 100%); box-shadow: 0 10px 28px rgba(20, 24, 31, 0.28), 0 2px 6px rgba(20, 24, 31, 0.18); overflow: hidden; }
+.biz-card-frame { position: absolute; inset: 10px; border: 1px solid rgba(214, 178, 106, 0.85); border-radius: 8px; box-shadow: inset 0 0 0 4px #14181f, inset 0 0 0 5px rgba(214, 178, 106, 0.45); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px 18px; text-align: center; }
+.biz-card-caption { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #d6b26a; }
+.biz-card-name { font-family: "Playfair Display", Georgia, "Times New Roman", serif; font-weight: 700; line-height: 1.12; color: #f7efdc; overflow-wrap: anywhere; text-shadow: 0 1px 0 rgba(0,0,0,0.35); }
+.biz-card-rule { width: 56px; height: 1px; background: linear-gradient(90deg, transparent, #d6b26a, transparent); }
+.biz-card-note { font-size: 11px; color: rgba(244, 236, 216, 0.6); }
+.biz-card-hint { max-width: 420px; margin: 8px auto 0; font-size: 12px; color: #5a6470; text-align: center; }
 /* Стили шапки сайта */
 .site-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid #dfe3e8; gap: 12px; }
 .site-logo-area { display: flex; align-items: center; gap: 12px; }
@@ -339,7 +347,7 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px var(--s-ink); }
 </div>
 </header>
 
-<div id="publicCompanyBanner" style="display:none; background:linear-gradient(90deg,#14181f,#14181f); color:#fff; border-radius:12px; padding:14px; margin-bottom:14px; text-align:center;"></div>
+<div id="publicCompanyBanner" style="display:none; margin-bottom:14px;"></div>
 <div id="authNotice" style="display:none; background:#fff4d1; color:#14181f; border:1px solid #e3c766; border-radius:12px; padding:12px 14px; margin-bottom:14px; font-size:13px; line-height:1.45;"></div>
 
 <div class="nav-header">
@@ -525,28 +533,52 @@ box.style.display = text ? 'block' : 'none';
 box.innerHTML = text || '';
 }
 
+// Визитка с названием компании: её видят заказчики по ссылке ?company=…
+// и сам владелец, когда открывает свой прайс в режиме «Своя компания».
+function bizCardHtml(name, note) {
+const len = String(name).length;
+const size = len <= 12 ? 34 : len <= 20 ? 29 : len <= 32 ? 24 : len <= 48 ? 20 : 17;
+return `<div class="biz-card"><div class="biz-card-frame">
+<div class="biz-card-caption">Прайс-лист</div>
+<div class="biz-card-name" style="font-size:${size}px;">${escapeHtml(name)}</div>
+<div class="biz-card-rule"></div>
+<div class="biz-card-note">${escapeHtml(note)}</div>
+</div></div>`;
+}
+
 function showPublicCompanyBanner() {
 const banner = document.getElementById('publicCompanyBanner');
 if (!banner) return;
+const self = cloudData && cloudData.self;
+const ownName = isCompanyMode && self ? (String(self.companyName || '').trim() || self.login || '') : '';
 if (publicCompanyName) {
 banner.style.display = 'block';
-banner.innerHTML = `<div style="font-size:11px; opacity:0.85; margin-bottom:2px;">Прайс-лист компании</div><div style="font-size:18px; font-weight:700;">${escapeHtml(publicCompanyName)}</div>`;
+banner.innerHTML = bizCardHtml(publicCompanyName, 'Стоимость работ');
 } else if (publicCompanyNotFound) {
 banner.style.display = 'block';
-banner.style.background = '#c2361f';
-banner.innerHTML = `<div style="font-size:14px; font-weight:600;">Эта витрина недоступна — ссылка устарела или отключена владельцем.</div>`;
+banner.innerHTML = `<div style="background:#c2361f; color:#fff; border-radius:12px; padding:14px; text-align:center; font-size:14px; font-weight:600;">Эта витрина недоступна — ссылка устарела или отключена владельцем.</div>`;
+} else if (ownName) {
+banner.style.display = 'block';
+const hint = self.publicPriceEnabled
+? 'Так название видят заказчики по ссылке на ваш прайс.'
+: 'Так название увидят заказчики, когда вы откроете прайс по ссылке в кабинете.';
+banner.innerHTML = bizCardHtml(ownName, 'Стоимость работ') + `<div class="biz-card-hint">${hint}</div>`;
+} else {
+banner.style.display = 'none';
+banner.innerHTML = '';
 }
 }
 
 function escapeHtml(str) {
 return String(str ?? '')
 .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-.replace(/"/g, "&quot;").replace(/'/g, "&#14181f;");
+.replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
 await loadCloudData();
 checkAdminMode();
+showPublicCompanyBanner();
 });
 
 async function loadCloudData() {
