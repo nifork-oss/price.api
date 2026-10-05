@@ -521,6 +521,15 @@ const xl = Math.min(XA(r.x0), XA(r.x1));
 s += `<rect x="${xl}" y="${Yh(r.y1)}" width="${Math.abs(XA(r.x1) - XA(r.x0))}" height="${(r.y1 - r.y0) * k}" fill="none" stroke="#5b2d86" stroke-width="${j ? 0.18 : 0.28}"/>`;
 }));
 lay.lines.forEach(l => { s += `<line x1="${XA(l.x0)}" y1="${Yh(l.y)}" x2="${XA(l.x1)}" y2="${Yh(l.y)}" stroke="#5b2d86" stroke-width="0.35"/>`; });
+// закрыто мебелью — штриховкой
+const covs = typeof coversCompute === 'function' ? coversCompute(m).list.filter(e => e.wall === wi && e.span) : [];
+if (covs.length) s += `<defs><pattern id="plCovHatch${wi}" width="1.6" height="1.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1.6" stroke="#777" stroke-width="0.25"/></pattern></defs>`;
+covs.forEach(e => {
+const xl = Math.min(XA(e.span[0]), XA(e.span[1])), w = Math.abs(XA(e.span[1]) - XA(e.span[0]));
+s += `<rect x="${xl}" y="${Yh(e.top)}" width="${w}" height="${e.h * k}" fill="url(#plCovHatch${wi})" stroke="#000" stroke-width="0.3"/>`;
+s += `<rect x="${xl + w / 2 - Math.min(w / 2 - 0.5, 9)}" y="${Yh((e.top + e.bottom) / 2) - 2}" width="${Math.max(1, Math.min(w - 1, 18))}" height="3.2" fill="#fff"/>`;
+s += T(xl + w / 2, Yh((e.top + e.bottom) / 2) + 0.4, e.code + (e.name && w > 20 ? ' ' + e.name : ''), 2.1, 700);
+});
 // ниши в стенах
 const niches = typeof radNichesCompute === 'function' ? radNichesCompute(m).list.filter(e => e.wall === wi && e.span) : [];
 niches.forEach(e => {
@@ -554,6 +563,10 @@ s += T((xl + xr) / 2, Yh(v.y1) + 3, opCode(o, oi), 2.3, 700);
 s += vChain(o.type === 'door' ? [0, v.y1, Hh] : [0, v.y0, v.y1, Hh], xr + 3);
 if (v.guess) s += T((xl + xr) / 2, Yh(v.y0) - 1.5, 'подоконник условно', 1.8, 400, 'middle', '#a33');
 });
+covs.forEach(e => {
+edges.push(e.span[0], e.span[1]);
+if (!e.toCeil || e.bottom > 0.005) s += vChain([0, e.bottom, e.top, Hh].filter((v, i) => i !== 1 || e.bottom > 0.005), Math.max(XA(e.span[0]), XA(e.span[1])) - 2.5);
+});
 niches.forEach(e => {
 edges.push(e.span[0], e.span[1]);
 // высота ниши и низ от пола — у левого края
@@ -582,8 +595,9 @@ s += hChain([0, L], yF + 13, 2.6);
 s += vChain([0, Hh], x0 - 7, 2.6);
 // итог под чертежом
 const net = ops.reduce((a, { o }) => a + (o.type === 'balcony' ? mNum(o.w) * winH(o) + mNum(o.dw) * mNum(o.dh) : mNum(o.w) * mNum(o.h)) * (mCount(o.n) || 1), 0);
-s += T(box.x, yF + 20, `${plMm(L)} × ${plMm(Hh)} мм · стена ${plM2(L * Hh)} м²${net > 0 ? ` − проёмы ${plM2(net)} = ${plM2(L * Hh - net)} м²` : ''} · М 1:${sc}`, 2.5, 400, 'start', '#222');
-const notes = [...niches.map(e => `${e.code}: ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}`)];
+const covA = L < 1 ? 0 : covs.reduce((a, e) => a + e.area, 0);
+s += T(box.x, yF + 20, `${plMm(L)} × ${plMm(Hh)} мм · стена ${plM2(L * Hh)} м²${net > 0 ? ` − проёмы ${plM2(net)}` : ''}${covA > 0 ? ` − мебель ${plM2(covA)}` : ''}${net > 0 || covA > 0 ? ` = ${plM2(Math.max(0, L * Hh - net - covA))} м²` : ''} · М 1:${sc}`, 2.5, 400, 'start', '#222');
+const notes = [...covs.map(e => `${e.code}${e.name ? ' ' + e.name : ''}: закрыто ${plMm(e.w)}×${plMm(e.h)}${e.bottom > 0.005 ? `, от пола ${plMm(e.bottom)}` : ''}`), ...niches.map(e => `${e.code}: ${plMm(e.w)}×${plMm(e.h)}${e.d ? '×' + plMm(e.d) : ''}${e.raised ? `, от пола ${plMm(e.bottom)}` : ''}`)];
 if (notes.length) s += T(box.x, yF + 24, notes.join('; '), 2.2, 400, 'start', '#444');
 return { svg: s, scale: sc };
 }
@@ -826,7 +840,7 @@ const win = ops.filter(o => o.type !== 'door' && o.type !== 'balcony').reduce((a
 const door = ops.filter(o => o.type === 'door').reduce((a, o) => a + mCount(o.n), 0);
 const balc = ops.filter(o => o.type === 'balcony').reduce((a, o) => a + mCount(o.n), 0);
 const opsText = [win ? `окна ${win}` : '', door ? `двери ${door}` : '', balc ? `балк. бл. ${balc}` : ''].filter(Boolean).join(', ');
-return { ceilEls: (r.ceilEls || []).length, name: roomName(room), floor: plFloorArea(g) || r.ceiling || 0, per: r.perimeter, h: mNum(m.height), walls: r.wallsGross, net: r.openingsArea > 0 ? r.wallsNet : r.wallsGross, ops: opsText };
+return { ceilEls: (r.ceilEls || []).length, name: roomName(room), floor: plFloorArea(g) || r.ceiling || 0, per: r.perimeter, h: mNum(m.height), walls: r.wallsGross, net: Math.max(0, (r.openingsArea > 0 ? r.wallsNet : r.wallsGross) - (r.coversArea || 0)), ops: opsText };
 }
 
 async function buildMeasurePlanPDF(objectId) {
