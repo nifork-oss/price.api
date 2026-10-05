@@ -1914,7 +1914,16 @@ document.getElementById('profEmail').value = self.email || '';
 document.getElementById('profCompanyName').value = self.companyName || '';
 document.getElementById('profInvoiceNote').value = self.invoiceNote || '';
 document.getElementById('profPass').value = '';
-document.getElementById('priceBackupBox').style.display = isCompanyMode() ? 'block' : 'none';
+// файл прайса: у «своей компании» — её прайс, у админа в обычном режиме — общий
+const canPriceFile = isCompanyMode() || isCurrentAdmin();
+document.getElementById('priceBackupBox').style.display = canPriceFile ? 'block' : 'none';
+document.getElementById('publicPriceBox').style.display = isCompanyMode() ? 'block' : 'none';
+document.getElementById('priceFileTitle').style.marginTop = isCompanyMode() ? '18px' : '0';
+document.getElementById('priceFileTitle').textContent = isCompanyMode() ? 'Прайс-лист в файле' : 'Общий прайс-лист в файле';
+document.getElementById('priceFileNote').textContent = isCompanyMode()
+? 'Прайс «своей компании» хранится у вас в облаке. Файл — это копия на всякий случай и способ перенести прайс на другой телефон.'
+: 'Основной прайс сайта, который видят все. Из файла можно вернуть старую версию или перенести прайс с другого устройства.';
+document.getElementById('sharePriceFileBtn').style.display = canShareFiles() ? 'inline-flex' : 'none';
 document.getElementById('publicPriceToggle').checked = !!self.publicPriceEnabled;
 updatePublicPriceLinkBox();
 }
@@ -2015,45 +2024,96 @@ navigator.share({ title, text: 'Прайс-лист на услуги', url: lin
 }
 }
 
-function downloadPriceBackup() {
+function priceBackupFile() {
 const payload = {
+type: 'price',
 exportedAt: new Date().toISOString(),
 login: currentUser,
+scope: isCompanyMode() ? 'company' : 'main',
 services: cloudData.services || [],
 };
-const blob = new Blob(['\uFEFF' + JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+const name = `price-${isCompanyMode() ? currentUser : 'main'}-${new Date().toISOString().slice(0, 10)}.json`;
+const text = JSON.stringify(payload, null, 2);
+return { name, text };
+}
+
+function canShareFiles() {
+try {
+return !!(navigator.canShare && navigator.canShare({ files: [new File(['{}'], 'x.json', { type: 'application/json' })] }));
+} catch (e) { return false; }
+}
+
+function downloadPriceBackup() {
+const { name, text } = priceBackupFile();
+const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
 const url = URL.createObjectURL(blob);
 const a = document.createElement('a');
 a.href = url;
-a.download = `price-backup-${currentUser}-${new Date().toISOString().slice(0, 10)}.json`;
+a.download = name;
 document.body.appendChild(a);
 a.click();
 document.body.removeChild(a);
-URL.revokeObjectURL(url);
+setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Отправка файла прайса через меню телефона (Telegram, WhatsApp, почта…)
+async function sharePriceBackup() {
+const { name, text } = priceBackupFile();
+const file = new File([text], name, { type: 'application/json' });
+try {
+await navigator.share({ files: [file], title: 'Прайс-лист' });
+} catch (e) {
+if (e && e.name === 'AbortError') return;
+downloadPriceBackup();
+}
+}
+
+// Достаёт список услуг из файла: копия прайса (services) или полная
+// резервная копия сайта (record.services — общий прайс).
+function servicesFromFile(parsed) {
+if (Array.isArray(parsed)) return parsed;
+if (parsed && Array.isArray(parsed.services)) return parsed.services;
+if (parsed && parsed.record && Array.isArray(parsed.record.services)) return parsed.record.services;
+return null;
 }
 
 function restorePriceBackup(event) {
-const file = event.target.files[0];
+const input = event.target;
+const file = input.files && input.files[0];
+input.value = '';
 if (!file) return;
 const reader = new FileReader();
 reader.onload = async (e) => {
+let services;
 try {
-const parsed = JSON.parse(e.target.result);
-if (!Array.isArray(parsed.services)) {
+const raw = String(e.target.result || '').replace(/^\uFEFF/, '');
+services = servicesFromFile(JSON.parse(raw));
+} catch (err) {
+alert('Не удалось прочитать файл — это не файл прайс-листа (нужен .json, скачанный кнопкой «Скачать файл»).');
+return;
+}
+services = Array.isArray(services) ? services.filter(x => x && typeof x === 'object' && typeof x.name === 'string') : null;
+if (!services || !services.length) {
 alert('В файле не найден прайс-лист.');
 return;
 }
-if (!confirm(`Заменить текущий прайс-лист на копию из файла (${parsed.services.length} позиций)? Текущий прайс будет перезаписан.`)) return;
-cloudData.services = parsed.services;
-await saveCloudData();
-renderServices();
-alert('Прайс-лист восстановлен из файла.');
-} catch (err) {
-alert('Не удалось прочитать файл: ' + err.message);
+const cats = services.filter(x => x.isCategory).length;
+const items = services.length - cats;
+const target = isCompanyMode() ? 'прайс «своей компании»' : 'ОБЩИЙ прайс сайта (его видят все)';
+if (!confirm(`В файле — услуг: ${items}, категорий: ${cats}.\n\nЗаменить ${target} на прайс из файла? Текущий прайс будет перезаписан.`)) return;
+const before = cloudData.services;
+cloudData.services = services;
+const ok = await saveCloudData();
+if (!ok) {
+// не сохранилось — возвращаем как было, чтобы экран не врал
+if (cloudData.services === services) cloudData.services = before;
+return;
 }
+renderServices();
+alert('Прайс-лист загружен из файла и сохранён в облако.');
 };
-reader.readAsText(file);
-event.target.value = '';
+reader.onerror = () => alert('Не удалось открыть файл.');
+reader.readAsText(file, 'utf-8');
 }
 
 function renderUsersList() {
