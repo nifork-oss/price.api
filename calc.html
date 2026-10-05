@@ -457,6 +457,7 @@
 <button type="button" class="btn btn-primary" onclick="updateProfile()">Сохранить изменения</button>
 </div>
 <div class="profile-box" id="priceBackupBox" style="display:none;">
+<div id="publicPriceBox">
 <h3 style="font-size: 14px; margin-bottom: 12px;">Публичная витрина прайса</h3>
 <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600;">
 <input type="checkbox" id="publicPriceToggle" onchange="togglePublicPrice()">
@@ -469,15 +470,26 @@
 <button type="button" class="btn btn-success btn-sm" id="sharePublicPriceBtn" onclick="sharePublicPriceLink()" style="display:none;">Поделиться</button>
 </div>
 </div>
-<h3 style="font-size: 14px; margin: 18px 0 12px;">Резервная копия прайс-листа</h3>
-<p style="font-size:12px; color:#5d6878; margin-top:-6px;">Прайс-лист «своей компании» хранится только у вас в облаке — стоит иногда сохранять копию на телефон, на всякий случай.</p>
+</div>
+<h3 style="font-size: 14px; margin: 18px 0 12px;" id="priceFileTitle">Прайс-лист в файле</h3>
+<p style="font-size:12px; color:#5d6878; margin-top:-6px;" id="priceFileNote"></p>
 <div style="display:flex; gap:8px; flex-wrap:wrap;">
-<button type="button" class="btn btn-success btn-sm" onclick="downloadPriceBackup()">⬇ Скачать копию</button>
+<button type="button" class="btn btn-success btn-sm" onclick="downloadPriceBackup()">⬇ Скачать файл</button>
+<button type="button" class="btn btn-ghost btn-sm" id="sharePriceFileBtn" onclick="sharePriceBackup()" style="display:none;">Отправить файл</button>
 <label class="btn btn-primary btn-sm" style="cursor:pointer; margin:0;">
-Восстановить из файла
-<input type="file" accept=".json" onchange="restorePriceBackup(event)" style="display:none;">
+Загрузить из файла
+<input type="file" accept=".json,application/json,text/plain,text/json,application/octet-stream" onchange="restorePriceBackup(event)" style="display:none;">
 </label>
 </div>
+<details style="margin-top:10px; font-size:12px; color:#5d6878;">
+<summary style="cursor:pointer; font-weight:600; color:#33404f;">Как перенести прайс на другой телефон</summary>
+<ol style="margin:8px 0 0; padding-left:18px; line-height:1.5;">
+<li>Нажмите «Отправить файл» (или «Скачать файл») — файл <code>price-…json</code> появится в «Загрузках».</li>
+<li>Отправьте его себе: в Telegram «Избранное», WhatsApp, на почту или перекиньте по кабелю.</li>
+<li>На другом телефоне сохраните файл, откройте этот кабинет: «Профиль» → «Загрузить из файла» и выберите его.</li>
+<li>Перед заменой покажем, сколько позиций в файле, — подтвердите, и прайс сохранится в облако.</li>
+</ol>
+</details>
 </div>
 </div>
 
@@ -572,7 +584,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=e4f0b1b4"></script>
+<script src="calc-app.js?v=c6a0107e"></script>
 
 <script src="calc-measure.js?v=1cb9e28d"></script>
 
