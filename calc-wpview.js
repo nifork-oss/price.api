@@ -15,7 +15,7 @@ const WP_HL_FILL = 'rgba(255,138,0,.28)';
 
 // Что подсвечивать: стены/потолок/пол/проёмы/углы/лепнина…
 const WP_KIND = {
-walls: 'walls', wallsMinus: 'wallsMinus', parts: 'parts', tileWalls: 'tileWalls',
+walls: 'walls', wallsMinus: 'wallsMinus', parts: 'parts', partStrips: 'partStrips', tileWalls: 'tileWalls',
 ceiling: 'ceiling', ceilingNet: 'ceilingNet', tileFloor: 'floor', tileAll: 'tileAll',
 ceilNiche: 'ceilEls:niche', ceilBox: 'ceilEls:box', ceilFin: 'ceilEls', ceilFinArea: 'ceilEls', ceilLight: 'ceilEls:light',
 radFin: 'rad', radFinArea: 'rad', slopes: 'slopes', narrow: 'narrow',
@@ -45,6 +45,7 @@ if (kind === 'walls' || kind === 'wallsMinus') return L >= 1;
 if (kind === 'tileWalls' || kind === 'tileAll') return wpTileWalls(m).includes(i) || kind === 'tileAll';
 if (kind === 'narrow') return L < 1;
 if (kind === 'parts') return partsCompute(m).some(e => e.wall === i);
+if (kind === 'partStrips') return partStripsCompute(m, partsCompute(m)).list.some(x => x.wall === i);
 if (kind === 'slopes') return (m.openings || []).some(o => o.wall === i && o.slopes !== false && openingWidth(o) > 0);
 if (kind === 'rad') return radNichesCompute(m).list.some(e => e.wall === i);
 if (kind === 'molWall') return typeof molWallLayout === 'function' && (molWallLayout(m, i).frames.length || molWallLayout(m, i).lines.length) > 0;
@@ -128,6 +129,7 @@ free(i, [...coverCuts(i), ...parts]).forEach(([a, b]) => { hl += line(s, a, b, 5
 if ((kind === 'tileWalls' || kind === 'tileAll') && tw.includes(i)) free(i).forEach(([a, b]) => { hl += line(s, a, b, 5, WP_HL, 5); });
 if (kind === 'narrow' && narrow && !narrowHidden(i)) hl += line(s, 0, s.len, 5, WP_HL, 6);
 if (kind === 'parts') partsCompute(m).filter(e => e.wall === i && e.span).forEach(e => { hl += line(s, e.span[0], e.span[1], 5, WP_HL, 5); });
+if (kind === 'partStrips') partStripsCompute(m, partsCompute(m)).list.filter(x => x.wall === i).forEach(x => { const sp = x.where === 'у угла Б' ? [x.e.span[1], x.e.span[1] + x.gap] : (x.where === 'снизу' || x.where === 'сверху') ? x.e.span : [x.e.span[0] - x.gap, x.e.span[0]]; hl += line(s, sp[0], sp[1], 5, WP_HL, 5); });
 if (kind === 'rad') radNichesCompute(m).list.filter(e => e.wall === i && e.span).forEach(e => { hl += line(s, e.span[0], e.span[1], 5, WP_HL, 6); });
 if (kind === 'molWall' && wpWallHas(m, i, 'molWall')) hl += line(s, 0, s.len, 5, WP_HL, 3, '6 3');
 });
@@ -194,6 +196,12 @@ if (wallHl) s += rect(0, L, 0, Math.min(Hh, tileH || Hh), WP_HL_FILL);
 partsCompute(m).filter(e => e.wall === i && e.span).forEach(e => {
 const on = kind === 'parts';
 s += rect(e.span[0], e.span[1], e.bottom, e.top, on ? WP_HL_FILL : kind === 'wallsMinus' ? '#ffffff' : 'none', on ? WP_HL : '#2f6fc0', on ? 1.8 : 1, '5 3');
+});
+// узкие полосы у участков: подсвечены сами или (для «стены − участки») вырезаны
+if (kind === 'partStrips' || kind === 'wallsMinus') partStripsCompute(m, partsCompute(m)).list.filter(x => x.wall === i).forEach(x => {
+const e = x.e;
+const r0 = x.where === 'снизу' ? [e.span[0], e.span[1], e.bottom - x.gap, e.bottom] : x.where === 'сверху' ? [e.span[0], e.span[1], e.top, e.top + x.gap] : x.where === 'у угла Б' ? [e.span[1], e.span[1] + x.gap, e.bottom, e.top] : [e.span[0] - x.gap, e.span[0], e.bottom, e.top];
+s += rect(r0[0], r0[1], r0[2], r0[3], kind === 'partStrips' ? WP_HL_FILL : '#ffffff', kind === 'partStrips' ? WP_HL : 'none', kind === 'partStrips' ? 1.8 : 0);
 });
 // мебель — штриховкой, не обрабатывается
 (typeof coversCompute === 'function' ? coversCompute(m).pieces : []).filter(p => p.wall === i).forEach(p => {

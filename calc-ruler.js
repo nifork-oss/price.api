@@ -246,6 +246,20 @@ out += `<path d="M${dx} ${yF}V${Yh(e.bottom)}M${dx - 3} ${Yh(e.bottom)}h6" strok
 out += `<text x="${dx + 4}" y="${(yF + Yh(e.bottom)) / 2 + 4}" font-size="10" fill="#1f4f8f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${mFmt(e.bottom)}</text>`;
 }
 });
+// узкие полосы у участков (уже метра) — считаются в пог. м
+if (typeof partStripsCompute === 'function' && partHere.length) partStripsCompute(m, partsCompute(m)).list.filter(x => x.wall === i).forEach(x => {
+const e = x.e;
+let a0, a1, b0, b1;
+if (x.where === 'снизу') { a0 = e.span[0]; a1 = e.span[1]; b0 = e.bottom - x.gap; b1 = e.bottom; }
+else if (x.where === 'сверху') { a0 = e.span[0]; a1 = e.span[1]; b0 = e.top; b1 = e.top + x.gap; }
+else if (x.where === 'у угла Б') { a0 = e.span[1]; a1 = e.span[1] + x.gap; b0 = e.bottom; b1 = e.top; }
+else { a0 = e.span[0] - x.gap; a1 = e.span[0]; b0 = e.bottom; b1 = e.top; }
+const xL = Math.min(XA(a0), XA(a1)), xR = Math.max(XA(a0), XA(a1));
+out += `<rect x="${xL}" y="${Yh(b1)}" width="${xR - xL}" height="${(b1 - b0) * k}" fill="#fff3d6" stroke="#c98a00" stroke-width="1" stroke-dasharray="3 2"/>`;
+const vert = x.where === 'у угла А' || x.where === 'у угла Б' || x.where === 'слева';
+const cx = (xL + xR) / 2, cy = Yh((b0 + b1) / 2);
+out += `<text x="${cx}" y="${cy + 3.5}" text-anchor="middle" font-size="10" font-weight="700" fill="#8a5a00" paint-order="stroke" stroke="#fff3d6" stroke-width="3"${vert ? ` transform="rotate(-90 ${cx} ${cy})"` : ''}>${mFmt(x.len)} пог. м</text>`;
+});
 // ниши в стенах — штриховой рамкой, с кодом и глубиной
 const radHere = typeof radNichesCompute === 'function' ? radNichesCompute(m).list.filter(e => e.wall === i && e.span) : [];
 radHere.forEach(e => {
