@@ -143,9 +143,9 @@ if (kind === 'cornice' || kind === 'plinth') {
 const md = molGet(m), kd = kind === 'cornice' ? md.cornice : md.plinth;
 if (kd.on) molWalls(kd.walls, m).forEach(i => {
 const s = g.segs[i]; if (!s || !(s.len > 0)) return;
-if (kind === 'cornice') { hl += line(s, 0, s.len, 6, WP_HL, 3.5); return; }
+if (kind === 'cornice') { molCorniceSpans(m, i, s.len).forEach(([a, b]) => { hl += line(s, a, b, 6, WP_HL, 3.5); }); return; }
 let x = 0;
-molDoorSpans(m, i, s.len).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { if (a0 > x) hl += line(s, x, a0, 6, WP_HL, 3.5); x = Math.max(x, a1); });
+molPlinthGaps(m, i, s.len).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { if (a0 > x) hl += line(s, x, a0, 6, WP_HL, 3.5); x = Math.max(x, a1); });
 if (s.len > x) hl += line(s, x, s.len, 6, WP_HL, 3.5);
 });
 }
@@ -236,10 +236,10 @@ e.strips.filter(p => p.q && p.q.i === i).forEach(p => { const sp = p.span || [0,
 if (kind === 'cornice' || kind === 'plinth') {
 const md = molGet(m), kd = kind === 'cornice' ? md.cornice : md.plinth;
 if (kd.on && molWalls(kd.walls, m).includes(i)) {
-if (kind === 'cornice') s += band(Hh - 0.08, Hh);
+if (kind === 'cornice') molCorniceSpans(m, i, L).forEach(([a, b]) => { s += rect(a, b, Hh - 0.08, Hh, WP_HL); });
 else {
 let x = 0;
-molDoorSpans(m, i, L).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { if (a0 > x) s += rect(x, a0, 0, 0.08, WP_HL); x = Math.max(x, a1); });
+molPlinthGaps(m, i, L).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { if (a0 > x) s += rect(x, a0, 0, 0.08, WP_HL); x = Math.max(x, a1); });
 if (L > x) s += rect(x, L, 0, 0.08, WP_HL);
 }
 }

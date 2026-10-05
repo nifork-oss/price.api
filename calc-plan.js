@@ -315,9 +315,9 @@ if (kind.on) molWalls(kind.walls, m).forEach(i => {
 const q = g.segs[i]; if (!q || !(q.len > 0)) return;
 const nx = -q.dy * orient, ny = q.dx * orient, d = 1.1 / k;
 const seg = (a, b) => b - a > 0.005 ? `<line x1="${X(q.x1 + q.dx * a + nx * d)}" y1="${Y(q.y1 + q.dy * a + ny * d)}" x2="${X(q.x1 + q.dx * b + nx * d)}" y2="${Y(q.y1 + q.dy * b + ny * d)}" stroke="${mode === 'ceiling' ? '#5b2d86' : '#7a5230'}" stroke-width="0.6"/>` : '';
-if (mode === 'ceiling') { s += seg(0, q.len); return; }
+if (mode === 'ceiling') { molCorniceSpans(m, i, q.len).forEach(([a, b]) => { s += seg(a, b); }); return; }
 let x = 0;
-molDoorSpans(m, i, q.len).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { s += seg(x, a0); x = Math.max(x, a1); });
+molPlinthGaps(m, i, q.len).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { s += seg(x, a0); x = Math.max(x, a1); });
 s += seg(x, q.len);
 });
 }
@@ -509,11 +509,11 @@ s += line(x0 - 3, yF, x0 + L * k + 3, yF, 0.9);
 // лепнина: карниз и плинтус полосами, рамки и линии молдингов
 const lay = typeof molWallLayout === 'function' ? molWallLayout(m, wi) : { frames: [], lines: [] };
 const md = typeof molGet === 'function' ? molGet(m) : null;
-if (md && md.cornice.on && molWalls(md.cornice.walls, m).includes(wi)) s += `<rect x="${x0}" y="${yTop}" width="${L * k}" height="1.4" fill="#e6e0ee" stroke="#000" stroke-width="0.15"/>`;
+if (md && md.cornice.on && molWalls(md.cornice.walls, m).includes(wi)) molCorniceSpans(m, wi, L).forEach(([a, b]) => { s += `<rect x="${Math.min(XA(a), XA(b))}" y="${yTop}" width="${Math.abs(XA(b) - XA(a))}" height="1.4" fill="#e6e0ee" stroke="#000" stroke-width="0.15"/>`; });
 if (md && md.plinth.on && molWalls(md.plinth.walls, m).includes(wi)) {
 let x = 0;
 const seg = (a, b) => b - a > 0.005 ? `<rect x="${Math.min(XA(a), XA(b))}" y="${yF - 1.2}" width="${Math.abs(XA(b) - XA(a))}" height="1.2" fill="#eadfce" stroke="#000" stroke-width="0.15"/>` : '';
-molDoorSpans(m, wi, L).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { s += seg(x, a0); x = Math.max(x, a1); });
+molPlinthGaps(m, wi, L).sort((a, b) => a[0] - b[0]).forEach(([a0, a1]) => { s += seg(x, a0); x = Math.max(x, a1); });
 s += seg(x, L);
 }
 lay.frames.forEach(f => [f, f.inner].filter(Boolean).forEach((r, j) => {
