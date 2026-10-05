@@ -209,6 +209,22 @@ const cornerA = XA(0), cornerB = XA(L);
 [[cornerA, 'А'], [cornerB, 'Б']].forEach(([cx, letter]) => {
 out += `<circle cx="${cx}" cy="${Yh(Hh) - 12}" r="9" fill="#ffffff" stroke="#14181f" stroke-width="1.2"/><text x="${cx}" y="${Yh(Hh) - 8}" text-anchor="middle" font-size="11" font-weight="700" fill="#14181f">${letter}</text>`;
 });
+// закрыто мебелью — серой штриховкой, с кодом и названием
+const covHere = typeof coversCompute === 'function' ? coversCompute(m).list.filter(e => e.wall === i && e.span) : [];
+if (covHere.length) out += `<defs><pattern id="rlCovHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V6" stroke="#9aa3ad" stroke-width="1.4"/></pattern></defs>`;
+covHere.forEach(e => {
+const xL = Math.min(XA(e.span[0]), XA(e.span[1])), xR = Math.max(XA(e.span[0]), XA(e.span[1]));
+out += `<rect x="${xL}" y="${Yh(e.top)}" width="${xR - xL}" height="${e.h * k}" fill="#eceff2"/><rect x="${xL}" y="${Yh(e.top)}" width="${xR - xL}" height="${e.h * k}" fill="url(#rlCovHatch)" stroke="#5d6878" stroke-width="1.2"/>`;
+const lbl = e.code + (e.name ? ' ' + e.name : '');
+const cy = Yh((e.top + e.bottom) / 2);
+out += `<text x="${(xL + xR) / 2}" y="${cy + 4}" text-anchor="middle" font-size="10.5" font-weight="700" fill="#33404f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${escapeHtml(lbl.length > 18 && xR - xL < 90 ? e.code : lbl)}</text>`;
+// не до потолка — высота мебели справа
+if (!e.toCeil) {
+const hx = xR - 6;
+out += `<path d="M${hx} ${Yh(e.bottom)}V${Yh(e.top)}M${hx - 3} ${Yh(e.top)}h6" stroke="#33404f" stroke-width="1"/>`;
+out += `<text x="${hx - 3}" y="${Yh(e.top) + 11}" text-anchor="end" font-size="10" fill="#33404f" paint-order="stroke" stroke="#eceff2" stroke-width="3">↕${mFmt(e.h)}</text>`;
+}
+});
 // ниши в стенах — штриховой рамкой, с кодом и глубиной
 const radHere = typeof radNichesCompute === 'function' ? radNichesCompute(m).list.filter(e => e.wall === i && e.span) : [];
 radHere.forEach(e => {
@@ -229,6 +245,7 @@ const ops = (m.openings || []).map((o, oi) => ({ o, oi })).filter(({ o }) => o.w
 const edges = [0, L];
 // края ниш в стенах — в цепочку размеров (у ниши под окном совпадают с окном или рядом)
 radHere.forEach(e => edges.push(e.span[0], e.span[1]));
+covHere.forEach(e => edges.push(e.span[0], e.span[1]));
 ops.forEach(({ o, oi }) => {
 const [a0, a1] = openingSpan(o, L);
 edges.push(a0, a1);
@@ -286,9 +303,13 @@ box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label
 // площадь стены
 const opsArea = ops.reduce((a, { o }) => a + (o.type === 'balcony' ? mNum(o.w) * winH(o) + mNum(o.dw) * mNum(o.dh) : mNum(o.w) * mNum(o.h)) * mCount(o.n), 0);
 const sum = document.getElementById('rlElevSum');
+const covArea = L < 1 ? 0 : covHere.reduce((a, e) => a + e.area, 0);
+const covCut = covHere.filter(e => e.full).reduce((a, e) => a + e.h, 0);
 if (sum) sum.innerHTML = L < 1
-? `Стена ${i + 1}: уже метра (${mFmt(L)} м) — узкая, считается по высоте: <b>${mFmt(minLen(Hh))} пог. м</b> (во вкладке «Узкие»)`
-: `Стена ${i + 1}: ${mFmt(L)} × ${mFmt(Hh)} = <b>${mFmt(L * Hh)} м²</b>${opsArea > 0 ? ` − проёмы ${mFmt(opsArea)} = <b>${mFmt(L * Hh - opsArea)} м²</b>` : ''}`;
+? (covCut >= Hh - 0.005
+? `Стена ${i + 1}: уже метра (${mFmt(L)} м), целиком за мебелью — не обрабатывается`
+: `Стена ${i + 1}: уже метра (${mFmt(L)} м) — узкая, считается по высоте: <b>${mFmt(minLen(Hh - covCut))} пог. м</b>${covCut > 0 ? ' (без мебели)' : ''} (во вкладке «Узкие»)`)
+: `Стена ${i + 1}: ${mFmt(L)} × ${mFmt(Hh)} = <b>${mFmt(L * Hh)} м²</b>${opsArea > 0 ? ` − проёмы ${mFmt(opsArea)}` : ''}${covArea > 0 ? ` − мебель ${mFmt(covArea)}` : ''}${opsArea > 0 || covArea > 0 ? ` = <b>${mFmt(Math.max(0, L * Hh - opsArea - covArea))} м²</b>` : ''}`;
 const nav = document.getElementById('rlElevNav');
 if (nav) nav.textContent = `Стена ${i + 1} из ${g.segs.length}`;
 }
@@ -430,6 +451,19 @@ const bx = bmx - s.dy * 16 * o2, by = bmy + s.dx * 16 * o2;
 out += `<circle cx="${bx}" cy="${by}" r="9" fill="${on ? '#14181f' : '#ffffff'}" stroke="#14181f" stroke-width="1.2"/>`;
 out += `<text x="${bx}" y="${by + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="${on ? '#ffc83d' : '#14181f'}">${s.i + 1}</text>`;
 });
+// закрыто мебелью — серая штрихованная полоса вдоль стены изнутри
+if (Array.isArray(m.covers) && m.covers.length && typeof coversCompute === 'function') {
+const covs = coversCompute(m).list.filter(e => e.span && g.segs[e.wall]);
+if (covs.length) out += `<defs><pattern id="rlCovHatchP" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V5" stroke="#8a939d" stroke-width="1.3"/></pattern></defs>`;
+covs.forEach(e => {
+const s = g.segs[e.wall];
+const nx = -s.dy * o2, ny = s.dx * o2, d = 9;   // внутрь комнаты, в пикселях
+const P2 = a => [X(s.x1 + s.dx * a), Y(s.y1 + s.dy * a)];
+const [ax, ay] = P2(e.span[0]), [bx, by] = P2(e.span[1]);
+const pts = [[ax + nx * 3, ay + ny * 3], [bx + nx * 3, by + ny * 3], [bx + nx * (3 + d), by + ny * (3 + d)], [ax + nx * (3 + d), ay + ny * (3 + d)]];
+out += `<path d="M${pts.map(p => p.join(' ')).join('L')}Z" fill="url(#rlCovHatchP)" stroke="#5d6878" stroke-width="1"/>`;
+});
+}
 // углы не по 90° — подпись в углу
 if (shape === 'free' && Array.isArray(m.angles)) {
 g.segs.forEach(s => {
