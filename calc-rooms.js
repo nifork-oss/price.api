@@ -427,6 +427,7 @@ function openWorkPicker() {
 const rooms = pickedRooms();
 if (!rooms.length) { alert('Отметьте помещения, в которых делали работу.'); return; }
 workPickerOpenIdx = null;
+if (typeof wpView !== 'undefined') { wpView.room = 0; wpView.wall = 0; }
 document.getElementById('wpTitle').textContent = 'Работа: ' + rooms.map(roomName).join(', ');
 document.getElementById('wpSearch').value = '';
 document.getElementById('workPicker').classList.add('open');
@@ -461,12 +462,16 @@ if (cat && !catPrinted) { html += `<div class="wp-cat">${escapeHtml(cat)}</div>`
 const open = workPickerOpenIdx === idx;
 const remembered = lastSurf[srv.name];
 const sug = remembered && has(remembered) ? remembered : suggestSurface(srv, has);
+// что подсвечено на чертеже: выбранное мастером, иначе — предложенное
+if (open && (typeof wpHl === 'undefined' || !wpHl || !has(wpHl))) { wpHl = sug; if (typeof wpJumpToHl === 'function') wpJumpToHl(); }
+const wpHlKey = open && typeof wpHl !== 'undefined' ? wpHl : null;
 html += `<div class="wp-item${inCart.has(srv.name) ? ' added' : ''}">
 <button type="button" class="wp-row" onclick="toggleWorkOptions(${idx})">
 <span class="wp-row-name">${escapeHtml(srv.name)}${inCart.has(srv.name) ? ' <span class="wp-badge">✓ в счёте</span>' : ''}</span>
 <span class="wp-row-price">${Number(srv.price).toLocaleString('ru-RU')} ₽${srv.unit ? '/' + escapeHtml(srv.unit) : ''}</span>
 </button>
 ${open ? `<div class="wp-opts">
+<div id="wpViewBox">${typeof wpViewHtml === 'function' ? wpViewHtml(rooms) : ''}</div>
 <div class="wp-opts-title">Что считаем в отмеченных помещениях: <span class="wp-opts-hint">можно несколько, повторное нажатие — убрать</span></div>
 <div class="wp-surfaces">
 ${SURFACES.filter(s => has(s.key)).map(s => {
@@ -474,7 +479,7 @@ const st = workSurfaceState(srv, s.key, rooms).state;
 const cls = `wp-surface${s.key === sug ? ' suggested' : ''}${st === 'all' ? ' done' : ''}${st === 'some' ? ' partial' : ''}`;
 const mark = st === 'all' ? '✓ ' : '';
 const extra = st === 'some' ? ' · не все помещения' : '';
-return `<button type="button" class="${cls}" onclick="toggleWorkSurface(${idx}, '${s.key}')">${mark}${s.label}<small>${mFmt(sums[s.key].value)} ${sums[s.key].unit}${extra}</small></button>`;
+return `<button type="button" class="${cls}${s.key === wpHlKey ? ' hl' : ''}" data-surf="${s.key}" onclick="wpHl = '${s.key}'; toggleWorkSurface(${idx}, '${s.key}')" onpointerenter="if (event.pointerType === 'mouse' && typeof wpSetHl === 'function') wpSetHl('${s.key}')">${mark}${s.label}<small>${mFmt(sums[s.key].value)} ${sums[s.key].unit}${extra}</small></button>`;
 }).join('')}
 </div>
 <div class="wp-manual">
@@ -491,6 +496,7 @@ body.scrollTop = keepScroll;
 
 function toggleWorkOptions(idx) {
 workPickerOpenIdx = workPickerOpenIdx === idx ? null : idx;
+if (typeof wpHl !== 'undefined') wpHl = null;
 renderWorkPicker();
 }
 
