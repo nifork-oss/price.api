@@ -411,13 +411,16 @@ return out;
 }
 
 /* ---------- закрыто мебелью: шкафы, мебельные панели ---------- */
-// measure.covers = [{ name, wall, off, from, w, h, y0 }]:
+// measure.covers = [{ name, wall, off, from, w, h, y0, d, sideA, sideB }]:
 //   wall — стена (пусто — без привязки), off/from — отступ от угла А или Б (пусто — по центру),
-//   w — ширина (у стены пусто — на всю стену), h — высота (пусто — до потолка), y0 — низ от пола.
+//   w — ширина (у стены пусто — на всю стену), h — высота (пусто — до потолка), y0 — низ от пола,
+//   d — глубина; шкаф у внутреннего угла закрывает боком соседнюю стену на глубину,
+//   sideA/sideB — стена за боком у угла А/Б закрыта (не обрабатываем, по умолчанию) или нет.
 // За мебелью стену не обрабатываем — эта площадь вычитается из стен.
 // На узкой стене (уже метра), закрытой по всей ширине, вычитается из её высоты в «Узких».
 const coverCode = idx => 'М-' + (idx + 1);
 const coverWall = (m, el) => Number.isInteger(el.wall) && el.wall >= 0 && el.wall < (m.walls || []).length && mNum(m.walls[el.wall]) > 0 ? el.wall : null;
+const coverSideOn = (el, c) => el['side' + c] !== false;
 function coverGeom(m, el) {
 const wall = coverWall(m, el);
 const Hh = (wall != null ? wallHeightOf(m, wall) : mNum(m.height)) || 0;
@@ -438,26 +441,80 @@ w = span[1] - span[0];
 full = w >= L - 0.005;
 }
 if (!(w > 0)) return null;
-return { wall, span, off, w, h, bottom: y0, top, L, full, toCeil: !(hIn > 0) || top >= Hh - 0.005, narrow: wall != null && L < 1 };
+return { wall, span, off, w, h, bottom: y0, top, L, full, toCeil: !(hIn > 0) || top >= Hh - 0.005, narrow: wall != null && L < 1, d: mNum(el.d) };
+}
+// Соседние стены, которые шкаф у внутреннего угла закрывает боком: [{ c: 'А'|'Б', key, wall, span }]
+function coverSideWalls(m, gm) {
+if (!gm || gm.wall == null || !(gm.d > 0) || typeof rulerGeometry !== 'function') return [];
+let g;
+try { g = rulerGeometry(m); } catch (e) { return []; }
+const n = g.segs.length, s = g.segs[gm.wall];
+if (!s || n < 3) return [];
+const o = g.orient || 1, nx = -s.dy * o, ny = s.dx * o;   // внутрь комнаты
+const res = [];
+const tryCorner = (key, c, j, dirX, dirY) => {
+const sj = g.segs[j], Lj = mNum((m.walls || [])[j]);
+if (!sj || !(Lj > 0) || j === gm.wall) return;
+// соседняя стена уходит от угла внутрь комнаты — значит угол внутренний и бок шкафа к ней прижат
+if (dirX * nx + dirY * ny < 0.7) return;
+const dd = Math.min(gm.d, Lj);
+res.push({ key, c, wall: j, span: key === 'A' ? [Lj - dd, Lj] : [0, dd], L: Lj });
+};
+const prev = gm.wall > 0 ? gm.wall - 1 : (g.closed ? n - 1 : -1);
+const next = gm.wall < n - 1 ? gm.wall + 1 : (g.closed ? 0 : -1);
+if (gm.span[0] < 0.03 && prev >= 0) tryCorner('A', 'А', prev, -g.segs[prev].dx, -g.segs[prev].dy);
+if (gm.span[1] > gm.L - 0.03 && next >= 0) tryCorner('B', 'Б', next, g.segs[next].dx, g.segs[next].dy);
+return res;
 }
 function coversCompute(m) {
-const out = { list: [], area: 0, narrowCut: {} };
+// pieces — все закрытые куски по стенам (сам шкаф и стены за его боками) для чертежей
+const out = { list: [], area: 0, narrowCut: {}, pieces: [] };
+// кусок стены: площадь, а у узкой стены (закрыта по всей ширине) — минус из высоты
+const addPiece = (e, wall, span, L, side) => {
+const Hw = wallHeightOf(m, wall) || e.top;
+const top = Math.min(e.top, Hw), h = top - e.bottom;
+if (!(h > 0.005)) return null;
+const w = span[1] - span[0];
+const narrow = L < 1, full = w >= L - 0.005;
+const pc = { idx: e.idx, code: e.code, name: e.name, wall, span, w, h, bottom: e.bottom, top, toCeil: top >= Hw - 0.005, narrow, full, side, area: 0 };
+if (narrow) { if (full) out.narrowCut[wall] = (out.narrowCut[wall] || 0) + h; }
+else pc.area = w * h;
+out.pieces.push(pc);
+return pc;
+};
 (Array.isArray(m.covers) ? m.covers : []).forEach((el, idx) => {
 const gm = coverGeom(m, el);
 if (!gm) return;
 const name = String(el.name || '').trim();
-const e = { idx, code: coverCode(idx), name, ...gm, area: 0 };
+const e = { idx, code: coverCode(idx), name, ...gm, area: 0, sides: [] };
 const where = gm.wall != null ? `стена ${gm.wall + 1}${gm.full ? ', вся' : gm.off != null ? `, от угла ${el.from === 'end' ? 'Б' : 'А'} ${mFmt(gm.off)}` : ', по центру'}` : '';
-const size = `${mFmt(gm.w)}×${mFmt(gm.h)}${gm.bottom > 0.005 ? `, от пола ${mFmt(gm.bottom)}` : ''}`;
-if (gm.narrow) {
-// узкая стена: целиком по ширине — режем её высоту в «Узких», частично — не влияет
-if (gm.full) out.narrowCut[gm.wall] = (out.narrowCut[gm.wall] || 0) + gm.h;
-e.line = `${e.code}${name ? ' ' + name : ''} (${where}) ${size}${gm.full ? ' — узкая стена, минус из высоты в «Узких»' : ' — узкая стена закрыта не по всей ширине, не вычитается'}`;
+const size = `${mFmt(gm.w)}×${mFmt(gm.h)}${gm.d ? '×' + mFmt(gm.d) : ''}${gm.bottom > 0.005 ? `, от пола ${mFmt(gm.bottom)}` : ''}`;
+const parts = [];
+if (gm.wall != null) {
+const pc = addPiece(e, gm.wall, gm.span, gm.L, false);
+if (pc) {
+e.area += pc.area;
+parts.push(pc.narrow ? (pc.full ? `узкая стена: минус ${mFmt(pc.h)} из высоты в «Узких»` : 'узкая стена закрыта не по всей ширине — не вычитается') : `${mFmt(pc.area)} м²`);
+}
 } else {
 e.area = gm.w * gm.h;
-out.area += e.area;
-e.line = `${e.code}${name ? ' ' + name : ''}${where ? ` (${where})` : ''} ${size} = ${mFmt(e.area)} м²`;
+parts.push(`${mFmt(e.area)} м²`);
 }
+coverSideWalls(m, gm).forEach(sd => {
+const on = coverSideOn(el, sd.key);
+const side = { ...sd, on, area: 0 };
+if (on) {
+const pc = addPiece(e, sd.wall, sd.span, sd.L, true);
+if (pc) {
+side.area = pc.area; side.narrow = pc.narrow;
+e.area += pc.area;
+parts.push(`бок у угла ${sd.c} — стена ${sd.wall + 1} ${pc.narrow ? (pc.full ? `(узкая, минус ${mFmt(pc.h)} из высоты)` : '(узкая, не вычитается)') : `${mFmt(pc.span[1] - pc.span[0])}×${mFmt(pc.h)} = ${mFmt(pc.area)} м²`}`);
+}
+} else parts.push(`бок у угла ${sd.c} — стена ${sd.wall + 1} обрабатывается`);
+e.sides.push(side);
+});
+out.area += e.area;
+e.line = `${e.code}${name ? ' ' + name : ''}${where ? ` (${where})` : ''} ${size}: ${parts.join(', ')}${parts.length > 1 && e.area > 0 ? ` — всего ${mFmt(e.area)} м²` : ''}`;
 out.list.push(e);
 });
 return out;
@@ -1144,7 +1201,14 @@ set('mpCalcParts', [r.lines.parts, r.lines.wallsMinusParts].filter(Boolean).map(
 set('mpCalcCovers', [r.lines.covers ? r.lines.covers.replace(/; /g, '\n') : '', r.lines.wallsCovered].filter(Boolean).map(escapeHtml).join('<br>').replace(/\n/g, '<br>'));
 (measure.covers || []).forEach((el, i) => {
 const e = (r.covers || []).find(x => x.idx === i);
-set('mpCoverRes' + i, e ? (e.narrow ? (e.full ? `↕ ${mFmt(e.h)}` : '—') : `${mFmt(e.area)} м²`) : '');
+// стены за боками шкафа: кнопки появляются, когда шкаф стоит в углу и задана глубина
+const sd = document.getElementById('mpCoverSides' + i);
+if (sd) {
+const sides = e ? e.sides : [];
+sd.style.display = sides.length ? '' : 'none';
+sd.innerHTML = sides.length ? `<span class="mp-ce-walls-label">За боком не обрабатываем:</span>` + sides.map(x => `<button type="button" class="mp-ce-wall${x.on ? ' on' : ''}" onclick="toggleCoverSide(${i}, '${x.key}')" aria-pressed="${x.on}">угол ${x.c} · стена ${x.wall + 1}</button>`).join('') : '';
+}
+set('mpCoverRes' + i, e ? (e.area > 0 ? `${mFmt(e.area)} м²` : e.narrow && e.full ? `↕ ${mFmt(e.h)}` : '—') : '');
 });
 set('mpCalcRad', r.lines.radNiches ? escapeHtml(r.lines.radNiches).replace(/\n/g, '<br>') : '');
 (measure.radNiches || []).forEach((el, i) => {
@@ -1577,7 +1641,7 @@ const walls = Array.isArray(m.walls) ? m.walls : [];
 const hasWalls = walls.some(w => mNum(w) > 0);
 return `<section class="mp-sec">
 <div class="mp-sec-title">Закрыто мебелью</div>
-<div class="mp-hint">Шкафы, кухня, мебельные панели: за ними стену не обрабатываем — площадь вычитается из стен. Ширина пусто — вся стена, высота пусто — до потолка. Если над шкафом стену делаем, укажите высоту шкафа.</div>
+<div class="mp-hint">Шкафы, кухня, мебельные панели: за ними стену не обрабатываем — площадь вычитается из стен. Ширина пусто — вся стена, высота пусто — до потолка. Если над шкафом стену делаем, укажите высоту шкафа; навесной — низ от пола. С глубиной шкаф в углу закрывает боком соседнюю стену — отметьте, обрабатываем её за боком или нет.</div>
 ${list.map((el, i) => {
 const wi = coverWall(m, el);
 return `<div class="mp-open">
@@ -1595,9 +1659,13 @@ ${wi != null ? `<label>От угла <button type="button" class="mp-ce-corner" 
 </div>` : ''}
 <div class="mp-dims" style="margin-top:6px;">
 <label>Ширина ↔${mIn(`covers.${i}.w`, el.w, wi != null ? 'вся стена' : '1,2')}</label><span class="mp-x">×</span>
-<label>Высота ↕${mIn(`covers.${i}.h`, el.h, 'до потолка')}</label><span class="mp-x">·</span>
-<label>Низ от пола ↑${mIn(`covers.${i}.y0`, el.y0, '0')}</label>
+<label>Высота ↕${mIn(`covers.${i}.h`, el.h, 'до потолка')}</label><span class="mp-x">×</span>
+<label>Глубина${mIn(`covers.${i}.d`, el.d, '0,6')}</label>
 </div>
+<div class="mp-dims mp-dims-2" style="margin-top:6px;">
+<label>Низ от пола ↑${mIn(`covers.${i}.y0`, el.y0, '0')}</label><span></span><span></span>
+</div>
+<div class="mp-ce-walls mp-ce-faces" id="mpCoverSides${i}"></div>
 </div>`;
 }).join('')}
 <div class="mp-add-row"><button type="button" class="mp-add" onclick="addCover()">+ Закрыто мебелью</button></div>
@@ -1614,6 +1682,13 @@ measure.covers.push({ name: prev ? prev.name || '' : '', w: '', h: prev ? prev.h
 saveMeasureDraft();
 renderMeasure();
 focusMeasurePath(`covers.${measure.covers.length - 1}.w`);
+}
+function toggleCoverSide(i, key) {
+const el = (measure.covers || [])[i];
+if (!el) return;
+el['side' + key] = !coverSideOn(el, key);
+saveMeasureDraft();
+updateMeasureOutputs();
 }
 function setCoverWall(i, v) {
 const el = (measure.covers || [])[i];

@@ -210,16 +210,17 @@ const cornerA = XA(0), cornerB = XA(L);
 out += `<circle cx="${cx}" cy="${Yh(Hh) - 12}" r="9" fill="#ffffff" stroke="#14181f" stroke-width="1.2"/><text x="${cx}" y="${Yh(Hh) - 8}" text-anchor="middle" font-size="11" font-weight="700" fill="#14181f">${letter}</text>`;
 });
 // закрыто мебелью — серой штриховкой, с кодом и названием
-const covHere = typeof coversCompute === 'function' ? coversCompute(m).list.filter(e => e.wall === i && e.span) : [];
+// куски стены за мебелью: сам шкаф на этой стене и бока шкафов с соседних стен
+const covHere = typeof coversCompute === 'function' ? coversCompute(m).pieces.filter(e => e.wall === i) : [];
 if (covHere.length) out += `<defs><pattern id="rlCovHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V6" stroke="#9aa3ad" stroke-width="1.4"/></pattern></defs>`;
 covHere.forEach(e => {
 const xL = Math.min(XA(e.span[0]), XA(e.span[1])), xR = Math.max(XA(e.span[0]), XA(e.span[1]));
 out += `<rect x="${xL}" y="${Yh(e.top)}" width="${xR - xL}" height="${e.h * k}" fill="#eceff2"/><rect x="${xL}" y="${Yh(e.top)}" width="${xR - xL}" height="${e.h * k}" fill="url(#rlCovHatch)" stroke="#5d6878" stroke-width="1.2"/>`;
-const lbl = e.code + (e.name ? ' ' + e.name : '');
+const lbl = e.side ? e.code + ' бок' : e.code + (e.name ? ' ' + e.name : '');
 const cy = Yh((e.top + e.bottom) / 2);
-out += `<text x="${(xL + xR) / 2}" y="${cy + 4}" text-anchor="middle" font-size="10.5" font-weight="700" fill="#33404f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${escapeHtml(lbl.length > 18 && xR - xL < 90 ? e.code : lbl)}</text>`;
+out += `<text x="${(xL + xR) / 2}" y="${cy + 4}" text-anchor="middle" font-size="10.5" font-weight="700" fill="#33404f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${escapeHtml(xR - xL < lbl.length * 6 ? e.code : lbl)}</text>`;
 // не до потолка — высота мебели справа
-if (!e.toCeil) {
+if (!e.toCeil && xR - xL > 30) {
 const hx = xR - 6;
 out += `<path d="M${hx} ${Yh(e.bottom)}V${Yh(e.top)}M${hx - 3} ${Yh(e.top)}h6" stroke="#33404f" stroke-width="1"/>`;
 out += `<text x="${hx - 3}" y="${Yh(e.top) + 11}" text-anchor="end" font-size="10" fill="#33404f" paint-order="stroke" stroke="#eceff2" stroke-width="3">↕${mFmt(e.h)}</text>`;
@@ -423,6 +424,30 @@ if (el.light) { const [l0, l1] = ceilLightPts(p); out += `<path d="M${X(l0[0])} 
 if (shape === 'free' && g.segs.length >= 2 && g.filled === g.segs.length && !g.checkClosed && g.checkGap > 0.02 && !ghost) {
 out += `<path d="M${X(g.endX)} ${Y(g.endY)}L${X(0)} ${Y(0)}" stroke="#c2361f" stroke-width="1.5" stroke-dasharray="4 4"/>`;
 }
+// закрыто мебелью: с глубиной — контур шкафа в масштабе, без глубины — штрихованная полоса вдоль стены
+if (Array.isArray(m.covers) && m.covers.length && typeof coversCompute === 'function') {
+const covs = coversCompute(m).list.filter(e => e.span && g.segs[e.wall]);
+if (covs.length) out += `<defs><pattern id="rlCovHatchP" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V5" stroke="#8a939d" stroke-width="1.3"/></pattern></defs>`;
+covs.forEach(e => {
+const s = g.segs[e.wall];
+const nx = -s.dy * o2, ny = s.dx * o2;   // внутрь комнаты
+const W0 = a => [s.x1 + s.dx * a, s.y1 + s.dy * a];
+let pts;
+if (e.d > 0) {
+pts = [W0(e.span[0]), W0(e.span[1])];
+pts.push([pts[1][0] + nx * e.d, pts[1][1] + ny * e.d], [pts[0][0] + nx * e.d, pts[0][1] + ny * e.d]);
+pts = pts.map(([x, y]) => [X(x), Y(y)]);
+} else {
+const d = 9, [ax, ay] = [X(W0(e.span[0])[0]), Y(W0(e.span[0])[1])], [bx, by] = [X(W0(e.span[1])[0]), Y(W0(e.span[1])[1])];
+pts = [[ax + nx * 3, ay + ny * 3], [bx + nx * 3, by + ny * 3], [bx + nx * (3 + d), by + ny * (3 + d)], [ax + nx * (3 + d), ay + ny * (3 + d)]];
+}
+out += `<path d="M${pts.map(p => p.join(' ')).join('L')}Z" fill="#eceff2" opacity=".9"/><path d="M${pts.map(p => p.join(' ')).join('L')}Z" fill="url(#rlCovHatchP)" stroke="#5d6878" stroke-width="1"/>`;
+if (e.d > 0) {
+const cx = pts.reduce((a, p) => a + p[0], 0) / 4, cy = pts.reduce((a, p) => a + p[1], 0) / 4;
+out += `<text x="${cx}" y="${cy + 3.5}" text-anchor="middle" font-size="10" font-weight="700" fill="#33404f" paint-order="stroke" stroke="#ffffff" stroke-width="3">${e.code}</text>`;
+}
+});
+}
 const wh = Array.isArray(m.wallHeights) ? m.wallHeights : [];
 g.segs.forEach(s => {
 const on = s.i === sel || linked(s.i) || s.i === opWall;
@@ -451,19 +476,6 @@ const bx = bmx - s.dy * 16 * o2, by = bmy + s.dx * 16 * o2;
 out += `<circle cx="${bx}" cy="${by}" r="9" fill="${on ? '#14181f' : '#ffffff'}" stroke="#14181f" stroke-width="1.2"/>`;
 out += `<text x="${bx}" y="${by + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="${on ? '#ffc83d' : '#14181f'}">${s.i + 1}</text>`;
 });
-// закрыто мебелью — серая штрихованная полоса вдоль стены изнутри
-if (Array.isArray(m.covers) && m.covers.length && typeof coversCompute === 'function') {
-const covs = coversCompute(m).list.filter(e => e.span && g.segs[e.wall]);
-if (covs.length) out += `<defs><pattern id="rlCovHatchP" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V5" stroke="#8a939d" stroke-width="1.3"/></pattern></defs>`;
-covs.forEach(e => {
-const s = g.segs[e.wall];
-const nx = -s.dy * o2, ny = s.dx * o2, d = 9;   // внутрь комнаты, в пикселях
-const P2 = a => [X(s.x1 + s.dx * a), Y(s.y1 + s.dy * a)];
-const [ax, ay] = P2(e.span[0]), [bx, by] = P2(e.span[1]);
-const pts = [[ax + nx * 3, ay + ny * 3], [bx + nx * 3, by + ny * 3], [bx + nx * (3 + d), by + ny * (3 + d)], [ax + nx * (3 + d), ay + ny * (3 + d)]];
-out += `<path d="M${pts.map(p => p.join(' ')).join('L')}Z" fill="url(#rlCovHatchP)" stroke="#5d6878" stroke-width="1"/>`;
-});
-}
 // углы не по 90° — подпись в углу
 if (shape === 'free' && Array.isArray(m.angles)) {
 g.segs.forEach(s => {
