@@ -154,15 +154,17 @@ if (fc.lvl === 'c' && d.shadowCeil.includes(fc.e.wall)) facade('shadowCeil', fc)
 return out;
 }
 // Длина объединения отрезков (совпадающие участки — один раз)
-function maskUnionLen(segs) {
+// min — каждый прямой отрезок короче метра считается как 1 м (как в откосах и узких)
+function maskUnionLen(segs, min = false) {
 const byKey = new Map();
 segs.forEach(s => { if (!byKey.has(s.key)) byKey.set(s.key, []); byKey.get(s.key).push([Math.min(s.a, s.b), Math.max(s.a, s.b)]); });
 let len = 0;
 byKey.forEach(list => {
 list.sort((p, q) => p[0] - q[0]);
 let [c0, c1] = list[0];
-list.slice(1).forEach(([a, b]) => { if (a <= c1 + 1e-6) c1 = Math.max(c1, b); else { len += c1 - c0; c0 = a; c1 = b; } });
-len += c1 - c0;
+const run = v => min ? minLen(v) : v;
+list.slice(1).forEach(([a, b]) => { if (a <= c1 + 1e-6) c1 = Math.max(c1, b); else { len += run(c1 - c0); c0 = a; c1 = b; } });
+len += run(c1 - c0);
 });
 return len;
 }
@@ -181,7 +183,6 @@ const free = [];
 busy.forEach(([a, b]) => { if (a > x + 1e-6) free.push([x, Math.min(a, hi)]); x = Math.max(x, b); });
 if (hi > x + 1e-6) free.push([x, hi]);
 free.forEach(([a, b]) => {
-own[kind] += b - a;
 const horiz = Math.abs(sg.y1 - sg.y0) < 1e-9;
 pieces.push(horiz ? { ...sg, x0: a, x1: b, a, b } : { ...sg, y0: a, y1: b, a, b });
 });
@@ -189,6 +190,7 @@ if (!taken.has(sg.key)) taken.set(sg.key, []);
 taken.get(sg.key).push([lo, hi]);
 });
 });
+MASK_ORDER.forEach(kind => { own[kind] = maskUnionLen(pieces.filter(pc => pc.kind === kind), true); });
 return { pieces, own };
 }
 function maskCompute(m) {
@@ -221,11 +223,12 @@ const loose = { windows: 0, doors: 0 };
 if (Number.isInteger(o.wall) && lens[o.wall] > 0) return;
 if (!(openingWidth(o) > 0)) return;
 const k = mCount(o.n) || 1, w = mNum(o.w), h = o.type === 'balcony' ? winH(o) : mNum(o.h);
-if (o.type === 'door') { if (d.doors) loose.doors += (w + 2 * h) * k; }
+const ml = minLen;
+if (o.type === 'door') { if (d.doors) loose.doors += (ml(w) + 2 * ml(h)) * k; }
 else if (o.type === 'balcony') {
-if (d.windows) loose.windows += 2 * (w + h) * k;
-if (d.doors) loose.doors += (mNum(o.dw) + 2 * mNum(o.dh)) * k;
-} else if (d.windows) loose.windows += 2 * (w + h) * k;
+if (d.windows) loose.windows += 2 * (ml(w) + ml(h)) * k;
+if (d.doors) loose.doors += (ml(mNum(o.dw)) + 2 * ml(mNum(o.dh))) * k;
+} else if (d.windows) loose.windows += 2 * (ml(w) + ml(h)) * k;
 });
 const allW = lens.map((v, i) => v > 0 ? i : -1).filter(i => i >= 0);
 const wl = a => allW.length > 1 && allW.every(i => a.includes(i)) ? 'все стены' : `${a.length > 1 ? 'стены' : 'стена'} ${a.map(i => i + 1).join(', ')}`;
@@ -235,27 +238,29 @@ const as = maskAssign(segs);
 out.pieces = as.pieces;
 MASK_ORDER.forEach(k => {
 const len = as.own[k] + (loose[k] || 0);
-const full = maskUnionLen(segs.filter(sg => sg.kind === k)) + (loose[k] || 0);
-if (len > 0.0005 || full > 0.0005 || area[k] > 0.0005) out.parts.push({ key: k, label: labels[k], len, full, area: area[k] });
+const full = maskUnionLen(segs.filter(sg => sg.kind === k), true) + (loose[k] || 0);
+// короче метра — как 1 м: где это сработало, ставим звёздочку
+const min = as.own[k] - maskUnionLen(as.pieces.filter(pc => pc.kind === k)) > 1e-6;
+if (len > 0.0005 || full > 0.0005 || area[k] > 0.0005) out.parts.push({ key: k, label: labels[k] + (min ? '*' : ''), len, full, area: area[k], min });
 });
 out.len = out.parts.reduce((a, p) => a + p.len, 0);
 out.area = Object.values(area).reduce((a, v) => a + v, 0);
 // по видам для счёта
 Object.entries(MASK_SURFACES).forEach(([key, kinds]) => {
 const ps = out.parts.filter(p => kinds.includes(p.key));
-out.kinds[key] = { len: ps.reduce((a, p) => a + p.len, 0), full: ps.reduce((a, p) => a + p.full, 0), labels: ps.map(p => p.label) };
+out.kinds[key] = { len: ps.reduce((a, p) => a + p.len, 0), full: ps.reduce((a, p) => a + p.full, 0), labels: ps.map(p => p.label), min: ps.some(p => p.min) };
 });
 const shared = out.parts.reduce((a, p) => a + p.full, 0) - out.len;
 const f = v => mFmt(Math.round(v * 1000) / 1000);
 const shown = out.parts.filter(p => p.len > 0.0005);
 if (out.len > 0) {
 out.lines.len = `Укрывка, периметр примыкания: ${shown.map(p => `${p.label} ${f(p.len)}`).join(' + ')}${shown.length > 1 ? ` = ${f(out.len)}` : ''} пог. м`
-+ (shared > 0.0005 ? ` (общие участки ${f(shared)} пог. м посчитаны один раз)` : '');
++ (shared > 0.0005 ? ` (общие участки ${f(shared)} пог. м посчитаны один раз)` : '') + (out.parts.some(p => p.min) ? MIN_NOTE : '');
 }
-if (out.area > 0) out.lines.area = `Укрывка плёнкой: ${out.parts.filter(p => p.area > 0.0005).map(p => `${p.label} ${f(p.area)}`).join(' + ')}${out.parts.filter(p => p.area > 0.0005).length > 1 ? ` = ${f(out.area)}` : ''} м²`;
+if (out.area > 0) out.lines.area = `Укрывка плёнкой: ${out.parts.filter(p => p.area > 0.0005).map(p => `${p.label.replace('*', '')} ${f(p.area)}`).join(' + ')}${out.parts.filter(p => p.area > 0.0005).length > 1 ? ` = ${f(out.area)}` : ''} м²`;
 Object.entries(out.kinds).forEach(([key, v]) => {
 if (!(v.full > 0.0005)) return;
-out.lines[key] = `Укрывка: ${v.labels.join(', ')} ${f(v.len)} пог. м${v.full - v.len > 0.0005 ? ` (ещё ${f(v.full - v.len)} пог. м — общие с другой укрывкой, посчитаны там)` : ''}`;
+out.lines[key] = `Укрывка: ${v.labels.join(', ')} ${f(v.len)} пог. м${v.full - v.len > 0.0005 ? ` (ещё ${f(v.full - v.len)} пог. м — общие с другой укрывкой, посчитаны там)` : ''}${v.min ? MIN_NOTE : ''}`;
 });
 if (loose.windows + loose.doors > 0) out.lines.loose = 'Проёмы без стены считаются целиком, без слияния с другими участками';
 return out;
@@ -454,7 +459,7 @@ renderMaskViews();
 const el = document.getElementById('mpCalcMask');
 const kinds = Object.keys(MASK_SURFACES).filter(k => t.lines[k]);
 if (el) el.innerHTML = [t.lines.len, t.lines.area, t.lines.loose].filter(Boolean).map(escapeHtml).join('<br>')
-+ (kinds.length > 1 ? `<div class="mp-hint" style="margin-top:6px;">В счёт по видам:<br>${kinds.map(k => escapeHtml(t.lines[k])).join('<br>')}</div>` : '') || 'Отметьте, что укрываем';
++ (kinds.length > 1 ? `<div class="mp-hint" style="margin-top:6px;">В счёт по видам:<br>${kinds.map(k => escapeHtml(t.lines[k].replace(MIN_NOTE, ''))).join('<br>')}</div>` : '') || 'Отметьте, что укрываем';
 }
 function maskToggle(key) {
 const d = maskEnsure();
