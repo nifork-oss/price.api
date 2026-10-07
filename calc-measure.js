@@ -1027,6 +1027,7 @@ const mk = maskCompute(m);
 r.maskInfo = mk;
 r.maskLen = mk.len;
 r.maskArea = mk.area;
+Object.keys(mk.kinds).forEach(k => { r[k] = mk.kinds[k].len; });
 Object.keys(mk.lines).forEach(k => { r.lines['mask_' + k] = mk.lines[k]; });
 }
 return r;
@@ -1045,6 +1046,7 @@ if (tab === 'tileWalls') return { value: r.tileWalls || 0, unit: 'м²', label: 
 if (tab === 'tileFloor') return { value: r.tileFloor || 0, unit: 'м²', label: 'Плитка: пол', text: [r.lines.tile_floor, r.lines.tile_floorLayout, r.lines.tile_blocksFloor, r.lines.tile_matFloor].filter(Boolean).join('\n') };
 if (tab === 'tileAll') return { value: r.tileAll || 0, unit: 'м²', label: 'Плитка: всего', text: [r.lines.tile_walls, r.lines.tile_wallsLayout, r.lines.tile_floor, r.lines.tile_floorLayout, r.lines.tile_all, r.lines.tile_blocksWalls, r.lines.tile_blocksFloor, r.lines.tile_blocks, r.lines.tile_edges, r.lines.tile_matWalls, r.lines.tile_matFloor].filter(Boolean).join('\n') };
 if (tab === 'mask') return { value: r.maskLen || 0, unit: 'пог. м', label: 'Укрывка', text: [r.lines.mask_len, r.lines.mask_loose].filter(Boolean).join('\n') };
+if (typeof MASK_SURFACES !== 'undefined' && MASK_SURFACES[tab]) return { value: r[tab] || 0, unit: 'пог. м', label: { maskWindows: 'Укрывка: окна', maskDoors: 'Укрывка: двери', maskCovers: 'Укрывка: мебель', maskFloor: 'Укрывка: пол', maskCeiling: 'Укрывка: потолок', maskWalls: 'Укрывка: готовые стены', maskShadow: 'Укрывка: теневые профили' }[tab], text: r.lines['mask_' + tab] || '' };
 if (tab === 'maskArea') return { value: r.maskArea || 0, unit: 'м²', label: 'Укрывка плёнкой', text: r.lines.mask_area || '' };
 if (tab === 'molWall') return { value: r.molWall || 0, unit: 'пог. м', label: 'Молдинг на стенах', text: r.lines.mol_wall || '' };
 if (tab === 'corners' || tab === 'cornersOut' || tab === 'cornersIn') {

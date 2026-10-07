@@ -41,6 +41,7 @@ function wpWallHas(m, i, key) {
 const kind = WP_KIND[key] || '';
 const L = mNum((m.walls || [])[i]);
 if (!(L > 0)) return false;
+if (/^mask/.test(key || '') && typeof wpMaskPieces === 'function') return wpMaskPieces(m, key).some(p => p.wall === i);
 if (kind === 'walls' || kind === 'wallsMinus') return L >= 1;
 if (kind === 'tileWalls' || kind === 'tileAll') return wpTileWalls(m).includes(i) || kind === 'tileAll';
 if (kind === 'narrow') return L < 1;
@@ -52,6 +53,13 @@ if (kind === 'molWall') return typeof molWallLayout === 'function' && (molWallLa
 if (kind.startsWith('ceilEls')) { const r = computeMeasure(m); return (r.ceilEls || []).some(e => e.strips.some(p => p.q && p.q.i === i)); }
 if (kind === 'cornice' || kind === 'plinth') { const md = molGet(m); const k = kind === 'cornice' ? md.cornice : md.plinth; return k.on && molWalls(k.walls, m).includes(i); }
 return true;
+}
+
+// Укрывка: что из неё досталось выбранной строке счёта (всё — для «Укрывка» и «Укрывка, м²»)
+function wpMaskPieces(m, key) {
+if (typeof maskCompute !== 'function') return [];
+const kinds = typeof MASK_SURFACES !== 'undefined' ? MASK_SURFACES[key] : null;
+return maskCompute(m).pieces.filter(p => !kinds || kinds.includes(p.kind));
 }
 
 /* ---------- вид сверху ---------- */
@@ -283,6 +291,10 @@ s += `<path d="M${XA(a)} ${yF}V${Yh(Math.min(Hh, it.pieces[0]))}" stroke="${WP_H
 });
 }
 s += `<path d="M${x0 - 6} ${yF}H${x0 + L * k + 6}" stroke="#14181f" stroke-width="3"/>`;
+// укрывка — линии примыкания поверх пола
+if (/^mask/.test(key || '')) wpMaskPieces(m, key).filter(p => p.wall === i).forEach(p => {
+s += `<path d="M${XA(p.x0)} ${Yh(p.y0)}L${XA(p.x1)} ${Yh(p.y1)}" stroke="${WP_HL}" stroke-width="4" stroke-linecap="round"/>`;
+});
 // углы А и Б, длина и высота
 [[0, 'А'], [L, 'Б']].forEach(([a, t]) => { s += `<text x="${XA(a)}" y="${Yh(Hh) - 6}" text-anchor="middle" font-size="10" font-weight="700" fill="#586270">${t}</text>`; });
 s += `<text x="${x0 + L * k / 2}" y="${yF + 18}" text-anchor="middle" font-size="12" font-weight="700" fill="#14181f">${mFmt(L)} м</text>`;

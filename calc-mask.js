@@ -3,13 +3,16 @@
 // Подключается из calc.html после calc-tile.js; порядок подключения важен.
 
 /* ===================== УКРЫВКА ===================== */
-// В замере: measure.mask = { windows, doors, covers, floor, ceiling: true/false, walls: [номера стен] }.
+// В замере: measure.mask = { windows, doors, covers, floor, ceiling: true/false, walls: [номера стен],
+// shadowCeil, shadowFloor: [номера стен с теневым профилем у потолка и у пола] }.
 // Считается периметр примыкания — где укрываемая поверхность встречается с той,
 // на которой работаем: рамка окна и двери, контур шкафа на стене, линия пол–стена,
 // потолок–стена, контур готовой стены. Каждый периметр раскладывается на отрезки
 // по стенам; там, где отрезки совпадают (пол под дверью, низ шкафа на полу, угол
 // между двумя готовыми стенами), участок считается один раз.
 // Площадь под плёнку — справочно: окна, двери, мебель спереди, пол, потолок, стены.
+// В счёт каждый вид идёт отдельно (у теневых профилей своя цена): общий участок
+// достаётся одному виду — первому по порядку MASK_ORDER, — так что сумма видов равна итогу.
 
 const MASK_KINDS = [
 { key: 'windows', label: 'Окна' },
@@ -19,12 +22,20 @@ const MASK_KINDS = [
 { key: 'ceiling', label: 'Потолок' }
 ];
 const MASK_INK = '#e0662b';
+// кому достаётся общий участок: сначала теневые профили и готовые стены, потом пол и потолок
+const MASK_ORDER = ['shadowCeil', 'shadowFloor', 'walls', 'ceiling', 'floor', 'windows', 'doors', 'covers'];
+// виды укрывки в счёте: ключ поверхности → виды
+const MASK_SURFACES = {
+maskWindows: ['windows'], maskDoors: ['doors'], maskCovers: ['covers'], maskFloor: ['floor'],
+maskCeiling: ['ceiling'], maskWalls: ['walls'], maskShadow: ['shadowCeil', 'shadowFloor']
+};
 let maskElevWall = 0;
 let measureMaskPick = 'mask';
 
 function maskGet(m) {
 const d = m && m.mask && typeof m.mask === 'object' ? m.mask : {};
-return { windows: !!d.windows, doors: !!d.doors, covers: !!d.covers, floor: !!d.floor, ceiling: !!d.ceiling, walls: Array.isArray(d.walls) ? d.walls : [] };
+const arr = v => Array.isArray(v) ? v : [];
+return { windows: !!d.windows, doors: !!d.doors, covers: !!d.covers, floor: !!d.floor, ceiling: !!d.ceiling, walls: arr(d.walls), shadowCeil: arr(d.shadowCeil), shadowFloor: arr(d.shadowFloor) };
 }
 function maskEnsure() {
 measure.mask = maskGet(measure);
@@ -95,6 +106,8 @@ const Hh = wallHeightOf(m, i);
 if (d.floor) hor('floor', i, 0, 0, L);
 if (d.ceiling && Hh > 0) hor('ceiling', i, Hh, 0, L);
 if (d.walls.includes(i) && Hh > 0) rect('walls', i, 0, L, 0, Hh);
+if (d.shadowCeil.includes(i) && Hh > 0) hor('shadowCeil', i, Hh, 0, L);
+if (d.shadowFloor.includes(i)) hor('shadowFloor', i, 0, 0, L);
 });
 return out;
 }
@@ -111,11 +124,36 @@ len += c1 - c0;
 });
 return len;
 }
+// Раздать отрезки по видам: участок, уже занятый видом раньше по MASK_ORDER, второй раз не считается.
+// pieces — что досталось каждому виду (для чертежей), own — длина по видам.
+function maskAssign(segs) {
+const taken = new Map();
+const pieces = [], own = {};
+MASK_ORDER.forEach(kind => {
+own[kind] = 0;
+segs.filter(sg => sg.kind === kind).forEach(sg => {
+const lo = Math.min(sg.a, sg.b), hi = Math.max(sg.a, sg.b);
+const busy = (taken.get(sg.key) || []).filter(([a, b]) => b > lo && a < hi).sort((p, q) => p[0] - q[0]);
+let x = lo;
+const free = [];
+busy.forEach(([a, b]) => { if (a > x + 1e-6) free.push([x, Math.min(a, hi)]); x = Math.max(x, b); });
+if (hi > x + 1e-6) free.push([x, hi]);
+free.forEach(([a, b]) => {
+own[kind] += b - a;
+const horiz = Math.abs(sg.y1 - sg.y0) < 1e-9;
+pieces.push(horiz ? { ...sg, x0: a, x1: b, a, b } : { ...sg, y0: a, y1: b, a, b });
+});
+if (!taken.has(sg.key)) taken.set(sg.key, []);
+taken.get(sg.key).push([lo, hi]);
+});
+});
+return { pieces, own };
+}
 function maskCompute(m) {
 const d = maskGet(m);
 const segs = maskSegments(m);
-const out = { len: 0, area: 0, segs, parts: [], lines: {} };
-if (!segs.length && !(d.windows || d.doors || d.covers || d.floor || d.ceiling || d.walls.length)) return out;
+const out = { len: 0, area: 0, segs, pieces: [], parts: [], kinds: {}, lines: {} };
+if (!segs.length && !(d.windows || d.doors || d.covers || d.floor || d.ceiling || d.walls.length || d.shadowCeil.length || d.shadowFloor.length)) return out;
 // площадь под плёнку
 const lens = (m.walls || []).map(mNum);
 let floorA = 0;
@@ -123,7 +161,7 @@ try {
 const g = rulerGeometry(m);
 if (g && g.closed) floorA = typeof plFloorArea === 'function' ? plFloorArea(g) : Math.abs(g.segs.reduce((a, q) => a + q.x1 * q.y2 - q.x2 * q.y1, 0)) / 2;
 } catch (e) { floorA = 0; }
-const area = { windows: 0, doors: 0, covers: 0, floor: d.floor ? floorA : 0, ceiling: d.ceiling ? floorA : 0, walls: 0 };
+const area = { windows: 0, doors: 0, covers: 0, floor: d.floor ? floorA : 0, ceiling: d.ceiling ? floorA : 0, walls: 0, shadowCeil: 0, shadowFloor: 0 };
 (m.openings || []).forEach(o => {
 if (!(openingWidth(o) > 0)) return;
 const k = mCount(o.n) || 1;
@@ -147,20 +185,36 @@ if (d.windows) loose.windows += 2 * (w + h) * k;
 if (d.doors) loose.doors += (mNum(o.dw) + 2 * mNum(o.dh)) * k;
 } else if (d.windows) loose.windows += 2 * (w + h) * k;
 });
-const labels = { windows: 'окна', doors: 'двери', covers: 'мебель', floor: 'пол', ceiling: 'потолок', walls: `стены ${d.walls.map(i => i + 1).join(', ')}` };
-['windows', 'doors', 'covers', 'floor', 'ceiling', 'walls'].forEach(k => {
-const own = maskUnionLen(segs.filter(s => s.kind === k)) + (loose[k] || 0);
-if (own > 0.0005 || area[k] > 0.0005) out.parts.push({ key: k, label: labels[k], len: own, area: area[k] });
+const allW = lens.map((v, i) => v > 0 ? i : -1).filter(i => i >= 0);
+const wl = a => allW.length > 1 && allW.every(i => a.includes(i)) ? 'все стены' : `${a.length > 1 ? 'стены' : 'стена'} ${a.map(i => i + 1).join(', ')}`;
+const labels = { windows: 'окна', doors: 'двери', covers: 'мебель', floor: 'пол', ceiling: 'потолок', walls: wl(d.walls) === 'все стены' ? 'все готовые стены' : d.walls.length > 1 ? `готовые ${wl(d.walls)}` : `готовая ${wl(d.walls)}`,
+shadowCeil: `теневой у потолка (${wl(d.shadowCeil)})`, shadowFloor: `теневой у пола (${wl(d.shadowFloor)})` };
+const as = maskAssign(segs);
+out.pieces = as.pieces;
+MASK_ORDER.forEach(k => {
+const len = as.own[k] + (loose[k] || 0);
+const full = maskUnionLen(segs.filter(sg => sg.kind === k)) + (loose[k] || 0);
+if (len > 0.0005 || full > 0.0005 || area[k] > 0.0005) out.parts.push({ key: k, label: labels[k], len, full, area: area[k] });
 });
-out.len = maskUnionLen(segs) + loose.windows + loose.doors;
+out.len = out.parts.reduce((a, p) => a + p.len, 0);
 out.area = Object.values(area).reduce((a, v) => a + v, 0);
-const sum = out.parts.reduce((a, p) => a + p.len, 0);
-const shared = sum - out.len;
+// по видам для счёта
+Object.entries(MASK_SURFACES).forEach(([key, kinds]) => {
+const ps = out.parts.filter(p => kinds.includes(p.key));
+out.kinds[key] = { len: ps.reduce((a, p) => a + p.len, 0), full: ps.reduce((a, p) => a + p.full, 0), labels: ps.map(p => p.label) };
+});
+const shared = out.parts.reduce((a, p) => a + p.full, 0) - out.len;
 const f = v => mFmt(Math.round(v * 1000) / 1000);
+const shown = out.parts.filter(p => p.len > 0.0005);
 if (out.len > 0) {
-out.lines.len = `Укрывка, периметр примыкания: ${out.parts.filter(p => p.len > 0.0005).map(p => `${p.label} ${f(p.len)}`).join(' + ')}${shared > 0.0005 ? ` − общие участки ${f(shared)}` : ''}${out.parts.length > 1 || shared > 0.0005 ? ` = ${f(out.len)}` : ''} пог. м`;
+out.lines.len = `Укрывка, периметр примыкания: ${shown.map(p => `${p.label} ${f(p.len)}`).join(' + ')}${shown.length > 1 ? ` = ${f(out.len)}` : ''} пог. м`
++ (shared > 0.0005 ? ` (общие участки ${f(shared)} пог. м посчитаны один раз)` : '');
 }
 if (out.area > 0) out.lines.area = `Укрывка плёнкой: ${out.parts.filter(p => p.area > 0.0005).map(p => `${p.label} ${f(p.area)}`).join(' + ')}${out.parts.filter(p => p.area > 0.0005).length > 1 ? ` = ${f(out.area)}` : ''} м²`;
+Object.entries(out.kinds).forEach(([key, v]) => {
+if (!(v.full > 0.0005)) return;
+out.lines[key] = `Укрывка: ${v.labels.join(', ')} ${f(v.len)} пог. м${v.full - v.len > 0.0005 ? ` (ещё ${f(v.full - v.len)} пог. м — общие с другой укрывкой, посчитаны там)` : ''}`;
+});
 if (loose.windows + loose.doors > 0) out.lines.loose = 'Проёмы без стены считаются целиком, без слияния с другими участками';
 return out;
 }
@@ -209,6 +263,12 @@ s += `<path d="M${X(q.x1 + q.dx * sp[0])} ${Y(q.y1 + q.dy * sp[0])}L${X(q.x1 + q
 if (!lit) s += `<path d="M${X(q.x1 + q.dx * sp[0])} ${Y(q.y1 + q.dy * sp[0])}L${X(q.x1 + q.dx * sp[1])} ${Y(q.y1 + q.dy * sp[1])}" stroke="#14181f" stroke-width="1"/>`;
 });
 });
+// теневой профиль: пунктир вдоль стены изнутри
+const sh = [d.shadowCeil.includes(q.i), d.shadowFloor.includes(q.i)].filter(Boolean).length;
+if (sh && q.len > 0) {
+const ix = -q.dy * o * 9, iy = q.dx * o * 9;
+s += `<path d="M${X(q.x1) + ix} ${Y(q.y1) + iy}L${X(q.x2) + ix} ${Y(q.y2) + iy}" stroke="${MASK_INK}" stroke-width="2.4" stroke-dasharray="${sh > 1 ? '7 3' : '4 4'}"/>`;
+}
 if (!(q.len > 0)) return;
 const mx = (X(q.x1) + X(q.x2)) / 2 + q.dy * o * 13, my = (Y(q.y1) + Y(q.y2)) / 2 - q.dx * o * 13;
 const cur = q.i === maskElevWall;
@@ -256,7 +316,9 @@ s += `<text x="${(xl + xr) / 2}" y="${Yh(v.y1) + 12}" text-anchor="middle" font-
 s += `<path d="M${x0 - 6} ${yF}H${x0 + L * k + 6}" stroke="#14181f" stroke-width="3"/>`;
 // линии укрывки на этой стене — поверх пола
 maskSegments(m).filter(sg => sg.wall === wi).forEach(sg => {
-s += `<path d="M${XA(sg.x0).toFixed(1)} ${Yh(sg.y0).toFixed(1)}L${XA(sg.x1).toFixed(1)} ${Yh(sg.y1).toFixed(1)}" stroke="${MASK_INK}" stroke-width="3.2" stroke-linecap="round"/>`;
+const sh = sg.kind === 'shadowCeil' || sg.kind === 'shadowFloor';
+const dy = sg.kind === 'shadowCeil' ? 5 : sg.kind === 'shadowFloor' ? -5 : 0;
+s += `<path d="M${XA(sg.x0).toFixed(1)} ${(Yh(sg.y0) + dy).toFixed(1)}L${XA(sg.x1).toFixed(1)} ${(Yh(sg.y1) + dy).toFixed(1)}" stroke="${MASK_INK}" stroke-width="${sh ? 2.4 : 3.2}" stroke-linecap="round"${sh ? ' stroke-dasharray="5 4"' : ''}/>`;
 });
 s += `<text x="${x0 + L * k / 2}" y="${yF + 17}" text-anchor="middle" font-size="12" font-weight="700" fill="#14181f">${mFmt(L)} м</text>`;
 s += `<text x="${x0 - 10}" y="${(yF + Yh(Hh)) / 2}" text-anchor="middle" font-size="11.5" font-weight="700" fill="#14181f" transform="rotate(-90 ${x0 - 10} ${(yF + Yh(Hh)) / 2})">${mFmt(Hh)}</text>`;
@@ -327,9 +389,9 @@ const hasWalls = lens.some(v => v > 0);
 const chip = (on, label, click) => `<button type="button" class="mp-ce-wall${on ? ' on' : ''}" onclick="${click}" aria-pressed="${on}">${label}</button>`;
 return `<section class="mp-sec">
 <div class="mp-sec-title">Укрывка</div>
-<div class="mp-hint">Отметьте, что укрываем. Считается периметр примыкания: рамки окон и дверей, контур мебели на стене, линия пол–стена или потолок–стена, контур готовых стен. Где периметры совпадают, участок считается один раз. Площадь под плёнку — справочно.</div>
+<div class="mp-hint">Отметьте, что укрываем. Считается периметр примыкания: рамки окон и дверей, контур мебели на стене, линия пол–стена или потолок–стена, контур готовых стен. Где периметры совпадают, участок считается один раз. В счёт каждый вид идёт отдельной строкой. Площадь под плёнку — справочно.</div>
 <div class="mp-ce-walls" style="margin-top:6px;"><span class="mp-ce-walls-label">Укрываем:</span>${MASK_KINDS.map(x => chip(d[x.key], x.label, `maskToggle('${x.key}')`)).join('')}</div>
-${hasWalls ? `<div class="mp-ce-walls" style="margin-top:6px;"><span class="mp-ce-walls-label">Готовые стены:</span>${lens.map((v, i) => v > 0 ? chip(d.walls.includes(i), String(i + 1), `maskWallToggle(${i})`) : '').join('')}${chip(lens.filter(v => v > 0).length > 0 && lens.every((v, i) => !(v > 0) || d.walls.includes(i)), 'все', 'maskAllWalls()')}</div>` : ''}
+${hasWalls ? [['walls', 'Готовые стены:'], ['shadowCeil', 'Теневой у потолка:'], ['shadowFloor', 'Теневой у пола:']].map(([f, t]) => `<div class="mp-ce-walls" style="margin-top:6px;"><span class="mp-ce-walls-label">${t}</span>${lens.map((v, i) => v > 0 ? chip(d[f].includes(i), String(i + 1), `maskWallToggle(${i}, '${f}')`) : '').join('')}${chip(lens.every((v, i) => !(v > 0) || d[f].includes(i)), 'все', `maskAllWalls('${f}')`)}</div>`).join('') : ''}
 <div class="mp-ce-plan rl-sketch${maskFull === 'plan' ? ' full' : ''}" id="mpMaskPlan"></div>
 <div class="mp-hint">Касание стены на плане — её развёртка ниже. Оранжевым — что укрываем.</div>
 ${hasWalls ? `<div class="rl-elev-nav"><button type="button" onclick="maskStep(-1)" aria-label="Предыдущая стена">‹</button><span>Стена ${maskElevWall + 1} из ${n}</span><button type="button" onclick="maskStep(1)" aria-label="Следующая стена">›</button></div>
@@ -341,7 +403,9 @@ function updateMaskOutputs(r) {
 const t = r.maskInfo || maskCompute(measure);
 renderMaskViews();
 const el = document.getElementById('mpCalcMask');
-if (el) el.innerHTML = [t.lines.len, t.lines.area, t.lines.loose].filter(Boolean).map(escapeHtml).join('<br>') || 'Отметьте, что укрываем';
+const kinds = Object.keys(MASK_SURFACES).filter(k => t.lines[k]);
+if (el) el.innerHTML = [t.lines.len, t.lines.area, t.lines.loose].filter(Boolean).map(escapeHtml).join('<br>')
++ (kinds.length > 1 ? `<div class="mp-hint" style="margin-top:6px;">В счёт по видам:<br>${kinds.map(k => escapeHtml(t.lines[k])).join('<br>')}</div>` : '') || 'Отметьте, что укрываем';
 }
 function maskToggle(key) {
 const d = maskEnsure();
@@ -349,25 +413,27 @@ d[key] = !d[key];
 saveMeasureDraft();
 renderMeasure();
 }
-function maskWallToggle(i) {
+function maskWallToggle(i, field = 'walls') {
 const d = maskEnsure();
-const set = new Set(d.walls);
+const set = new Set(d[field]);
 if (set.has(i)) set.delete(i); else set.add(i);
-d.walls = [...set].sort((a, b) => a - b);
+d[field] = [...set].sort((a, b) => a - b);
 maskElevWall = i;
 saveMeasureDraft();
 renderMeasure();
 }
-function maskAllWalls() {
+function maskAllWalls(field = 'walls') {
 const d = maskEnsure();
 const all = (measure.walls || []).map((w, i) => mNum(w) > 0 ? i : -1).filter(i => i >= 0);
-d.walls = all.every(i => d.walls.includes(i)) ? [] : all;
+d[field] = all.every(i => d[field].includes(i)) ? [] : all;
 saveMeasureDraft();
 renderMeasure();
 }
 function setMaskPick(p) { measureMaskPick = p; updateMeasureOutputs(); }
 // номера готовых стен после перестройки стен: map[старый] = новый (или -1)
 function remapMaskWalls(m, map) {
-if (!m || !m.mask || !Array.isArray(m.mask.walls)) return;
-m.mask.walls = [...new Set(m.mask.walls.map(i => map[i]).filter(i => Number.isInteger(i) && i >= 0))].sort((a, b) => a - b);
+if (!m || !m.mask) return;
+['walls', 'shadowCeil', 'shadowFloor'].forEach(f => {
+if (Array.isArray(m.mask[f])) m.mask[f] = [...new Set(m.mask[f].map(i => map[i]).filter(i => Number.isInteger(i) && i >= 0))].sort((a, b) => a - b);
+});
 }
