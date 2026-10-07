@@ -39,6 +39,13 @@ const SURFACES = [
 { key: 'tileAll', tab: 'tileAll', label: 'Плитка: всего' },
 { key: 'mask', tab: 'mask', label: 'Укрывка' },
 { key: 'maskArea', tab: 'maskArea', label: 'Укрывка, м²' },
+{ key: 'maskWindows', tab: 'maskWindows', label: 'Укрывка: окна', sub: true },
+{ key: 'maskDoors', tab: 'maskDoors', label: 'Укрывка: двери', sub: true },
+{ key: 'maskCovers', tab: 'maskCovers', label: 'Укрывка: мебель', sub: true },
+{ key: 'maskFloor', tab: 'maskFloor', label: 'Укрывка: пол', sub: true },
+{ key: 'maskCeiling', tab: 'maskCeiling', label: 'Укрывка: потолок', sub: true },
+{ key: 'maskWalls', tab: 'maskWalls', label: 'Укрывка: готовые стены', sub: true },
+{ key: 'maskShadow', tab: 'maskShadow', label: 'Укрывка: теневые профили', sub: true },
 ];
 
 function calcObject() {
@@ -106,6 +113,13 @@ tileFloor: 'Плитка: пол',
 tileAll: 'Плитка',
 mask: 'Укрывка',
 maskArea: 'Укрывка',
+maskWindows: 'Укрывка: окна',
+maskDoors: 'Укрывка: двери',
+maskCovers: 'Укрывка: мебель',
+maskFloor: 'Укрывка: пол',
+maskCeiling: 'Укрывка: потолок',
+maskWalls: 'Укрывка: готовые стены',
+maskShadow: 'Укрывка: теневые профили',
 };
 function surfaceInvoiceLabel(item) {
 if (!item || !item.surface || item.surface === 'manual') return '';
@@ -186,7 +200,7 @@ list.innerHTML = '<div class="rooms-hint">У объекта пока нет по
 return;
 }
 const picked = rooms.filter(r => selectedRoomIds.has(r.id));
-const sums = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'partStrips' && s.key !== 'ceilingNet' && s.key !== 'cornersOut' && s.key !== 'cornersIn').map(s => ({ s, v: sumSurface(picked, s.key) })).filter(x => x.v.value > 0);
+const sums = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'partStrips' && s.key !== 'ceilingNet' && s.key !== 'cornersOut' && s.key !== 'cornersIn' && !s.sub).map(s => ({ s, v: sumSurface(picked, s.key) })).filter(x => x.v.value > 0);
 list.innerHTML = `
 <div class="room-select-all">
 <button type="button" class="chip" onclick="selectAllRooms(true)">Отметить все</button>
@@ -195,7 +209,7 @@ ${picked.length ? `<button type="button" class="chip" onclick="selectAllRooms(fa
 ${rooms.map(room => {
 const surf = roomSurfaces(room);
 const on = selectedRoomIds.has(room.id);
-const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'partStrips' && s.key !== 'ceilingNet' && s.key !== 'cornersOut' && s.key !== 'cornersIn' && surf[s.key].value > 0).map(s => `${s.label.toLowerCase()} ${mFmt(surf[s.key].value)}`).join(' · ');
+const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'partStrips' && s.key !== 'ceilingNet' && s.key !== 'cornersOut' && s.key !== 'cornersIn' && !s.sub && surf[s.key].value > 0).map(s => `${s.label.toLowerCase()} ${mFmt(surf[s.key].value)}`).join(' · ');
 return `<div class="room-row${on ? ' on' : ''}">
 <label class="room-check">
 <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleRoom('${room.id}', this.checked)">
@@ -397,7 +411,12 @@ try { localStorage.setItem(lastSurfaceStoreKey(), JSON.stringify(m)); } catch (e
 function suggestSurface(srv, has) {
 const n = String(srv.name || '').toLowerCase();
 // укрывка окон, дверей, пола плёнкой и малярным скотчем: пог. м — по периметру примыкания, м² — по площади
-if (/укрыв|плёнк|пленк|скотч/.test(n) && (has('mask') || has('maskArea'))) return srv.unit === 'м²' && has('maskArea') ? 'maskArea' : has('mask') ? 'mask' : 'maskArea';
+if (/укрыв|плёнк|пленк|скотч/.test(n) && (has('mask') || has('maskArea'))) {
+if (srv.unit === 'м²') return has('maskArea') ? 'maskArea' : 'mask';
+// по виду укрывки в названии: теневые профили, окна, двери, мебель, стены, потолок, пол
+const kind = [[/тенев/, 'maskShadow'], [/окн|окон/, 'maskWindows'], [/двер/, 'maskDoors'], [/мебел|шкаф|кухн|гарнитур/, 'maskCovers'], [/стен/, 'maskWalls'], [/потол/, 'maskCeiling'], [/(^|[^а-яё])пол([аеуы]|ом)?([^а-яё]|$)/, 'maskFloor']].find(([re, k]) => re.test(n) && has(k));
+return kind ? kind[1] : has('mask') ? 'mask' : 'maskArea';
+}
 // лепнина: потолочный плинтус — это карниз; «закарнизная ниша» (под карниз для штор) — не лепнина
 if (/(^|[^а-яё])карниз|галтел|потолочн\S* плинтус/.test(n) && !/закарниз|штор|гардин|тюл/.test(n) && has('molCornice')) return 'molCornice';
 if (/плинтус/.test(n) && has('molPlinth')) return 'molPlinth';
@@ -590,7 +609,7 @@ const canEdit = !isCurrentClient();
 const list = rooms.length
 ? rooms.map(room => {
 const surf = roomSurfaces(room);
-const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'partStrips' && s.key !== 'ceilingNet' && s.key !== 'cornersOut' && s.key !== 'cornersIn' && surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
+const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'partStrips' && s.key !== 'ceilingNet' && s.key !== 'cornersOut' && s.key !== 'cornersIn' && !s.sub && surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
 return `<div class="room-card">
 <div class="room-head">
 <div class="room-name">${escapeHtml(roomName(room))}</div>

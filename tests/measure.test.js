@@ -202,11 +202,23 @@ test('укрывка: периметр примыкания, общие учас
   run('measure.covers = [{ wall: 1, w: "1", h: "2", off: "1" }]; measure.mask.covers = true');
   k = run('maskCompute(measure)');
   near(k.len, 24.6 + 6 - 1);
-  assert.match(k.lines.len, /общие участки 1 /);
+  assert.match(k.lines.len, /общие участки 1 пог\. м посчитаны один раз/);
+  // в счёт по видам: общий низ шкафа достаётся полу, сумма видов — итог
+  near(k.kinds.maskFloor.len, 14);
+  near(k.kinds.maskCovers.len, 5);
+  near(k.kinds.maskWindows.len + k.kinds.maskDoors.len + k.kinds.maskCovers.len + k.kinds.maskFloor.len, k.len);
   // готовые стены 1 и 2: общий угол и низ по полу — один раз
   run('measure.covers = []; measure.mask.covers = false; measure.mask.walls = [0, 1]');
   k = run('maskCompute(measure)');
   near(k.len, 24.6 + (13.4 + 11.4 - 2.7) - 7);
+  // теневой профиль у потолка на стенах 1 и 3 — своя строка в счёте
+  run('measure.mask.shadowCeil = [0, 2]');
+  k = run('maskCompute(measure)');
+  near(k.kinds.maskShadow.len, 8);
+  near(k.len, 24.6 + (13.4 + 11.4 - 2.7) - 7 + 4);    // верх стены 1 уже у теневого, стены — на 4 меньше
+  near(k.kinds.maskWalls.len, 13.4 + 11.4 - 2.7 - 4);   // низ готовых стен — у стен, пол без него
+  near(k.kinds.maskFloor.len, 14 - 7);
+  near(run('measureValueForTab(computeMeasure(measure), "maskShadow").value'), 8);
   // во вкладке и в счёт: пог. м и м²
   const r = run('computeMeasure(measure)');
   near(run('measureValueForTab(computeMeasure(measure), "mask").value'), r.maskLen);
