@@ -37,6 +37,8 @@ const SURFACES = [
 { key: 'tileWalls', tab: 'tileWalls', label: 'Плитка: стены' },
 { key: 'tileFloor', tab: 'tileFloor', label: 'Плитка: пол' },
 { key: 'tileAll', tab: 'tileAll', label: 'Плитка: всего' },
+{ key: 'mask', tab: 'mask', label: 'Укрывка' },
+{ key: 'maskArea', tab: 'maskArea', label: 'Укрывка, м²' },
 ];
 
 function calcObject() {
@@ -102,6 +104,8 @@ molWall: 'Молдинг на стенах',
 tileWalls: 'Плитка: стены',
 tileFloor: 'Плитка: пол',
 tileAll: 'Плитка',
+mask: 'Укрывка',
+maskArea: 'Укрывка',
 };
 function surfaceInvoiceLabel(item) {
 if (!item || !item.surface || item.surface === 'manual') return '';
@@ -392,6 +396,8 @@ try { localStorage.setItem(lastSurfaceStoreKey(), JSON.stringify(m)); } catch (e
 
 function suggestSurface(srv, has) {
 const n = String(srv.name || '').toLowerCase();
+// укрывка окон, дверей, пола плёнкой и малярным скотчем: пог. м — по периметру примыкания, м² — по площади
+if (/укрыв|плёнк|пленк|скотч/.test(n) && (has('mask') || has('maskArea'))) return srv.unit === 'м²' && has('maskArea') ? 'maskArea' : has('mask') ? 'mask' : 'maskArea';
 // лепнина: потолочный плинтус — это карниз; «закарнизная ниша» (под карниз для штор) — не лепнина
 if (/(^|[^а-яё])карниз|галтел|потолочн\S* плинтус/.test(n) && !/закарниз|штор|гардин|тюл/.test(n) && has('molCornice')) return 'molCornice';
 if (/плинтус/.test(n) && has('molPlinth')) return 'molPlinth';
