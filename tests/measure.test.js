@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const vm = require('vm');
 const { loadCalc } = require('./load.js');
 
-const FILES = ['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-import.js'];
+const FILES = ['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-import.js'];
 
 // Новая песочница на каждую проверку: замер — глобальная переменная страницы
 function setup(m) {
@@ -188,4 +188,27 @@ test('наружные углы под плитку: углы стен и кор
   assert.match(t.lines.edges, /уголок: 3 шт\. по 2,5 м/);
   run('measure.tile.walls.edge = "cut45"');
   assert.match(run('tileCompute(measure, computeMeasure(measure))').lines.edges, /запил 45°/);
+});
+
+test('укрывка: периметр примыкания, общие участки один раз', () => {
+  // комната 4 × 3, высота 2,7; окно 1,5 × 1,4 на стене 1, дверь 0,8 × 2 на стене 3
+  const { run } = setup({ shape: 'rect', height: '2,7', walls: ['4', '3', '4', '3'],
+    openings: [{ type: 'window', w: '1,5', h: '1,4', n: '1', wall: 0 }, { type: 'door', w: '0,8', h: '2', n: '1', wall: 2 }],
+    mask: { windows: true, doors: true, floor: true } });
+  let k = run('maskCompute(measure)');
+  near(k.len, 5.8 + 4.8 + 14);                         // рамка окна, дверь без порога, пол по стенам
+  near(k.area, 2.1 + 1.6 + 12);
+  // шкаф 1 × 2 на полу у стены 2: низ шкафа совпадает с линией пола
+  run('measure.covers = [{ wall: 1, w: "1", h: "2", off: "1" }]; measure.mask.covers = true');
+  k = run('maskCompute(measure)');
+  near(k.len, 24.6 + 6 - 1);
+  assert.match(k.lines.len, /общие участки 1 /);
+  // готовые стены 1 и 2: общий угол и низ по полу — один раз
+  run('measure.covers = []; measure.mask.covers = false; measure.mask.walls = [0, 1]');
+  k = run('maskCompute(measure)');
+  near(k.len, 24.6 + (13.4 + 11.4 - 2.7) - 7);
+  // во вкладке и в счёт: пог. м и м²
+  const r = run('computeMeasure(measure)');
+  near(run('measureValueForTab(computeMeasure(measure), "mask").value'), r.maskLen);
+  assert.strictEqual(run('measureValueForTab(computeMeasure(measure), "maskArea").unit'), 'м²');
 });

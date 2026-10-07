@@ -1021,6 +1021,14 @@ r.tileFloor = t.floor;
 r.tileAll = t.walls + t.floor;
 Object.keys(t.lines).forEach(k => { r.lines['tile_' + k] = t.lines[k]; });
 }
+// Укрывка: периметр примыкания и площадь плёнки
+if (typeof maskCompute === 'function') {
+const mk = maskCompute(m);
+r.maskInfo = mk;
+r.maskLen = mk.len;
+r.maskArea = mk.area;
+Object.keys(mk.lines).forEach(k => { r.lines['mask_' + k] = mk.lines[k]; });
+}
 return r;
 }
 
@@ -1036,6 +1044,8 @@ if (tab === 'molCeil') return { value: r.molCeil || 0, unit: 'пог. м', label
 if (tab === 'tileWalls') return { value: r.tileWalls || 0, unit: 'м²', label: 'Плитка: стены', text: [r.lines.tile_walls, r.lines.tile_wallsLayout, r.lines.tile_blocksWalls, r.lines.tile_edges, r.lines.tile_matWalls].filter(Boolean).join('\n') };
 if (tab === 'tileFloor') return { value: r.tileFloor || 0, unit: 'м²', label: 'Плитка: пол', text: [r.lines.tile_floor, r.lines.tile_floorLayout, r.lines.tile_blocksFloor, r.lines.tile_matFloor].filter(Boolean).join('\n') };
 if (tab === 'tileAll') return { value: r.tileAll || 0, unit: 'м²', label: 'Плитка: всего', text: [r.lines.tile_walls, r.lines.tile_wallsLayout, r.lines.tile_floor, r.lines.tile_floorLayout, r.lines.tile_all, r.lines.tile_blocksWalls, r.lines.tile_blocksFloor, r.lines.tile_blocks, r.lines.tile_edges, r.lines.tile_matWalls, r.lines.tile_matFloor].filter(Boolean).join('\n') };
+if (tab === 'mask') return { value: r.maskLen || 0, unit: 'пог. м', label: 'Укрывка', text: [r.lines.mask_len, r.lines.mask_loose].filter(Boolean).join('\n') };
+if (tab === 'maskArea') return { value: r.maskArea || 0, unit: 'м²', label: 'Укрывка плёнкой', text: r.lines.mask_area || '' };
 if (tab === 'molWall') return { value: r.molWall || 0, unit: 'пог. м', label: 'Молдинг на стенах', text: r.lines.mol_wall || '' };
 if (tab === 'corners' || tab === 'cornersOut' || tab === 'cornersIn') {
 const cmin = r.cornersMin ? MIN_NOTE : '';
@@ -1134,6 +1144,7 @@ if (cpFull) { cpFull = false; document.body.classList.remove('cp-full-open'); }
 if (cnFull) { cnFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof molFull !== 'undefined' && molFull) { molFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof tileFull !== 'undefined' && tileFull) { tileFull = null; document.body.classList.remove('cp-full-open'); }
+if (typeof maskFull !== 'undefined' && maskFull) { maskFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof rlFull !== 'undefined' && rlFull) { rlFull = false; document.body.classList.remove('rl-full-open'); }
 cpZoom = 1; cpPan = { x: 0, y: 0 }; cpRot = 0;
 if (typeof rulerTarget !== 'undefined') { rulerTarget = null; rulerUndo = []; rulerPick = null; if (typeof rlEditBase !== "undefined") rlEditBase = null; rlZoom = 1; rlPan = { x: 0, y: 0 }; rlUnderlayAdjust = false; rlLastFit = null; }
@@ -1336,6 +1347,8 @@ html += cornersTabHtml(m);
 html += typeof moldingTabHtml === 'function' ? moldingTabHtml(m) : '';
 } else if (measureTab === 'tile') {
 html += typeof tileTabHtml === 'function' ? tileTabHtml(m) : '';
+} else if (measureTab === 'mask') {
+html += typeof maskTabHtml === 'function' ? maskTabHtml(m) : '';
 } else if (measureTab === 'history') {
 html += renderMeasureHistoryHtml();
 }
@@ -1389,6 +1402,7 @@ if (measureTab === 'ceiling') renderCeilPlan();
 if (measureTab === 'corners') renderCnViews(r);
 if (measureTab === 'molding' && typeof updateMoldingOutputs === 'function') updateMoldingOutputs(r);
 if (measureTab === 'tile' && typeof updateTileOutputs === 'function') updateTileOutputs(r);
+if (measureTab === 'mask' && typeof updateMaskOutputs === 'function') updateMaskOutputs(r);
 (measure.parts || []).forEach((pt, i) => {
 const e = (r.partsList || []).find(x => x.idx === i);
 set('mpPartArea' + i, e ? `${mFmt(e.area)} м²` : '');
@@ -1435,6 +1449,9 @@ pick = `<div class="mp-pick">${opt('cornersOut', 'Наружные', r.cornersOu
 } else if (measureTab === 'tile' && r.tileWalls > 0 && r.tileFloor > 0 && measureTarget.kind !== 'room') {
 const opt = key => `<button type="button" class="${effTab === key ? 'active' : ''}" onclick="setTilePick('${key}')">${{ tileWalls: 'Стены', tileFloor: 'Пол', tileAll: 'Всего' }[key]}<br><b>${mFmt(r[key])}</b> м²</button>`;
 pick = `<div class="mp-pick">${opt('tileWalls')}${opt('tileFloor')}${opt('tileAll')}</div>`;
+} else if (measureTab === 'mask' && r.maskLen > 0 && r.maskArea > 0 && measureTarget.kind !== 'room') {
+const opt = (key, label, unit) => `<button type="button" class="${effTab === key ? 'active' : ''}" onclick="setMaskPick('${key}')">${label}<br><b>${mFmt(r[key === 'mask' ? 'maskLen' : 'maskArea'])}</b> ${unit}</button>`;
+pick = `<div class="mp-pick">${opt('mask', 'Периметр', 'пог. м')}${opt('maskArea', 'Плёнка', 'м²')}</div>`;
 } else if (measureTab === 'molding' && ['molCornice', 'molPlinth', 'molCeil', 'molWall'].filter(k => r[k] > 0).length > 1 && measureTarget.kind !== 'room') {
 const opt = (key, label) => r[key] > 0 ? `<button type="button" class="${effTab === key ? 'active' : ''}" onclick="setMolPick('${key}')">${label}<br><b>${mFmt(r[key])}</b> пог. м</button>` : '';
 pick = `<div class="mp-pick">${opt('molCornice', 'Карниз')}${opt('molPlinth', 'Плинтус')}${opt('molCeil', 'Потолок')}${opt('molWall', 'Стены')}</div>`;
@@ -1481,6 +1498,10 @@ const have = ['tileWalls', 'tileFloor', 'tileAll'].filter(k => r[k] > 0);
 const pick = typeof measureTilePick === 'string' ? measureTilePick : 'tileWalls';
 return have.includes(pick) && (pick !== 'tileAll' || (r.tileWalls > 0 && r.tileFloor > 0)) ? pick : (r.tileWalls > 0 ? 'tileWalls' : r.tileFloor > 0 ? 'tileFloor' : 'tileWalls');
 }
+if (measureTab === 'mask') {
+const pick = typeof measureMaskPick === 'string' ? measureMaskPick : 'mask';
+return pick === 'maskArea' && r.maskArea > 0 ? 'maskArea' : (r.maskLen > 0 || !(r.maskArea > 0) ? 'mask' : 'maskArea');
+}
 if (measureTab === 'molding') {
 const have = ['molCornice', 'molPlinth', 'molCeil', 'molWall'].filter(k => r[k] > 0);
 return have.includes(measureMolPick) ? measureMolPick : (have[0] || 'molCornice');
@@ -1493,6 +1514,7 @@ if (cpFull) cpToggleFull(false);
 if (cnFull) { cnFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof molFull !== 'undefined' && molFull) { molFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof tileFull !== 'undefined' && tileFull) { tileFull = null; document.body.classList.remove('cp-full-open'); }
+if (typeof maskFull !== 'undefined' && maskFull) { maskFull = null; document.body.classList.remove('cp-full-open'); }
 if (typeof rlFull !== 'undefined' && rlFull) { rlFull = false; document.body.classList.remove('rl-full-open'); }
 if (typeof rulerTarget !== 'undefined' && rulerTarget) { rulerTarget = null; document.getElementById('measurePanel').classList.remove('ruler-open'); }
 measureTab = tab;
@@ -2123,6 +2145,7 @@ renderMeasure();
 function remapCeilElWalls(m, map) {
 if (typeof remapMoldingWalls === 'function') remapMoldingWalls(m, map);
 if (typeof remapTileWalls === 'function') remapTileWalls(m, map);
+if (typeof remapMaskWalls === 'function') remapMaskWalls(m, map);
 // ниши в стенах на стене (не под окном): новый номер стены; стены нет — без привязки
 (Array.isArray(m.radNiches) ? m.radNiches : []).forEach(el => {
 if (radUnder(el) || !Number.isInteger(el.wall)) return;
@@ -2828,6 +2851,7 @@ if (r.molCornice > 0) p.push(`Карниз ${mFmt(r.molCornice)} пог. м`);
 if (r.molPlinth > 0) p.push(`Плинтус ${mFmt(r.molPlinth)} пог. м`);
 if (r.molCeil + r.molWall > 0) p.push(`Молдинги ${mFmt(r.molCeil + r.molWall)} пог. м`);
 if (r.tileAll > 0) p.push(`Плитка ${mFmt(r.tileAll)} м²`);
+if (r.maskLen > 0) p.push(`Укрывка ${mFmt(r.maskLen)} пог. м`);
 return p;
 }
 
