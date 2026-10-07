@@ -86,41 +86,85 @@ if (d.doors) rect('doors', o.wall, bp.door[0], bp.door[1], 0, v.door[1], { b: fa
 if (d.doors) rect('doors', o.wall, a0, a1, 0, v.y1, { b: false, t: true, l: true, r: true });
 } else if (d.windows) rect('windows', o.wall, a0, a1, v.y0, v.y1);
 });
+// Встроенная мебель на полу или до потолка: линия пол–стена или потолок–стена за ней
+// не нужна — скотч идёт по фасаду (спереди и по открытым бокам). hide[стена] — участки
+// за шкафом у пола (f) и у потолка (c); facades — фасады таких шкафов.
+const cov = typeof coversCompute === 'function' ? coversCompute(m) : { list: [], pieces: [] };
+const hide = lens.map(() => ({ f: [], c: [] }));
+const facades = [];
+cov.list.filter(e => e.wall != null && e.span).forEach(e => {
+const atF = e.bottom < 0.005, atC = !!e.toCeil;
+if (!atF && !atC) return;
+[{ wall: e.wall, span: e.span }, ...(e.sides || []).map(sd => ({ wall: sd.wall, span: sd.span }))].forEach(z => {
+if (!hide[z.wall]) return;
+if (atF) hide[z.wall].f.push(z.span);
+if (atC) hide[z.wall].c.push(z.span);
+});
+const open = e.d > 0 ? 2 - (e.sides || []).length : 0;
+const Hh = wallHeightOf(m, e.wall);
+if (atF) facades.push({ e, lvl: 'f', y: 0, open });
+if (atC && Hh > 0) facades.push({ e, lvl: 'c', y: Math.min(e.top, Hh), open });
+});
+// горизонталь вдоль всей стены без участков за мебелью
+const horFree = (kind, wall, y, L, spans) => {
+let x = 0;
+spans.slice().sort((p, q) => p[0] - q[0]).forEach(([a, b]) => { if (a > x) hor(kind, wall, y, x, Math.min(a, L)); x = Math.max(x, b); });
+if (L > x) hor(kind, wall, y, x, L);
+};
+// фасад: передняя кромка (по ширине шкафа) и открытые боки (по глубине) — свои прямые,
+// общие для пола/потолка и контура самого шкафа
+const facade = (kind, fc) => {
+const { e, lvl, y } = fc;
+out.push({ kind, wall: e.wall, x0: e.span[0], y0: y, x1: e.span[1], y1: y, key: `f${e.idx}:${lvl}`, a: e.span[0], b: e.span[1], facade: 'front' });
+for (let k = 0; k < fc.open; k++) out.push({ kind, wall: e.wall, x0: 0, y0: y, x1: 0, y1: y, key: `f${e.idx}:${lvl}:s${k}`, a: 0, b: e.d, facade: 'side' });
+};
 // мебель: контур, которым шкаф прилегает к стене; у шкафа в углу (с боком на соседней
-// стене) вертикаль в самом углу не нужна — там шкаф и стена за боком сходятся
-if (d.covers && typeof coversCompute === 'function') {
-const pcs = coversCompute(m).pieces;
+// стене) вертикаль в самом углу не нужна — там шкаф и стена за боком сходятся.
+// Низ на полу и верх у потолка — не по стене, а по фасаду.
+if (d.covers) {
+const pcs = cov.pieces;
 pcs.forEach(p => {
 const L = lens[p.wall];
 const corner = pcs.some(q => q !== p && q.idx === p.idx);
+const e = cov.list.find(x => x.idx === p.idx);
 rect('covers', p.wall, p.span[0], p.span[1], p.bottom, p.top, {
-b: true, t: true,
+b: !(p.bottom < 0.005 && e && e.wall != null), t: !(p.toCeil && e && e.wall != null),
 l: !(corner && p.span[0] < 0.0005),
 r: !(corner && p.span[1] > L - 0.0005)
 });
 });
+facades.forEach(fc => facade('covers', fc));
 }
 lens.forEach((L, i) => {
 if (!(L > 0)) return;
 const Hh = wallHeightOf(m, i);
-if (d.floor) hor('floor', i, 0, 0, L);
-if (d.ceiling && Hh > 0) hor('ceiling', i, Hh, 0, L);
+if (d.floor) horFree('floor', i, 0, L, hide[i].f);
+if (d.ceiling && Hh > 0) horFree('ceiling', i, Hh, L, hide[i].c);
 if (d.walls.includes(i) && Hh > 0) rect('walls', i, 0, L, 0, Hh);
-if (d.shadowCeil.includes(i) && Hh > 0) hor('shadowCeil', i, Hh, 0, L);
-if (d.shadowFloor.includes(i)) hor('shadowFloor', i, 0, 0, L);
+if (d.shadowCeil.includes(i) && Hh > 0) horFree('shadowCeil', i, Hh, L, hide[i].c);
+if (d.shadowFloor.includes(i)) horFree('shadowFloor', i, 0, L, hide[i].f);
+});
+facades.forEach(fc => {
+if (fc.lvl === 'f' && d.floor) facade('floor', fc);
+if (fc.lvl === 'c' && d.ceiling) facade('ceiling', fc);
+// теневой профиль обходит шкаф по фасаду, если он есть на стене за шкафом
+if (fc.lvl === 'f' && d.shadowFloor.includes(fc.e.wall)) facade('shadowFloor', fc);
+if (fc.lvl === 'c' && d.shadowCeil.includes(fc.e.wall)) facade('shadowCeil', fc);
 });
 return out;
 }
 // Длина объединения отрезков (совпадающие участки — один раз)
-function maskUnionLen(segs) {
+// min — каждый прямой отрезок короче метра считается как 1 м (как в откосах и узких)
+function maskUnionLen(segs, min = false) {
 const byKey = new Map();
 segs.forEach(s => { if (!byKey.has(s.key)) byKey.set(s.key, []); byKey.get(s.key).push([Math.min(s.a, s.b), Math.max(s.a, s.b)]); });
 let len = 0;
 byKey.forEach(list => {
 list.sort((p, q) => p[0] - q[0]);
 let [c0, c1] = list[0];
-list.slice(1).forEach(([a, b]) => { if (a <= c1 + 1e-6) c1 = Math.max(c1, b); else { len += c1 - c0; c0 = a; c1 = b; } });
-len += c1 - c0;
+const run = v => min ? minLen(v) : v;
+list.slice(1).forEach(([a, b]) => { if (a <= c1 + 1e-6) c1 = Math.max(c1, b); else { len += run(c1 - c0); c0 = a; c1 = b; } });
+len += run(c1 - c0);
 });
 return len;
 }
@@ -139,7 +183,6 @@ const free = [];
 busy.forEach(([a, b]) => { if (a > x + 1e-6) free.push([x, Math.min(a, hi)]); x = Math.max(x, b); });
 if (hi > x + 1e-6) free.push([x, hi]);
 free.forEach(([a, b]) => {
-own[kind] += b - a;
 const horiz = Math.abs(sg.y1 - sg.y0) < 1e-9;
 pieces.push(horiz ? { ...sg, x0: a, x1: b, a, b } : { ...sg, y0: a, y1: b, a, b });
 });
@@ -147,6 +190,7 @@ if (!taken.has(sg.key)) taken.set(sg.key, []);
 taken.get(sg.key).push([lo, hi]);
 });
 });
+MASK_ORDER.forEach(kind => { own[kind] = maskUnionLen(pieces.filter(pc => pc.kind === kind), true); });
 return { pieces, own };
 }
 function maskCompute(m) {
@@ -179,11 +223,12 @@ const loose = { windows: 0, doors: 0 };
 if (Number.isInteger(o.wall) && lens[o.wall] > 0) return;
 if (!(openingWidth(o) > 0)) return;
 const k = mCount(o.n) || 1, w = mNum(o.w), h = o.type === 'balcony' ? winH(o) : mNum(o.h);
-if (o.type === 'door') { if (d.doors) loose.doors += (w + 2 * h) * k; }
+const ml = minLen;
+if (o.type === 'door') { if (d.doors) loose.doors += (ml(w) + 2 * ml(h)) * k; }
 else if (o.type === 'balcony') {
-if (d.windows) loose.windows += 2 * (w + h) * k;
-if (d.doors) loose.doors += (mNum(o.dw) + 2 * mNum(o.dh)) * k;
-} else if (d.windows) loose.windows += 2 * (w + h) * k;
+if (d.windows) loose.windows += 2 * (ml(w) + ml(h)) * k;
+if (d.doors) loose.doors += (ml(mNum(o.dw)) + 2 * ml(mNum(o.dh))) * k;
+} else if (d.windows) loose.windows += 2 * (ml(w) + ml(h)) * k;
 });
 const allW = lens.map((v, i) => v > 0 ? i : -1).filter(i => i >= 0);
 const wl = a => allW.length > 1 && allW.every(i => a.includes(i)) ? 'все стены' : `${a.length > 1 ? 'стены' : 'стена'} ${a.map(i => i + 1).join(', ')}`;
@@ -193,27 +238,29 @@ const as = maskAssign(segs);
 out.pieces = as.pieces;
 MASK_ORDER.forEach(k => {
 const len = as.own[k] + (loose[k] || 0);
-const full = maskUnionLen(segs.filter(sg => sg.kind === k)) + (loose[k] || 0);
-if (len > 0.0005 || full > 0.0005 || area[k] > 0.0005) out.parts.push({ key: k, label: labels[k], len, full, area: area[k] });
+const full = maskUnionLen(segs.filter(sg => sg.kind === k), true) + (loose[k] || 0);
+// короче метра — как 1 м: где это сработало, ставим звёздочку
+const min = as.own[k] - maskUnionLen(as.pieces.filter(pc => pc.kind === k)) > 1e-6;
+if (len > 0.0005 || full > 0.0005 || area[k] > 0.0005) out.parts.push({ key: k, label: labels[k] + (min ? '*' : ''), len, full, area: area[k], min });
 });
 out.len = out.parts.reduce((a, p) => a + p.len, 0);
 out.area = Object.values(area).reduce((a, v) => a + v, 0);
 // по видам для счёта
 Object.entries(MASK_SURFACES).forEach(([key, kinds]) => {
 const ps = out.parts.filter(p => kinds.includes(p.key));
-out.kinds[key] = { len: ps.reduce((a, p) => a + p.len, 0), full: ps.reduce((a, p) => a + p.full, 0), labels: ps.map(p => p.label) };
+out.kinds[key] = { len: ps.reduce((a, p) => a + p.len, 0), full: ps.reduce((a, p) => a + p.full, 0), labels: ps.map(p => p.label), min: ps.some(p => p.min) };
 });
 const shared = out.parts.reduce((a, p) => a + p.full, 0) - out.len;
 const f = v => mFmt(Math.round(v * 1000) / 1000);
 const shown = out.parts.filter(p => p.len > 0.0005);
 if (out.len > 0) {
 out.lines.len = `Укрывка, периметр примыкания: ${shown.map(p => `${p.label} ${f(p.len)}`).join(' + ')}${shown.length > 1 ? ` = ${f(out.len)}` : ''} пог. м`
-+ (shared > 0.0005 ? ` (общие участки ${f(shared)} пог. м посчитаны один раз)` : '');
++ (shared > 0.0005 ? ` (общие участки ${f(shared)} пог. м посчитаны один раз)` : '') + (out.parts.some(p => p.min) ? MIN_NOTE : '');
 }
-if (out.area > 0) out.lines.area = `Укрывка плёнкой: ${out.parts.filter(p => p.area > 0.0005).map(p => `${p.label} ${f(p.area)}`).join(' + ')}${out.parts.filter(p => p.area > 0.0005).length > 1 ? ` = ${f(out.area)}` : ''} м²`;
+if (out.area > 0) out.lines.area = `Укрывка плёнкой: ${out.parts.filter(p => p.area > 0.0005).map(p => `${p.label.replace('*', '')} ${f(p.area)}`).join(' + ')}${out.parts.filter(p => p.area > 0.0005).length > 1 ? ` = ${f(out.area)}` : ''} м²`;
 Object.entries(out.kinds).forEach(([key, v]) => {
 if (!(v.full > 0.0005)) return;
-out.lines[key] = `Укрывка: ${v.labels.join(', ')} ${f(v.len)} пог. м${v.full - v.len > 0.0005 ? ` (ещё ${f(v.full - v.len)} пог. м — общие с другой укрывкой, посчитаны там)` : ''}`;
+out.lines[key] = `Укрывка: ${v.labels.join(', ')} ${f(v.len)} пог. м${v.full - v.len > 0.0005 ? ` (ещё ${f(v.full - v.len)} пог. м — общие с другой укрывкой, посчитаны там)` : ''}${v.min ? MIN_NOTE : ''}`;
 });
 if (loose.windows + loose.doors > 0) out.lines.loose = 'Проёмы без стены считаются целиком, без слияния с другими участками';
 return out;
@@ -245,7 +292,13 @@ if (typeof coversCompute === 'function' && typeof blockPlanPoly === 'function') 
 if (e.wall == null || !(e.d > 0)) return;
 const pp = blockPlanPoly(g, { wall: e.wall, span: e.span, d: e.d });
 if (!pp) return;
-s += `<path d="M${pp.map(([x, y]) => `${X(x).toFixed(1)} ${Y(y).toFixed(1)}`).join('L')}Z" fill="${d.covers ? 'rgba(224,102,43,.25)' : '#e9ebef'}" stroke="${d.covers ? MASK_INK : '#8a93a3'}" stroke-width="1.2"/>`;
+s += `<path d="M${pp.map(([x, y]) => `${X(x).toFixed(1)} ${Y(y).toFixed(1)}`).join('L')}Z" fill="${d.covers ? '#f8d9c8' : '#e9ebef'}" stroke="${d.covers ? MASK_INK : '#8a93a3'}" stroke-width="1.2"/>`;
+// фасад встроенного шкафа (на полу или до потолка) — по нему скотч вместо линии вдоль стены
+if ((e.bottom < 0.005 && (d.floor || d.shadowFloor.includes(e.wall))) || (e.toCeil && (d.ceiling || d.shadowCeil.includes(e.wall))) || d.covers) {
+const has = c => (e.sides || []).some(sd => sd.key === c);
+const edges = [[pp[3], pp[2]], ...(has('B') ? [] : [[pp[1], pp[2]]]), ...(has('A') ? [] : [[pp[0], pp[3]]])];
+if (e.bottom < 0.005 || e.toCeil) edges.forEach(([a, b]) => { s += `<path d="M${X(a[0])} ${Y(a[1])}L${X(b[0])} ${Y(b[1])}" stroke="${MASK_INK}" stroke-width="2.6" stroke-dasharray="5 3"/>`; });
+}
 const cx = pp.reduce((a, p) => a + X(p[0]), 0) / 4, cy = pp.reduce((a, p) => a + Y(p[1]), 0) / 4;
 s += `<text x="${cx}" y="${cy + 3.5}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${d.covers ? MASK_INK : '#5d6878'}">${e.code}</text>`;
 });
@@ -315,9 +368,10 @@ s += `<text x="${(xl + xr) / 2}" y="${Yh(v.y1) + 12}" text-anchor="middle" font-
 });
 s += `<path d="M${x0 - 6} ${yF}H${x0 + L * k + 6}" stroke="#14181f" stroke-width="3"/>`;
 // линии укрывки на этой стене — поверх пола
-maskSegments(m).filter(sg => sg.wall === wi).forEach(sg => {
-const sh = sg.kind === 'shadowCeil' || sg.kind === 'shadowFloor';
-const dy = sg.kind === 'shadowCeil' ? 5 : sg.kind === 'shadowFloor' ? -5 : 0;
+// фасад встроенной мебели — пунктиром по краю шкафа (боки на развёртке не видны)
+maskSegments(m).filter(sg => sg.wall === wi && sg.facade !== 'side').forEach(sg => {
+const sh = sg.kind === 'shadowCeil' || sg.kind === 'shadowFloor' || sg.facade;
+const dy = sg.kind === 'shadowCeil' || (sg.facade && sg.y0 > 0) ? 5 : sg.kind === 'shadowFloor' || sg.facade ? -5 : 0;
 s += `<path d="M${XA(sg.x0).toFixed(1)} ${(Yh(sg.y0) + dy).toFixed(1)}L${XA(sg.x1).toFixed(1)} ${(Yh(sg.y1) + dy).toFixed(1)}" stroke="${MASK_INK}" stroke-width="${sh ? 2.4 : 3.2}" stroke-linecap="round"${sh ? ' stroke-dasharray="5 4"' : ''}/>`;
 });
 s += `<text x="${x0 + L * k / 2}" y="${yF + 17}" text-anchor="middle" font-size="12" font-weight="700" fill="#14181f">${mFmt(L)} м</text>`;
@@ -405,7 +459,7 @@ renderMaskViews();
 const el = document.getElementById('mpCalcMask');
 const kinds = Object.keys(MASK_SURFACES).filter(k => t.lines[k]);
 if (el) el.innerHTML = [t.lines.len, t.lines.area, t.lines.loose].filter(Boolean).map(escapeHtml).join('<br>')
-+ (kinds.length > 1 ? `<div class="mp-hint" style="margin-top:6px;">В счёт по видам:<br>${kinds.map(k => escapeHtml(t.lines[k])).join('<br>')}</div>` : '') || 'Отметьте, что укрываем';
++ (kinds.length > 1 ? `<div class="mp-hint" style="margin-top:6px;">В счёт по видам:<br>${kinds.map(k => escapeHtml(t.lines[k].replace(MIN_NOTE, ''))).join('<br>')}</div>` : '') || 'Отметьте, что укрываем';
 }
 function maskToggle(key) {
 const d = maskEnsure();
