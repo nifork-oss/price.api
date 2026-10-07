@@ -224,3 +224,21 @@ test('укрывка: периметр примыкания, общие учас
   near(run('measureValueForTab(computeMeasure(measure), "mask").value'), r.maskLen);
   assert.strictEqual(run('measureValueForTab(computeMeasure(measure), "maskArea").unit'), 'м²');
 });
+
+test('укрывка: встроенный шкаф до потолка — скотч по фасаду, не за шкафом', () => {
+  // шкаф 2 м шириной, глубиной 0,6, от пола до потолка, не в углу — у стены 1
+  const { run } = setup({ shape: 'rect', height: '2,7', walls: ['4', '3', '4', '3'],
+    covers: [{ wall: 0, w: '2', d: '0,6', off: '1', h: '' }],
+    mask: { ceiling: true } });
+  let k = run('maskCompute(measure)');
+  near(k.len, 14 - 2 + 2 + 2 * 0.6);                    // за шкафом — нет, фасад и два бока — да
+  // в углу: один бок прижат к стене 4, за ним линии тоже нет
+  run('measure.covers[0].off = "0"');
+  near(run('maskCompute(measure)').len, 14 - 2 - 0.6 + 2 + 0.6);
+  // укрываем и сам шкаф: по стене — только боковые стыки, верх и низ — по фасаду, общему с потолком и полом
+  run('measure.covers[0].off = "1"; measure.mask.floor = true; measure.mask.covers = true');
+  k = run('maskCompute(measure)');
+  near(k.kinds.maskCovers.len, 2 * 2.7);
+  near(k.kinds.maskCeiling.len, 15.2);
+  near(k.kinds.maskFloor.len, 15.2);
+});

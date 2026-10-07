@@ -292,8 +292,9 @@ s += `<path d="M${XA(a)} ${yF}V${Yh(Math.min(Hh, it.pieces[0]))}" stroke="${WP_H
 }
 s += `<path d="M${x0 - 6} ${yF}H${x0 + L * k + 6}" stroke="#14181f" stroke-width="3"/>`;
 // укрывка — линии примыкания поверх пола
-if (/^mask/.test(key || '')) wpMaskPieces(m, key).filter(p => p.wall === i).forEach(p => {
-s += `<path d="M${XA(p.x0)} ${Yh(p.y0)}L${XA(p.x1)} ${Yh(p.y1)}" stroke="${WP_HL}" stroke-width="4" stroke-linecap="round"/>`;
+if (/^mask/.test(key || '')) wpMaskPieces(m, key).filter(p => p.wall === i && p.facade !== 'side').forEach(p => {
+const dy = p.facade ? (p.y0 > 0 ? 4 : -4) : 0;
+s += `<path d="M${XA(p.x0)} ${Yh(p.y0) + dy}L${XA(p.x1)} ${Yh(p.y1) + dy}" stroke="${WP_HL}" stroke-width="4" stroke-linecap="round"${p.facade ? ' stroke-dasharray="6 4"' : ''}/>`;
 });
 // углы А и Б, длина и высота
 [[0, 'А'], [L, 'Б']].forEach(([a, t]) => { s += `<text x="${XA(a)}" y="${Yh(Hh) - 6}" text-anchor="middle" font-size="10" font-weight="700" fill="#586270">${t}</text>`; });
