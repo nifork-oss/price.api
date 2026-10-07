@@ -241,4 +241,7 @@ test('укрывка: встроенный шкаф до потолка — ск
   near(k.kinds.maskCovers.len, 2 * 2.7);
   near(k.kinds.maskCeiling.len, 15.2);
   near(k.kinds.maskFloor.len, 15.2);
+  // теневой профиль у потолка на всех стенах тоже идёт по фасаду: столько же, сколько потолок
+  run('measure.mask = { shadowCeil: [0, 1, 2, 3] }');
+  near(run('maskCompute(measure)').kinds.maskShadow.len, 15.2);
 });

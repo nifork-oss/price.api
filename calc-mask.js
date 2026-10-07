@@ -144,7 +144,13 @@ if (d.walls.includes(i) && Hh > 0) rect('walls', i, 0, L, 0, Hh);
 if (d.shadowCeil.includes(i) && Hh > 0) horFree('shadowCeil', i, Hh, L, hide[i].c);
 if (d.shadowFloor.includes(i)) horFree('shadowFloor', i, 0, L, hide[i].f);
 });
-facades.forEach(fc => { if (fc.lvl === 'f' && d.floor) facade('floor', fc); if (fc.lvl === 'c' && d.ceiling) facade('ceiling', fc); });
+facades.forEach(fc => {
+if (fc.lvl === 'f' && d.floor) facade('floor', fc);
+if (fc.lvl === 'c' && d.ceiling) facade('ceiling', fc);
+// теневой профиль обходит шкаф по фасаду, если он есть на стене за шкафом
+if (fc.lvl === 'f' && d.shadowFloor.includes(fc.e.wall)) facade('shadowFloor', fc);
+if (fc.lvl === 'c' && d.shadowCeil.includes(fc.e.wall)) facade('shadowCeil', fc);
+});
 return out;
 }
 // Длина объединения отрезков (совпадающие участки — один раз)
@@ -283,7 +289,7 @@ const pp = blockPlanPoly(g, { wall: e.wall, span: e.span, d: e.d });
 if (!pp) return;
 s += `<path d="M${pp.map(([x, y]) => `${X(x).toFixed(1)} ${Y(y).toFixed(1)}`).join('L')}Z" fill="${d.covers ? '#f8d9c8' : '#e9ebef'}" stroke="${d.covers ? MASK_INK : '#8a93a3'}" stroke-width="1.2"/>`;
 // фасад встроенного шкафа (на полу или до потолка) — по нему скотч вместо линии вдоль стены
-if ((e.bottom < 0.005 && d.floor) || (e.toCeil && d.ceiling) || d.covers) {
+if ((e.bottom < 0.005 && (d.floor || d.shadowFloor.includes(e.wall))) || (e.toCeil && (d.ceiling || d.shadowCeil.includes(e.wall))) || d.covers) {
 const has = c => (e.sides || []).some(sd => sd.key === c);
 const edges = [[pp[3], pp[2]], ...(has('B') ? [] : [[pp[1], pp[2]]]), ...(has('A') ? [] : [[pp[0], pp[3]]])];
 if (e.bottom < 0.005 || e.toCeil) edges.forEach(([a, b]) => { s += `<path d="M${X(a[0])} ${Y(a[1])}L${X(b[0])} ${Y(b[1])}" stroke="${MASK_INK}" stroke-width="2.6" stroke-dasharray="5 3"/>`; });
