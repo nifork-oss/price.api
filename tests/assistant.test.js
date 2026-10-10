@@ -475,3 +475,24 @@ test('баланс: мастер просит пополнить, админ в�
   // С деньгами на балансе — можно
   assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
 });
+
+test('план: уточнение к готовому плану — только изменения, сайт подставляет их в план', async () => {
+  const patch = { partial: true, rooms: [{ name: 'Кухня', height_m: 2.7, walls: [{ length_m: 3, turn_after: 'R' }, { length_m: 2.5, turn_after: 'R' }, { length_m: 3, turn_after: 'R' }, { length_m: 2.5, turn_after: 'R' }] }], removed: ['Кладовка'], warnings: [] };
+  const { text, sent } = await callPlan({ turns: [{ note: 'кухня 3 на 2,5', answer: PLAN_JSON }] }, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(patch) }] }) }]);
+  assert.match(sent[0].messages[2].content[0].text, /только изменённые и новые помещения/);
+  const data = JSON.parse(text);
+  assert.strictEqual(data.partial, true);
+  assert.deepStrictEqual(data.removed, ['Кладовка']);
+  assert.strictEqual(data.rooms[0].walls[1].length_m, 2.5);
+  // Ответ с вопросами (плана ещё нет) — уточнение просит весь план
+  const q = await callPlan({ turns: [{ note: 'в мм', answer: '{"questions":["единицы?"]}' }] }, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }]);
+  assert.match(q.sent[0].messages[2].content[0].text, /весь план целиком/);
+
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-import.js']);
+  const merged = vm.runInContext(`aiMergePlan(
+    { rooms: [{ name: 'Гостиная', walls: [1] }, { name: 'Кухня', walls: [2] }, { name: 'Кладовка', walls: [3] }], warnings: ['старое'] },
+    { partial: true, rooms: [{ name: 'Кухня', walls: [9] }, { name: 'Балкон', walls: [4] }], removed: ['Кладовка'], warnings: [] })`, c.ctx || c);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(merged.rooms)), [{ name: 'Гостиная', walls: [1] }, { name: 'Кухня', walls: [9] }, { name: 'Балкон', walls: [4] }]);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(merged.patch)), { changed: ['Кухня'], added: ['Балкон'], removed: ['Кладовка'] });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(merged.warnings)), ['старое']);
+});
