@@ -335,3 +335,26 @@ test('план: своя модель из ANTHROPIC_PLAN_MODEL', async () => {
     assert.strictEqual(sent[0].model, 'claude-opus-4-8');
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('план: свой посредник и ключ для распознавания, помощник — на основном', async () => {
+  const worker = (await import('../worker.js')).default;
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => { sent.push({ url, headers: opts.headers, body: JSON.parse(opts.body) }); return new Response(JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }), { headers: { 'content-type': 'application/json' } }); };
+  const env = { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'main', ANTHROPIC_BASE_URL: 'https://main.example', ANTHROPIC_MODEL: 'claude-sonnet-5',
+    ANTHROPIC_PLAN_API_KEY: 'plan', ANTHROPIC_PLAN_BASE_URL: 'https://vision.example/v1', ANTHROPIC_PLAN_MODEL: 'claude-opus-4-8' };
+  const call = async (path, body) => worker.fetch(new Request('https://x' + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) }, body: JSON.stringify(body) }), env);
+  try {
+    await call('/recognize-plan', { image: 'AAAA' });
+    await call('/assistant', { messages: [{ role: 'user', content: 'привет' }] });
+    assert.strictEqual(sent[0].url, 'https://vision.example/v1/messages');
+    assert.strictEqual(sent[0].headers['x-api-key'], 'plan');
+    assert.strictEqual(sent[0].body.model, 'claude-opus-4-8');
+    assert.strictEqual(sent[1].url, 'https://main.example/v1/messages');
+    assert.strictEqual(sent[1].headers['x-api-key'], 'main');
+    assert.strictEqual(sent[1].body.model, 'claude-sonnet-5');
+    delete env.ANTHROPIC_PLAN_BASE_URL;
+    await call('/recognize-plan', { image: 'AAAA' });
+    assert.strictEqual(sent[2].url, 'https://api.anthropic.com/v1/messages');
+  } finally { globalThis.fetch = realFetch; }
+});

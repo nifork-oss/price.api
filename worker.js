@@ -24,7 +24,6 @@
  *   Если Cloudinary не настроен, загрузка файлов вернёт понятную ошибку,
  *   а остальной сайт продолжит работать.
  *   ANTHROPIC_API_KEY — необязательно: ключ API Anthropic (console.anthropic.com)
- *   ANTHROPIC_PLAN_MODEL — необязательно: отдельная модель для распознавания плана
  *                     для платного распознавания обмерных планов по фото.
  *                     Без ключа кнопка «Распознать план» сообщит, что
  *                     функция не настроена. Модель можно сменить
@@ -33,6 +32,10 @@
  *   ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL — вместо ANTHROPIC_API_KEY, если
  *                     ключ куплен у сервиса-посредника: его токен и адрес
  *                     (например https://example-proxy.ru, без /v1/messages).
+ *   ANTHROPIC_PLAN_API_KEY (или ANTHROPIC_PLAN_AUTH_TOKEN), ANTHROPIC_PLAN_BASE_URL,
+ *   ANTHROPIC_PLAN_MODEL — необязательно: свой сервис/модель только для
+ *                     распознавания плана (нужен посредник, который передаёт
+ *                     модели картинки и PDF). Помощник остаётся на основных.
  *
  * BIN_ID и разрешённые адреса сайта ниже захардкожены.
  */
@@ -662,7 +665,8 @@ const handler = {
       // Распознавание обмерного плана по картинке (платно, через Anthropic API)
       if (path === "/recognize-plan" && request.method === "POST") {
         if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
-        if (!anthropicConfigured(env)) {
+        const aiEnv = planEnv(env);
+        if (!anthropicConfigured(aiEnv)) {
           return json({ error: "Распознавание не настроено: добавьте в воркер секрет ANTHROPIC_API_KEY.", notConfigured: true }, 501);
         }
         if (await isRateLimited(env.AUTH_LIMITER, "ai:" + auth.login)) return tooManyRequests();
@@ -673,8 +677,8 @@ const handler = {
         if (!image || image.length > 14 * 1024 * 1024) return json({ error: "Картинка не передана или слишком большая" }, 400);
         try {
           const turns = planTurns(body.turns);
-          if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns), parsePlanReply, "Не удалось распознать план: ");
-          const result = await recognizePlan(env, image, mediaType, turns);
+          if (body.stream) return await streamAnthropic(aiEnv, planPayload(aiEnv, image, mediaType, turns), parsePlanReply, "Не удалось распознать план: ");
+          const result = await recognizePlan(aiEnv, image, mediaType, turns);
           return json(result);
         } catch (e) {
           return json({ error: "Не удалось распознать план: " + (e && e.message ? e.message : e) }, 502);
@@ -1099,6 +1103,22 @@ function envValue(env, name) {
   return String(env[name] || "").trim().replace(/^["'`]+|["'`]+$/g, "").trim();
 }
 
+// Настройки для распознавания плана: свои ключ/адрес/модель, если заданы.
+// Свой ключ без своего адреса — значит напрямую в Anthropic.
+function planEnv(env) {
+  const key = envValue(env, "ANTHROPIC_PLAN_API_KEY"), token = envValue(env, "ANTHROPIC_PLAN_AUTH_TOKEN");
+  const model = envValue(env, "ANTHROPIC_PLAN_MODEL");
+  if (!key && !token && !model) return env;
+  const out = Object.create(env);
+  if (key || token) {
+    out.ANTHROPIC_API_KEY = key;
+    out.ANTHROPIC_AUTH_TOKEN = token;
+    out.ANTHROPIC_BASE_URL = envValue(env, "ANTHROPIC_PLAN_BASE_URL");
+  }
+  if (model) out.ANTHROPIC_MODEL = model;
+  return out;
+}
+
 function anthropicConfigured(env) {
   return !!(envValue(env, "ANTHROPIC_API_KEY") || envValue(env, "ANTHROPIC_AUTH_TOKEN"));
 }
@@ -1180,8 +1200,7 @@ function planPayload(env, image, mediaType, turns) {
     if (t.answer) messages.push({ role: "user", content: text });
     else if (last.role === "user") last.content = [].concat(last.content, [{ type: "text", text }]);
   });
-  // Для плана можно задать свою модель (ANTHROPIC_PLAN_MODEL), помощник останется на основной
-  return { model: envValue(env, "ANTHROPIC_PLAN_MODEL") || anthropicModel(env), max_tokens: 8000, messages };
+  return { model: anthropicModel(env), max_tokens: 8000, messages };
 }
 
 // Переписка из окна распознавания: до 10 реплик мастера по 2000 знаков,
