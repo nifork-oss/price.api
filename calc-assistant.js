@@ -53,40 +53,104 @@ return { id: room.id, name: roomName(room), surfaces };
 const cart = invoiceCart.map(it => ({ name: it.name, qty: it.qty, unit: it.unit, price: it.price, ...(it.location ? { where: it.location } : {}) }));
 return {
 doc: selectedDocType === 'estimate' ? 'предварительный расчёт' : 'счёт',
+currency: '₽',
 object: obj ? (obj.name || obj.address || '') : 'не выбран',
 services, rooms, cart,
 total: invoiceCart.reduce((a, it) => a + it.qty * it.price, 0),
 };
 }
 
+// Ответ печатается по мере написания; «Стоп» обрывает его и возвращает
+// вопрос в поле ввода, чтобы поправить и отправить заново.
+let assistantAbort = null;
+
 async function sendAssistant() {
 const input = document.getElementById('assistantInput');
 const text = input.value.trim();
 if (!text || assistantBusy) return;
 assistantChat.push({ role: 'user', content: text });
+const reply = { role: 'assistant', content: '', thinking: '', streaming: true };
 input.value = '';
 assistantBusy = true;
+assistantAbort = new AbortController();
 renderAssistant();
+const history = assistantChat.map(m => ({ role: m.role, content: assistantHistoryText(m) }));
+assistantChat.push(reply);
+let stopped = false;
 try {
 const res = await fetch(`${WORKER_URL}/assistant`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-body: JSON.stringify({ messages: assistantChat.map(m => ({ role: m.role, content: assistantHistoryText(m) })), context: assistantContext() })
+body: JSON.stringify({ messages: history, context: assistantContext(), stream: true }),
+signal: assistantAbort.signal
 });
+if (/ndjson/.test(res.headers.get('content-type') || '') && res.body) {
+await assistantReadStream(res.body, reply);
+} else {
 const data = await res.json().catch(() => null);
 if (res.status === 501) {
-assistantChat.push({ role: 'assistant', error: true, content: 'Помощник пока не подключён. Чтобы включить: получите ключ API на console.anthropic.com и добавьте его в Cloudflare → ваш воркер → Settings → Variables and Secrets как секрет ANTHROPIC_API_KEY.' });
+assistantFail(reply, 'Помощник пока не подключён. Чтобы включить: получите ключ API на console.anthropic.com и добавьте его в Cloudflare → ваш воркер → Settings → Variables and Secrets как секрет ANTHROPIC_API_KEY.');
 } else if (!res.ok || !data) {
-assistantChat.push({ role: 'assistant', error: true, content: (data && data.error) || 'Помощник не ответил. Попробуйте ещё раз.' });
+assistantFail(reply, (data && data.error) || 'Помощник не ответил. Попробуйте ещё раз.');
 } else {
-const items = assistantPrepareItems(data.items || []);
-assistantChat.push({ role: 'assistant', content: data.text || (items.length ? 'Предлагаю добавить:' : 'Нечего предложить.'), items });
+assistantFinish(reply, data);
+}
 }
 } catch (err) {
-assistantChat.push({ role: 'assistant', error: true, content: 'Нет связи с сервером: ' + (err && err.message ? err.message : err) });
+if (err && err.name === 'AbortError' && reply.streaming) {
+stopped = true;
+// Остановили — убираем вопрос и недописанный ответ, вопрос — обратно в поле
+assistantChat = assistantChat.filter(m => m !== reply);
+const last = assistantChat[assistantChat.length - 1];
+if (last && last.role === 'user' && last.content === text) assistantChat.pop();
+if (!input.value.trim()) input.value = text;
+} else if (reply.streaming) {
+assistantFail(reply, 'Нет связи с сервером: ' + (err && err.message ? err.message : err));
 }
+}
+if (!stopped && reply.streaming) assistantFail(reply, reply.content ? reply.content + '\n\n(ответ оборвался)' : 'Помощник не ответил. Попробуйте ещё раз.');
 assistantBusy = false;
+assistantAbort = null;
 renderAssistant();
+if (stopped) setTimeout(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }, 0);
+}
+
+function stopAssistant() {
+if (assistantAbort) assistantAbort.abort();
+}
+
+// Строки JSON от сервера: размышления и текст по кусочкам, в конце — позиции
+function assistantReadStream(body, reply) {
+return readAiStream(body, ev => {
+if (ev.t === 'thinking') reply.thinking += ev.d || '';
+else if (ev.t === 'text') reply.content += ev.d || '';
+else if (ev.t === 'tool') reply.picking = true;
+else if (ev.t === 'done') assistantFinish(reply, ev);
+else if (ev.t === 'error') assistantFail(reply, ev.error || 'Помощник не ответил.');
+scheduleAssistantRender();
+});
+}
+
+function assistantFinish(reply, data) {
+const items = assistantPrepareItems(data.items || []);
+reply.content = data.text || (items.length ? 'Предлагаю добавить:' : 'Нечего предложить.');
+reply.items = items;
+reply.streaming = false;
+reply.picking = false;
+}
+
+function assistantFail(reply, message) {
+reply.content = message;
+reply.error = true;
+reply.streaming = false;
+reply.picking = false;
+}
+
+let assistantRenderQueued = false;
+function scheduleAssistantRender() {
+if (assistantRenderQueued) return;
+assistantRenderQueued = true;
+(window.requestAnimationFrame || setTimeout)(() => { assistantRenderQueued = false; renderAssistant(); });
 }
 
 // В историю для нейросети: ответ помощника вместе с тем, что он предлагал
@@ -156,6 +220,8 @@ renderAssistant();
 function renderAssistant() {
 const box = document.getElementById('assistantMessages');
 if (!box) return;
+// Листают историю вверх — не дёргаем вниз на каждом кусочке ответа
+const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 60 || !assistantBusy;
 if (!assistantChat.length) {
 box.innerHTML = `<div class="as-hint">Опишите, что нужно сделать, — помощник подберёт работы из вашего прайса и посчитает объём по замерам помещений.
 <div class="as-examples">
@@ -166,7 +232,10 @@ box.innerHTML = `<div class="as-hint">Опишите, что нужно сдел
 } else {
 box.innerHTML = assistantChat.map((m, mi) => {
 const cls = m.role === 'user' ? 'as-msg as-user' : 'as-msg as-bot' + (m.error ? ' as-error' : '');
-let html = `<div class="${cls}"><div class="as-text">${escapeHtml(m.content)}</div>`;
+let html = `<div class="${cls}">`;
+if (m.thinking) html += `<details class="as-think"${m.streaming && !m.content ? ' open' : ''}><summary>${m.streaming && !m.content ? 'Размышляю…' : 'Ход рассуждений'}</summary><div>${escapeHtml(m.thinking)}</div></details>`;
+if (m.content) html += `<div class="as-text">${m.role === 'user' ? escapeHtml(m.content) : assistantTextHtml(m.content)}</div>`;
+if (m.streaming) html += `<div class="as-status">${m.picking ? 'Подбираю позиции…' : m.content ? 'Пишу…' : m.thinking ? '' : 'Думаю…'}</div>`;
 if (m.items && m.items.length) {
 html += '<div class="as-items">' + m.items.map((it, ii) => `
 <label class="as-item${it.added ? ' added' : ''}">
@@ -183,10 +252,25 @@ if (m.items.some(it => !it.added)) html += `<button type="button" class="as-add"
 }
 return html + '</div>';
 }).join('');
-if (assistantBusy) box.innerHTML += '<div class="as-msg as-bot as-wait"><div class="as-text">Думаю…</div></div>';
 }
-box.scrollTop = box.scrollHeight;
-document.getElementById('assistantSend').disabled = assistantBusy;
+if (stick) box.scrollTop = box.scrollHeight;
+const thinkBox = box.querySelector('.as-think[open] > div');
+if (thinkBox) thinkBox.scrollTop = thinkBox.scrollHeight;
+const btn = document.getElementById('assistantSend');
+btn.classList.toggle('as-stop', assistantBusy);
+btn.setAttribute('aria-label', assistantBusy ? 'Остановить' : 'Отправить');
+btn.innerHTML = assistantBusy ? '<svg class="ic"><use href="#i-stop"/></svg>' : '<svg class="ic"><use href="#i-go"/></svg>';
+}
+
+// Ответ нейросети обычным текстом: **жирный** — жирным, остальная разметка
+// и служебные номера услуг «(i=25)» убираются.
+function assistantTextHtml(text) {
+return escapeHtml(String(text || '')
+.replace(/\s*\(?\bi\s*=\s*\d+\)?/g, '')
+.replace(/^#{1,6}\s+/gm, '')
+.replace(/`/g, ''))
+.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+.replace(/(^|\s)\*(\S[^*\n]*?)\*(?=\s|$|[.,:;!?])/g, '$1$2');
 }
 
 function assistantExample(btn) {

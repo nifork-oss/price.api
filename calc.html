@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261010-1. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261010-4. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=f3258304">
+<link rel="stylesheet" href="calc.css?v=b04874e8">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -41,6 +41,7 @@
 <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
 <symbol id="i-clear" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
 <symbol id="i-go" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 </svg>
 
@@ -193,15 +194,19 @@
 <div class="measure-panel" id="aiPanel" role="dialog" aria-modal="true" aria-label="Распознанный план">
 <div class="mp-head"><div class="mp-head-inner">
 <div class="mp-head-row">
-<div class="mp-title">Распознанный план</div>
+<div class="mp-title">Распознавание плана</div>
 <button type="button" class="mp-head-btn mp-close" onclick="closeAiReview()" aria-label="Закрыть">✕</button>
 </div>
 </div></div>
 <div class="mp-body" id="aiBody"></div>
 <div class="mp-foot"><div class="mp-foot-inner">
+<form class="ai-note-form" id="aiNoteForm" onsubmit="event.preventDefault(); sendAiNote();">
+<textarea id="aiNote" rows="1" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendAiNote(); }"></textarea>
+<button type="submit" id="aiNoteSend" aria-label="Отправить уточнение"><svg class="ic"><use href="#i-go"/></svg></button>
+</form>
 <div class="mp-actions" style="margin-top:0;">
-<button type="button" class="mp-btn" onclick="closeAiReview()">Отмена</button>
-<button type="button" class="mp-btn mp-btn-primary" onclick="applyAiRooms()">Добавить выбранные</button>
+<button type="button" class="mp-btn" id="aiCancel" onclick="aiCancel()">Отмена</button>
+<button type="button" class="mp-btn mp-btn-primary" id="aiApply" onclick="applyAiRooms()">Добавить выбранные</button>
 </div>
 </div></div>
 </div>
@@ -610,16 +615,16 @@
 <button type="button" class="as-head-btn" onclick="closeAssistant()" aria-label="Закрыть">✕</button>
 </div>
 <div class="as-messages" id="assistantMessages"></div>
-<form class="as-form" onsubmit="event.preventDefault(); sendAssistant();">
+<form class="as-form" onsubmit="event.preventDefault(); assistantBusy ? stopAssistant() : sendAssistant();">
 <textarea id="assistantInput" rows="2" placeholder="Например: шпаклёвка и покраска стен в спальне" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendAssistant(); }"></textarea>
 <button type="submit" id="assistantSend" aria-label="Отправить"><svg class="ic"><use href="#i-go"/></svg></button>
 </form>
 </div>
-<script src="calc-assistant.js?v=6fd8fae3"></script>
+<script src="calc-assistant.js?v=40776cd8"></script>
 
 <script src="calc-plan.js?v=52b816b0"></script>
 
-<script src="calc-import.js?v=e1d4301c"></script>
+<script src="calc-import.js?v=dcba6857"></script>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
 <div class="update-banner-text">Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>

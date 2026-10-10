@@ -671,7 +671,9 @@ const handler = {
         const mediaType = ["image/jpeg", "image/png", "image/webp"].includes(body && body.mediaType) ? body.mediaType : "image/jpeg";
         if (!image || image.length > 7 * 1024 * 1024) return json({ error: "Картинка не передана или слишком большая" }, 400);
         try {
-          const result = await recognizePlan(env, image, mediaType);
+          const turns = planTurns(body.turns);
+          if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns), parsePlanReply, "Не удалось распознать план: ");
+          const result = await recognizePlan(env, image, mediaType, turns);
           return json(result);
         } catch (e) {
           return json({ error: "Не удалось распознать план: " + (e && e.message ? e.message : e) }, 502);
@@ -692,6 +694,7 @@ const handler = {
         const context = JSON.stringify((body && body.context) || {});
         if (context.length > 60000) return json({ error: "Слишком большой объект для помощника" }, 400);
         try {
+          if (body.stream) return await streamAssistant(env, messages, context);
           return json(await askAssistant(env, messages, context));
         } catch (e) {
           return json({ error: "Помощник не ответил: " + (e && e.message ? e.message : e) }, 502);
@@ -1142,6 +1145,13 @@ const PLAN_PROMPT = `Это обмерный план квартиры или д
   в твоём порядке обхода (с нуля), с шириной, высотой (если указана) и отступом от начала стены (если указан).
 
 Если размер не подписан — оцени по масштабу и добавь предупреждение. Не выдумывай помещения, которых нет.
+Если без ответа мастера план получится заведомо неверным (непонятно, где границы помещений, к каким стенам
+относятся размеры, в каких они единицах, есть ли на картинке план вообще) — не строй план, а задай мастеру
+короткие конкретные вопросы: {"questions":["..."]} — столько, сколько нужно, можно в несколько заходов,
+пока не станет понятно. Спрашивай только о том, без чего не обойтись, не повторяй вопросы, на которые
+мастер уже ответил, а когда всё понятно — сразу присылай план. Мелкие сомнения (не подписан один размер, нет высоты) —
+не повод спрашивать: построй план и опиши их в warnings.
+Отвечать словами вместо JSON нельзя.
 
 Ответ — только JSON без пояснений и без markdown, строго такой формы:
 {"rooms":[{"name":"Гостиная","height_m":null,"walls":[{"length_m":4.6,"turn_after":"R","angle_deg":null}],
@@ -1149,27 +1159,61 @@ const PLAN_PROMPT = `Это обмерный план квартиры или д
 "warnings":["..."]}
 type — одно из: "window", "door", "balcony" (для balcony width_m/height_m — окно, door_width_m/door_height_m — дверь).`;
 
-async function recognizePlan(env, image, mediaType) {
+// turns — переписка в окне распознавания: что нейросеть ответила (план или
+// вопросы, JSON) и что мастер на это написал, по порядку
+function planPayload(env, image, mediaType, turns) {
+  const messages = [{
+    role: "user",
+    content: [
+      { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
+      { type: "text", text: PLAN_PROMPT },
+    ],
+  }];
+  (turns || []).forEach((t) => {
+    const last = messages[messages.length - 1];
+    if (t.answer) messages.push({ role: "assistant", content: t.answer });
+    const text = "Мастер пишет: " + t.note + "\n\nУчти это и верни заново весь план целиком в том же формате JSON (или вопросы, если без них никак).";
+    if (t.answer) messages.push({ role: "user", content: text });
+    else if (last.role === "user") last.content = [].concat(last.content, [{ type: "text", text }]);
+  });
+  return { model: anthropicModel(env), max_tokens: 8000, messages };
+}
+
+// Переписка из окна распознавания: до 10 реплик мастера по 2000 знаков,
+// ответы нейросети — до 60000 знаков вместе
+function planTurns(raw) {
+  if (!Array.isArray(raw)) return [];
+  let size = 0;
+  return raw.slice(-10).map((t) => {
+    const note = String((t && t.note) || "").trim().slice(0, 2000);
+    let answer = String((t && t.answer) || "").trim();
+    size += answer.length;
+    if (size > 60000) answer = "";
+    return { note, answer };
+  }).filter((t) => t.note);
+}
+
+async function recognizePlan(env, image, mediaType, turns) {
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
-    body: JSON.stringify({
-      model: anthropicModel(env),
-      max_tokens: 4000,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
-          { type: "text", text: PLAN_PROMPT },
-        ],
-      }],
-    }),
+    body: JSON.stringify(planPayload(env, image, mediaType, turns)),
   });
-  const data = await readAnthropicResponse(res, env);
+  return parsePlanReply(await readAnthropicResponse(res, env));
+}
+
+function parsePlanReply(data) {
   const text = (data.content || []).map((c) => (c.type === "text" ? c.text : "")).join("");
   const clean = text.replace(/```json|```/g, "").trim();
   const start = clean.indexOf("{"), end = clean.lastIndexOf("}");
-  if (start < 0 || end < 0) throw new Error("нейросеть не вернула данные");
+  if (start < 0 || end < 0) {
+    // Без JSON — показываем, что нейросеть ответила на самом деле
+    const said = text.replace(/\s+/g, " ").trim();
+    const kinds = (data.content || []).map((c) => c.type).join(", ");
+    throw new Error(data.stop_reason === "max_tokens" ? "ответ не поместился, план слишком большой"
+      : said ? "нейросеть ответила не планом: «" + said.slice(0, 300) + "»"
+      : `нейросеть вернула пустой ответ (${kinds || "нет блоков"}${data.stop_reason ? ", " + data.stop_reason : ""})`);
+  }
   return sanitizePlan(JSON.parse(clean.slice(start, end + 1)));
 }
 
@@ -1190,13 +1234,16 @@ function sanitizePlan(raw) {
     return { name: String((r && r.name) || "Помещение " + (i + 1)).slice(0, 80), height_m: num(r && r.height_m, 1, 20), walls, openings };
   }).filter((r) => r.walls.length >= 3);
   const warnings = (Array.isArray(raw && raw.warnings) ? raw.warnings : []).map((w) => String(w).slice(0, 300)).slice(0, 20);
-  return { rooms, warnings };
+  const questions = rooms.length ? [] : (Array.isArray(raw && raw.questions) ? raw.questions : []).map((q) => String(q).slice(0, 300)).filter(Boolean).slice(0, 10);
+  return { rooms, warnings, ...(questions.length ? { questions } : {}) };
 }
 
 /* ============== помощник в калькуляторе ============== */
 
 const ASSISTANT_PROMPT = `Ты — помощник мастера-отделочника в его кабинете (калькулятор счетов и смет за ремонт).
-Отвечай по-русски, коротко и по делу, без markdown-таблиц.
+Отвечай по-русски, коротко и по делу, обычным текстом: без markdown (никаких **, #, таблиц).
+Все цены — в рублях, пиши «₽». Номера услуг i и id помещений — служебные, мастеру их не называй,
+называй услуги и помещения по названию.
 
 Ниже в <calc> — данные калькулятора: прайс мастера (services, у каждой услуги номер i),
 помещения выбранного объекта с замерами (rooms: id, name и поверхности surfaces — ключ, объём, единица)
@@ -1207,6 +1254,8 @@ const ASSISTANT_PROMPT = `Ты — помощник мастера-отдело�
 - если объём берётся из замера помещения, укажи surface (ключ поверхности) и room_ids — калькулятор сам
   посчитает объём по замерам, сам ничего не пересчитывай;
 - если поверхности нет в замерах или помещений нет — укажи qty и unit (м², пог. м, шт., компл., час, усл.);
+- если объект не выбран (object: «не выбран»), а объём нужен по площади — подскажи выбрать объект с замерами
+  или назвать объём;
 - не предлагай то, что уже есть в счёте, если об этом не просили.
 Мастер сам решает, что добавить. Не выдумывай цены и размеры. Если данных не хватает — спроси.`;
 
@@ -1258,16 +1307,104 @@ async function askAssistant(env, messages, context) {
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
-    body: JSON.stringify({
-      model: anthropicModel(env),
-      max_tokens: 2000,
-      system: ASSISTANT_PROMPT + "\n\n<calc>\n" + context + "\n</calc>",
-      tools: [ASSISTANT_TOOL],
-      messages,
-    }),
+    body: JSON.stringify(assistantPayload(env, messages, context)),
   });
   const data = await readAnthropicResponse(res, env);
   return parseAssistantReply(data);
+}
+
+// Ответ по мере написания: к нейросети — потоком (SSE), в браузер — строками
+// JSON: {t:"thinking"|"text", d} по ходу, {t:"tool"} когда нейросеть начала
+// заполнять инструмент, в конце {t:"done", ...finish(ответ)} или {t:"error", error}.
+// Ход рассуждений (thinking) — если посредник его не принимает (400),
+// повторяем запрос без него. Нажали «Стоп» — обрываем запрос к нейросети.
+async function streamAnthropic(env, payload, finish, errorPrefix) {
+  const request = (thinking) => fetch(anthropicUrl(env), {
+    method: "POST",
+    headers: anthropicHeaders(env),
+    body: JSON.stringify({
+      ...payload,
+      max_tokens: payload.max_tokens + (thinking ? 6000 : 0),
+      stream: true,
+      ...(thinking ? { thinking: { type: "adaptive", display: "summarized" } } : {}),
+    }),
+  });
+  let res = await request(true);
+  if (res.status === 400) {
+    await res.body?.cancel();
+    res = await request(false);
+  }
+  // Ошибка или посредник ответил целиком, без потока — обычный ответ JSON
+  if (!res.ok || !res.body || !/event-stream/i.test(res.headers.get("content-type") || "")) {
+    return json(finish(await readAnthropicResponse(res, env)));
+  }
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const enc = new TextEncoder();
+  let gone = false;
+  const send = (obj) => gone ? null : writer.write(enc.encode(JSON.stringify(obj) + "\n")).catch(() => { gone = true; });
+  (async () => {
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    const blocks = [];
+    let buf = "", stopReason = null;
+    try {
+      const handle = (chunk) => {
+        const data = chunk.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+        if (!data) return;
+        let ev;
+        try { ev = JSON.parse(data); } catch (e) { return; }
+        if (ev.type === "error") throw new Error((ev.error && ev.error.message) || "ошибка сервиса");
+        if (ev.type === "content_block_start" && ev.content_block) {
+          blocks[ev.index] = { type: ev.content_block.type, name: ev.content_block.name, text: "", json: "" };
+          if (ev.content_block.type === "tool_use") send({ t: "tool" });
+        } else if (ev.type === "content_block_delta" && ev.delta && blocks[ev.index]) {
+          const b = blocks[ev.index];
+          if (ev.delta.type === "text_delta") { b.text += ev.delta.text; send({ t: "text", d: ev.delta.text }); }
+          else if (ev.delta.type === "thinking_delta") send({ t: "thinking", d: ev.delta.thinking });
+          else if (ev.delta.type === "input_json_delta") b.json += ev.delta.partial_json || "";
+        } else if (ev.type === "message_delta" && ev.delta && ev.delta.stop_reason) stopReason = ev.delta.stop_reason;
+      };
+      while (!gone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true }).replace(/\r/g, "");
+        let i;
+        while ((i = buf.indexOf("\n\n")) >= 0) { handle(buf.slice(0, i)); buf = buf.slice(i + 2); }
+      }
+      if (gone) { await reader.cancel().catch(() => {}); return; }
+      if (buf.trim()) handle(buf);
+      const content = blocks.filter(Boolean).map((b) => {
+        if (b.type === "text") return { type: "text", text: b.text };
+        if (b.type !== "tool_use") return null;
+        let input = {};
+        try { input = JSON.parse(b.json || "{}"); } catch (e) { /* ответ оборвался */ }
+        return { type: "tool_use", name: b.name, input };
+      }).filter(Boolean);
+      await send({ t: "done", ...finish({ content, stop_reason: stopReason }) });
+    } catch (e) {
+      await reader.cancel().catch(() => {});
+      await send({ t: "error", error: errorPrefix + (e && e.message ? e.message : e) });
+    }
+    if (!gone) await writer.close().catch(() => {});
+  })();
+  return new Response(readable, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache", ...corsHeaders() },
+  });
+}
+
+function assistantPayload(env, messages, context) {
+  return {
+    model: anthropicModel(env),
+    max_tokens: 2000,
+    system: ASSISTANT_PROMPT + "\n\n<calc>\n" + context + "\n</calc>",
+    tools: [ASSISTANT_TOOL],
+    messages,
+  };
+}
+
+function streamAssistant(env, messages, context) {
+  return streamAnthropic(env, assistantPayload(env, messages, context), parseAssistantReply, "Помощник не ответил: ");
 }
 
 function parseAssistantReply(data) {

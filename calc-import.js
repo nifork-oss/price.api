@@ -174,13 +174,38 @@ return [[-u.w / 2, -h / 2], [u.w / 2, -h / 2], [u.w / 2, h / 2], [-u.w / 2, h / 
 }
 
 /* ---------- распознавание ---------- */
-let aiTarget = null;   // { objectId, result }
+// Окно распознавания — как чат: картинка, ход рассуждений нейросети,
+// найденные помещения; мастер может написать уточнение («высота 2,7»,
+// «добавь балкон»), и нейросеть переделает план с учётом поправки.
+let aiTarget = null;   // { objectId, image, preview, runs: [{ note, thinking, text, status, error, done, result }], abort, measures }
 
 function startPlanRecognition(objectId) {
 const obj = objectId ? (cloudData.objects || []).find(o => o.id === objectId) : calcObject();
 if (!obj) { alert('Сначала выберите объект.'); return; }
-aiTarget = { objectId: obj.id };
+aiTarget = { objectId: obj.id, runs: [] };
 document.getElementById('aiFile').click();
+}
+
+// Ответ нейросети строками JSON (воркер передаёт поток): по ходу —
+// размышления и текст, в конце done/error. Общая часть для помощника и плана.
+async function readAiStream(body, onEvent) {
+const reader = body.getReader();
+const dec = new TextDecoder();
+let buf = '';
+const line = (l) => {
+if (!l.trim()) return;
+let ev;
+try { ev = JSON.parse(l); } catch (e) { return; }
+onEvent(ev);
+};
+for (;;) {
+const { done, value } = await reader.read();
+if (done) break;
+buf += dec.decode(value, { stream: true });
+let i;
+while ((i = buf.indexOf('\n')) >= 0) { line(buf.slice(0, i)); buf = buf.slice(i + 1); }
+}
+line(buf);
 }
 
 async function handleAiFile(input) {
@@ -188,26 +213,153 @@ const file = input.files && input.files[0];
 input.value = '';
 if (!file || !aiTarget) return;
 if (!confirm('Распознать план с помощью нейросети?\n\nЭто платная функция: картинка будет отправлена в сторонний сервис, каждое распознавание стоит денег по тарифу ключа API. Результат — черновик, его нужно проверить.')) return;
-showAddToast('Распознаю план… обычно до минуты');
+const target = aiTarget;
+target.runs = [{ thinking: '', text: '', status: 'Готовлю картинку…' }];
+target.preview = null;
+document.getElementById('aiNote').value = '';
+document.getElementById('aiPanel').classList.add('open');
+document.body.classList.add('measure-open');
+renderAiPanel();
 try {
 const img = await fileToJpeg(file, 1568);
+if (aiTarget !== target) return;
+target.preview = img.dataUrl;
+target.image = img.dataUrl.split(',')[1];
+target.runs = [];
+runAiRecognition('');
+} catch (err) {
+target.runs[0].error = 'Не удалось открыть картинку: ' + (err && err.message ? err.message : err);
+target.runs[0].done = true;
+renderAiPanel();
+}
+}
+
+// Один заход нейросети; note — уточнение мастера к прошлому результату
+async function runAiRecognition(note) {
+const target = aiTarget;
+if (!target || !target.image || aiBusy()) return;
+const run = { note, thinking: '', text: '', status: 'Отправляю в нейросеть…' };
+target.runs.push(run);
+target.abort = new AbortController();
+renderAiPanel();
+try {
 const res = await fetch(`${WORKER_URL}/recognize-plan`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-body: JSON.stringify({ image: img.dataUrl.split(',')[1], mediaType: 'image/jpeg' })
+body: JSON.stringify({ image: target.image, mediaType: 'image/jpeg', stream: true,
+turns: aiTurns(target.runs) }),
+signal: target.abort.signal
 });
-const data = await res.json().catch(() => null);
-if (res.status === 501) {
-alert('Распознавание пока не подключено.\n\nЧтобы включить: получите ключ API на console.anthropic.com и добавьте его в Cloudflare → ваш воркер → Settings → Variables and Secrets как секрет ANTHROPIC_API_KEY. Пока можно пользоваться подложкой — это бесплатно.');
-return;
+let data = null;
+if (/ndjson/.test(res.headers.get('content-type') || '') && res.body) {
+run.status = 'Рассматриваю план…';
+renderAiPanel();
+await readAiStream(res.body, ev => {
+if (ev.t === 'thinking') run.thinking += ev.d || '';
+else if (ev.t === 'text') { run.text += ev.d || ''; run.status = 'Пишу ответ…'; }
+else if (ev.t === 'done') data = ev;
+else if (ev.t === 'error') run.error = ev.error || 'Не удалось распознать план';
+scheduleAiPanel();
+});
+if (!data && !run.error) run.error = 'Ответ оборвался. Попробуйте ещё раз.';
+} else {
+data = await res.json().catch(() => null);
+if (res.status === 501) run.error = 'Распознавание пока не подключено. Чтобы включить: получите ключ API на console.anthropic.com и добавьте его в Cloudflare → ваш воркер → Settings → Variables and Secrets как секрет ANTHROPIC_API_KEY. Пока можно пользоваться подложкой — это бесплатно.';
+else if (!res.ok || !data) run.error = (data && data.error) || 'Не удалось распознать план';
 }
-if (!res.ok || !data) { alert((data && data.error) || 'Не удалось распознать план'); return; }
-if (!data.rooms || !data.rooms.length) { alert('Помещения на картинке не найдены. Попробуйте более чёткое фото или скриншот.'); return; }
-aiTarget.result = data;
-openAiReview();
+if (!run.error && data.questions && data.questions.length && !(data.rooms && data.rooms.length)) {
+run.questions = data.questions;
+} else if (!run.error && (!data.rooms || !data.rooms.length)) run.error = 'Помещения не распознаны' + (data.warnings && data.warnings.length ? ': ' + data.warnings.join(' ') : '.') + ' Напишите внизу, что на плане (например, «это квартира из 3 комнат, размеры в мм»), или попробуйте более чёткое фото.';
+if (!run.error && !run.questions) run.result = { rooms: data.rooms, warnings: data.warnings || [] };
 } catch (err) {
-alert('Ошибка: ' + (err && err.message ? err.message : err));
+if (err && err.name === 'AbortError') {
+// Остановили — убираем заход, уточнение возвращаем в поле
+target.runs = target.runs.filter(r => r !== run);
+if (note) document.getElementById('aiNote').value = note;
+} else {
+run.error = 'Ошибка: ' + (err && err.message ? err.message : err);
 }
+}
+run.done = true;
+target.abort = null;
+if (aiTarget === target) renderAiPanel();
+}
+
+// Переписка для нейросети: на каждую реплику мастера — что она ответила перед этим
+function aiTurns(runs) {
+const turns = [];
+runs.forEach((r, i) => {
+if (!r.note) return;
+const prev = runs[i - 1];
+const answer = prev && (prev.result || prev.questions) ? JSON.stringify(prev.result || { questions: prev.questions }) : '';
+turns.push({ note: r.note, answer });
+});
+return turns;
+}
+
+function aiBusy() {
+return !!(aiTarget && aiTarget.runs.some(r => !r.done));
+}
+
+function sendAiNote() {
+const el = document.getElementById('aiNote');
+const note = el.value.trim();
+if (!note || aiBusy()) return;
+el.value = '';
+runAiRecognition(note);
+}
+
+let aiPanelQueued = false;
+function scheduleAiPanel() {
+if (aiPanelQueued) return;
+aiPanelQueued = true;
+(window.requestAnimationFrame || setTimeout)(() => { aiPanelQueued = false; renderAiPanel(); });
+}
+
+// Помещения, которые нейросеть уже записала, — по ещё недописанному JSON
+function aiFoundRooms(text) {
+return [...String(text || '').matchAll(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => m[1].replace(/\\(.)/g, '$1'));
+}
+
+function renderAiPanel() {
+if (!aiTarget) return;
+const body = document.getElementById('aiBody');
+const box = body.querySelector('.ai-chat');
+const stick = !box || body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+const busy = aiBusy();
+const last = aiTarget.runs[aiTarget.runs.length - 1];
+const showReview = !busy && last && last.result;
+let html = '<div class="mp-body-inner ai-chat">';
+if (aiTarget.preview) html += `<img class="ai-preview" src="${aiTarget.preview}" alt="План">`;
+aiTarget.runs.forEach((run, ri) => {
+if (run.note) html += `<div class="as-msg as-user ai-note"><div class="as-text">${escapeHtml(run.note)}</div></div>`;
+const live = !run.done;
+const rooms = run.result ? run.result.rooms.map(r => r.name) : aiFoundRooms(run.text);
+html += `<div class="as-msg as-bot ai-run${run.error ? ' as-error' : ''}">`;
+if (run.thinking) html += `<details class="as-think"${live ? ' open' : ''}><summary>${live ? 'Размышляю…' : 'Ход рассуждений'}</summary><div>${escapeHtml(run.thinking)}</div></details>`;
+if (rooms.length) html += `<div class="as-text"><b>${run.result ? 'Распознал' : 'Нашёл'} помещений: ${rooms.length}</b>\n${rooms.map(escapeHtml).join(', ')}</div>`;
+if (run.questions) html += `<div class="as-text"><b>Чтобы не ошибиться, уточните:</b>\n${run.questions.map((q, qi) => (run.questions.length > 1 ? (qi + 1) + '. ' : '') + escapeHtml(q)).join('\n')}</div>`;
+if (run.error) html += `<div class="as-text">${escapeHtml(run.error)}</div>`;
+else if (live) html += `<div class="as-status">${escapeHtml(run.status)}</div>`;
+else if (run.result && ri < aiTarget.runs.length - 1) html += '<div class="as-status">заменено следующим вариантом</div>';
+html += '</div>';
+});
+if (showReview) html += aiReviewHtml(last.result);
+html += '</div>';
+body.innerHTML = html;
+const t = body.querySelector('.as-think[open] > div');
+if (t) t.scrollTop = t.scrollHeight;
+if (stick) body.scrollTop = body.scrollHeight;
+const apply = document.getElementById('aiApply');
+const cancel = document.getElementById('aiCancel');
+apply.style.display = showReview ? '' : 'none';
+cancel.textContent = busy ? 'Стоп' : showReview ? 'Отмена' : 'Закрыть';
+cancel.classList.toggle('ai-stop', busy);
+const form = document.getElementById('aiNoteForm');
+form.style.display = aiTarget.image ? '' : 'none';
+document.getElementById('aiNoteSend').disabled = busy;
+document.getElementById('aiNote').placeholder = last && last.questions ? 'Ваш ответ' : last && last.result ? 'Уточнение, например: высота 2,7' : 'Что на плане? Подскажите — попробую ещё раз';
+if (last && last.questions && last.done && !busy) setTimeout(() => document.getElementById('aiNote').focus(), 0);
 }
 
 // Ответ нейросети → обычный замер «своей формы»
@@ -243,14 +395,13 @@ ${g.closed ? '' : `<path d="M${pts[pts.length - 1]}L${pts[0]}" stroke="#c2361f" 
 </svg>`;
 }
 
-function openAiReview() {
-const res = aiTarget.result;
-const body = document.getElementById('aiBody');
+// Последний результат — помещения с галочками, как раньше
+function aiReviewHtml(res) {
 const ms = res.rooms.map(r => aiRoomToMeasure(r, aiTarget.objectId));
 aiTarget.measures = ms;
-body.innerHTML = `<div class="mp-body-inner">
+return `<div class="ai-review">
 ${res.warnings && res.warnings.length ? `<div class="ai-warn"><b>Нейросеть предупреждает:</b><br>${res.warnings.map(escapeHtml).join('<br>')}</div>` : ''}
-<div class="ai-hint">Это черновик. Отметьте нужные помещения и проверьте размеры — после добавления каждое правится в замере, как обычно.</div>
+<div class="ai-hint">Это черновик. Отметьте нужные помещения и проверьте размеры — после добавления каждое правится в замере, как обычно. Если что-то не так — напишите уточнение внизу.</div>
 ${ms.map((m, i) => {
 const g = rulerGeometry(m);
 const ops = m.openings.length;
@@ -265,11 +416,17 @@ return `<label class="ai-room">
 </label>`;
 }).join('')}
 </div>`;
-document.getElementById('aiPanel').classList.add('open');
-document.body.classList.add('measure-open');
+}
+
+// «Стоп» во время распознавания, иначе — закрыть окно
+function aiCancel() {
+if (aiBusy()) { if (aiTarget.abort) aiTarget.abort.abort(); return; }
+closeAiReview();
 }
 
 function closeAiReview() {
+if (aiTarget && aiTarget.abort) aiTarget.abort.abort();
+aiTarget = null;
 document.getElementById('aiPanel').classList.remove('open');
 document.body.classList.remove('measure-open');
 }

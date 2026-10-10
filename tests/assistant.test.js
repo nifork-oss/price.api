@@ -144,3 +144,166 @@ test('калькулятор: «Добавить отмеченное» клад
   run('addAssistantItems(0)'); // повторно уже добавленное не дублируется
   assert.strictEqual(run('invoiceCart.length'), 1);
 });
+
+test('калькулятор: ответ без звёздочек, решёток и служебных номеров услуг', () => {
+  const run = setupCalc();
+  const html = run(`assistantTextHtml('**Нанесение Замши (i=25)** — 1000 ₽\\n## Итог\\n2*3 = 6')`);
+  assert.strictEqual(html, '<b>Нанесение Замши</b> — 1000 ₽\nИтог\n2*3 = 6');
+});
+
+// Поток: сервис отвечает SSE, мастеру уходят строки JSON
+function sse(events) {
+  return events.map(e => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`).join('');
+}
+
+async function callStream(responses, env = {}) {
+  const worker = (await import('../worker.js')).default;
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    sent.push(JSON.parse(opts.body));
+    const r = responses[Math.min(sent.length - 1, responses.length - 1)];
+    return new Response(r.body, { status: r.status || 200, headers: { 'content-type': r.type || 'text/event-stream' } });
+  };
+  try {
+    const req = new Request('https://x/assistant', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'покрась' }], context: {}, stream: true }),
+    });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', ...env });
+    const text = await res.text();
+    return { status: res.status, type: res.headers.get('content-type'), text, sent };
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+const STREAM = sse([
+  { type: 'message_start', message: {} },
+  { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } },
+  { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Смотрю замеры' } },
+  { type: 'content_block_stop', index: 0 },
+  { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+  { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Предлагаю ' } },
+  { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'покраску.' } },
+  { type: 'content_block_stop', index: 1 },
+  { type: 'content_block_start', index: 2, content_block: { type: 'tool_use', name: 'propose_items', input: {} } },
+  { type: 'content_block_delta', index: 2, delta: { type: 'input_json_delta', partial_json: '{"items":[{"service_index":3,' } },
+  { type: 'content_block_delta', index: 2, delta: { type: 'input_json_delta', partial_json: '"surface":"walls","room_ids":["r1"]}]}' } },
+  { type: 'content_block_stop', index: 2 },
+  { type: 'message_delta', delta: { stop_reason: 'tool_use' } },
+  { type: 'message_stop' },
+]);
+
+test('поток: размышления и текст по кусочкам, в конце — позиции', async () => {
+  const { status, type, text, sent } = await callStream([{ body: STREAM }]);
+  assert.strictEqual(status, 200);
+  assert.match(type, /ndjson/);
+  const lines = text.trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(lines.slice(0, 4), [
+    { t: 'thinking', d: 'Смотрю замеры' }, { t: 'text', d: 'Предлагаю ' }, { t: 'text', d: 'покраску.' }, { t: 'tool' },
+  ]);
+  const done = lines[4];
+  assert.strictEqual(done.t, 'done');
+  assert.strictEqual(done.text, 'Предлагаю покраску.');
+  assert.deepStrictEqual(done.items[0].room_ids, ['r1']);
+  assert.strictEqual(sent[0].stream, true);
+  assert.deepStrictEqual(sent[0].thinking, { type: 'adaptive', display: 'summarized' });
+});
+
+test('поток: посредник не принял размышления (400) — повтор без них', async () => {
+  const { text, sent } = await callStream([
+    { status: 400, type: 'application/json', body: JSON.stringify({ error: { message: 'thinking not supported' } }) },
+    { body: STREAM },
+  ]);
+  assert.strictEqual(sent.length, 2);
+  assert.strictEqual(sent[1].thinking, undefined);
+  assert.match(text, /"t":"done"/);
+});
+
+test('поток: ошибка сервиса посреди ответа и ответ без потока', async () => {
+  const broken = sse([
+    { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Нач' } },
+    { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } },
+  ]);
+  const a = await callStream([{ body: broken }]);
+  const last = JSON.parse(a.text.trim().split('\n').pop());
+  assert.strictEqual(last.t, 'error');
+  assert.match(last.error, /Overloaded/);
+  const b = await callStream([{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: 'целиком' }] }) }]);
+  assert.deepStrictEqual(JSON.parse(b.text), { text: 'целиком', items: [] });
+  const c = await callStream([{ status: 502, type: 'text/plain', body: 'error code: 502' }]);
+  assert.strictEqual(c.status, 502);
+  assert.match(JSON.parse(c.text).error, /ответил 502/);
+});
+
+// Распознавание плана: поток, уточнение мастера, понятная ошибка
+async function callPlan(body, responses) {
+  const worker = (await import('../worker.js')).default;
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    sent.push(JSON.parse(opts.body));
+    const r = responses[Math.min(sent.length - 1, responses.length - 1)];
+    return new Response(r.body, { status: r.status || 200, headers: { 'content-type': r.type || 'text/event-stream' } });
+  };
+  try {
+    const req = new Request('https://x/recognize-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) },
+      body: JSON.stringify({ image: 'AAAA', mediaType: 'image/png', ...body }),
+    });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k' });
+    return { status: res.status, text: await res.text(), sent };
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+const PLAN_JSON = '{"rooms":[{"name":"Кухня","height_m":2.7,"walls":[{"length_m":3,"turn_after":"R"},{"length_m":2,"turn_after":"R"},{"length_m":3,"turn_after":"R"},{"length_m":2,"turn_after":"R"}],"openings":[]}],"warnings":[]}';
+
+test('план: поток с размышлениями, уточнение уходит вместе с прошлым ответом', async () => {
+  const stream = sse([
+    { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Вижу кухню' } },
+    { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+    { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: PLAN_JSON.slice(0, 40) } },
+    { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: PLAN_JSON.slice(40) } },
+    { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+  ]);
+  const { text, sent } = await callPlan({ stream: true, turns: [{ note: 'в мм', answer: '{"questions":["единицы?"]}' }, { note: 'высота 2,7', answer: '{"rooms":[]}' }] }, [{ body: stream }]);
+  const lines = text.trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(lines[0], { t: 'thinking', d: 'Вижу кухню' });
+  const done = lines.pop();
+  assert.strictEqual(done.t, 'done');
+  assert.strictEqual(done.rooms[0].name, 'Кухня');
+  assert.strictEqual(done.rooms[0].walls.length, 4);
+  const msgs = sent[0].messages;
+  assert.strictEqual(msgs.length, 5);
+  assert.strictEqual(msgs[0].content[0].source.media_type, 'image/png');
+  assert.strictEqual(msgs[1].content, '{"questions":["единицы?"]}');
+  assert.match(msgs[2].content, /в мм/);
+  assert.strictEqual(msgs[3].content, '{"rooms":[]}');
+  assert.match(msgs[4].content, /высота 2,7/);
+  const first = await callPlan({ turns: [{ note: 'это одна комната' }] }, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }]);
+  assert.strictEqual(first.sent[0].messages.length, 1);
+  assert.match(first.sent[0].messages[0].content[2].text, /одна комната/);
+});
+
+test('план: нейросеть ответила словами — в ошибке видно, что она написала', async () => {
+  const { status, text } = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: 'Не вижу размеров на картинке.' }], stop_reason: 'end_turn' }) }]);
+  assert.strictEqual(status, 502);
+  assert.match(JSON.parse(text).error, /ответила не планом: «Не вижу размеров на картинке\.»/);
+  const empty = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [], stop_reason: 'refusal' }) }]);
+  assert.match(JSON.parse(empty.text).error, /пустой ответ \(нет блоков, refusal\)/);
+});
+
+test('план: нейросеть может сначала задать вопросы', async () => {
+  const { status, text } = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: '{"questions":["Размеры в мм или см?"]}' }] }) }]);
+  assert.strictEqual(status, 200);
+  assert.deepStrictEqual(JSON.parse(text), { rooms: [], warnings: [], questions: ['Размеры в мм или см?'] });
+  const both = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON.replace('"warnings":[]', '"warnings":[],"questions":["лишний"]') }] }) }]);
+  assert.strictEqual(JSON.parse(both.text).questions, undefined);
+});
