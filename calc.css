@@ -986,3 +986,8 @@ body.assistant-open .add-toast { z-index: 99; }
 .paid-dot { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: #c2361f; color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
 .user-chip.has-paid-req { position: relative; }
 .user-chip.has-paid-req::after { content: ''; position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-radius: 50%; background: #c2361f; }
+.paid-balance { font-size: 15px; margin: 2px 0 4px; }
+.paid-off { color: var(--s-due); }
+.paid-user.paid-req { background: #fff8e6; }
+.paid-btns input[type="number"] { width: 110px; padding: 6px 8px; border: 1px solid #cfd5dd; border-radius: 8px; font: inherit; font-size: 13px; }
+.paid-user .paid-btns { margin-top: 8px; }

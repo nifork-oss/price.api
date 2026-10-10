@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261010-11. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261010-12. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=c52e6263">
+<link rel="stylesheet" href="calc.css?v=cc15acd2">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -516,7 +516,7 @@
 <div id="paidTab" style="display: none;">
 <h1>Платные функции</h1>
 <div class="dimline" aria-hidden="true"><span></span></div>
-<p class="paid-muted" style="margin-top:-8px;">Распознавание плана и помощник. Мастер просит доступ, оплачивает вам — вы включаете ему доступ до нужного времени. Расход токенов — за текущий месяц.</p>
+<p class="paid-muted" style="margin-top:-8px;">Распознавание плана и помощник работают с баланса мастера: он платит вам, вы зачисляете сумму, каждый запрос списывает свою стоимость по токенам. Нет денег на балансе — функции закрыты.</p>
 <div id="paidListContainer">Загрузка...</div>
 </div>
 
@@ -636,7 +636,7 @@
 <button type="submit" id="assistantSend" aria-label="Отправить"><svg class="ic"><use href="#i-go"/></svg></button>
 </form>
 </div>
-<script src="calc-paid.js?v=04f038a2"></script>
+<script src="calc-paid.js?v=9a2a60ed"></script>
 <script src="calc-aichats.js?v=08208a53"></script>
 <script src="calc-assistant.js?v=a1663e41"></script>
 

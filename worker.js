@@ -659,7 +659,7 @@ const handler = {
       const auth = await getAuthUser(request, env);
       if (!auth) return json({ error: "Требуется вход" }, 401);
 
-      // Платные функции: проверка доступа и счёт запросов (через хранилище)
+      // Платные функции: хватает ли денег на балансе и запись расхода (через хранилище)
       if (path === "/ai-quota" && request.method === "POST") {
         let body;
         try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
@@ -672,31 +672,24 @@ const handler = {
         return json(await aiUsageAdd(env, auth, body && body.feature, body && body.usage));
       }
 
-      // Мастер просит доступ к платной функции — админ увидит запрос
+      // Мастер просит пополнить баланс — админ увидит запрос
       if (path === "/ai-access-request" && request.method === "POST") {
         if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
-        let body;
-        try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
-        const feature = body && body.feature;
-        if (!AI_FEATURES.includes(feature)) return json({ error: "Неизвестная функция" }, 400);
         const record = await readBin(env);
         const u = record.users.find((x) => x.login === auth.login);
         if (!u) return json({ error: "Пользователь не найден" }, 404);
-        u.aiReq = { ...(u.aiReq || {}), [feature]: Date.now() };
+        u.aiReq = Date.now();
         await writeUsers(env, record);
-        return json(aiStatus(record, u));
+        return json({ ai: aiStatus(record, u) });
       }
 
-      // Админ: кто просит доступ, у кого он есть, сколько потрачено; настройки
+      // Админ: балансы, расход, запросы; настройки (текст для мастеров, цены)
       if (path === "/ai-access" && request.method === "GET") {
         if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
-        const record = await readBin(env);
-        const users = record.users.filter((u) => u.role !== "client" && u.role !== "admin")
-          .map((u) => ({ login: u.login, email: u.email || "", ...aiStatus(record, u) }));
-        return json({ users, settings: aiSettings(record), now: Date.now() });
+        return json(aiAdminView(await readBin(env)));
       }
 
-      // Админ: включить/продлить/выключить доступ, лимит; или общие настройки
+      // Админ: пополнить (или поправить) баланс мастера; или общие настройки
       if (path === "/ai-access" && request.method === "PUT") {
         if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
         let body;
@@ -706,31 +699,24 @@ const handler = {
           const admin = siteAdmin(record);
           if (!admin) return json({ error: "Админ не найден" }, 404);
           const cur = aiSettings(record);
-          const lim = (v, d) => (Number.isInteger(v) && v >= 0 && v <= 1e9 ? v : d);
+          const price = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 1e6 ? Math.round(Number(v) * 100) / 100 : d);
+          const pr = body.settings.prices || {};
           admin.aiSettings = {
             offer: typeof body.settings.offer === "string" ? body.settings.offer.trim().slice(0, 1000) : cur.offer,
-            limits: { plan: lim(body.settings.limits && body.settings.limits.plan, cur.limits.plan), assistant: lim(body.settings.limits && body.settings.limits.assistant, cur.limits.assistant) },
+            prices: { in: price(pr.in, cur.prices.in), out: price(pr.out, cur.prices.out) },
           };
         } else {
-          const feature = body && body.feature;
-          if (!AI_FEATURES.includes(feature)) return json({ error: "Неизвестная функция" }, 400);
           const u = record.users.find((x) => x.login === (body && body.login));
           if (!u) return json({ error: "Пользователь не найден" }, 404);
-          const ai = { ...(u.ai || {}) };
-          const cur = ai[feature] || {};
-          const until = body.until === null ? 0 : Number(body.until);
-          ai[feature] = {
-            until: Number.isFinite(until) && until > 0 ? Math.min(until, Date.now() + 10 * 365 * 864e5) : 0,
-            limit: body.limit === null ? null : Number.isInteger(body.limit) && body.limit >= 0 && body.limit <= 1e9 ? body.limit : (cur.limit ?? null),
-          };
-          u.ai = ai;
-          // Доступ включили — запрос выполнен
-          if (ai[feature].until > Date.now() && u.aiReq) { u.aiReq = { ...u.aiReq }; delete u.aiReq[feature]; }
+          const kop = Math.round(Number(body && body.add) * 100);
+          if (!Number.isFinite(kop) || kop === 0 || Math.abs(kop) > 1e9) return json({ error: "Укажите сумму в рублях" }, 400);
+          u.aiBalance = (u.aiBalance || 0) + kop;
+          u.aiPay = [{ at: Date.now(), kop, by: auth.login }, ...(u.aiPay || [])].slice(0, 50);
+          // Пополнили — запрос выполнен
+          if (kop > 0) delete u.aiReq;
         }
         await writeUsers(env, record);
-        const users = record.users.filter((u) => u.role !== "client" && u.role !== "admin")
-          .map((u) => ({ login: u.login, email: u.email || "", ...aiStatus(record, u) }));
-        return json({ users, settings: aiSettings(record), now: Date.now() });
+        return json(aiAdminView(record));
       }
 
       // Распознавание обмерного плана по картинке (платно, через Anthropic API)
@@ -859,8 +845,8 @@ const handler = {
         // общего списка пользователей. Нужно, чтобы вкладка "Профиль"
         // работала и в режиме "своя компания", где полный список
         // пользователей не приходит вовсе (приватность).
-        const aiSelf = selfUser ? aiStatus(record, selfUser).ai : null;
-        const aiPending = auth.role === "admin" ? record.users.filter((u) => u.aiReq && Object.keys(u.aiReq).length).length : 0;
+        const aiSelf = selfUser ? aiStatus(record, selfUser) : null;
+        const aiPending = auth.role === "admin" ? record.users.filter((u) => typeof u.aiReq === "number").length : 0;
         const self = selfUser
           ? { ai: aiSelf, aiOffer: aiSettings(record).offer, aiPending, login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "" }
           : { login: auth.login, email: "", companyName: "", publicPriceEnabled: false, pieNote: "", invoiceNote: "", planHints: "" };
@@ -1174,14 +1160,14 @@ const handler = {
   },
 };
 
-/* ============== платные функции: доступ и лимиты ============== */
+/* ============== платные функции: баланс в рублях ============== */
 
-// Распознавание плана и помощник — только админу и тем, кому он включил
-// доступ (до даты и времени), с лимитом запросов в месяц.
+// Распознавание плана и помощник — админу всегда, мастерам — пока на балансе
+// есть деньги. Мастер платит админу, админ пополняет баланс; каждый запрос
+// списывает свою стоимость: токены из ответа сервиса × цены из настроек.
+// Деньги храним в копейках.
 const AI_FEATURES = ["plan", "assistant"];
-// Лимит — токенов в месяц (вход + выход вместе); 0 — без лимита
-const AI_DEFAULT_LIMITS = { plan: 500000, assistant: 1000000 };
-const AI_NAMES = { plan: "распознаванию плана", assistant: "помощнику" };
+const AI_DEFAULT_PRICES = { in: 500, out: 2500 }; // ₽ за 1 млн токенов (ProxyAPI, Sonnet 5.5)
 
 function siteAdmin(record) {
   return record.users.find((u) => u.login === "admin") || record.users.find((u) => u.role === "admin") || null;
@@ -1189,41 +1175,41 @@ function siteAdmin(record) {
 
 function aiSettings(record) {
   const s = (siteAdmin(record) || {}).aiSettings || {};
-  const limits = { ...AI_DEFAULT_LIMITS, ...(s.limits || {}) };
-  return { offer: s.offer || "", limits };
+  return { offer: s.offer || "", prices: { ...AI_DEFAULT_PRICES, ...(s.prices || {}) } };
 }
 
 function aiMonth() {
   return new Date().toISOString().slice(0, 7);
 }
 
-// Расход за этот месяц: { req, in, out } по функции
+// Расход за этот месяц по функции: запросы, токены, копейки
 function aiUse(u, feature) {
   const use = u.aiUse && u.aiUse.month === aiMonth() ? u.aiUse : {};
   const f = use[feature];
-  return f && typeof f === "object" ? { req: f.req || 0, in: f.in || 0, out: f.out || 0 } : { req: 0, in: 0, out: 0 };
+  return f && typeof f === "object" ? { req: f.req || 0, in: f.in || 0, out: f.out || 0, kop: f.kop || 0 } : { req: 0, in: 0, out: 0, kop: 0 };
 }
 
-// Что видит сам мастер и админ: до какого времени доступ, лимит токенов,
-// потрачено (запросы, токены на вход и выход), когда просил доступ
+// Что видят мастер и админ: баланс, расход за месяц, запрос, пополнения
 function aiStatus(record, u) {
-  const settings = aiSettings(record);
-  const out = {};
+  const month = {};
   for (const f of AI_FEATURES) {
-    const a = (u.ai || {})[f] || {};
-    const use = aiUse(u, f);
-    out[f] = {
-      until: a.until || 0,
-      limit: a.limit ?? settings.limits[f],
-      customLimit: a.limit ?? null,
-      requests: use.req,
-      tokensIn: use.in,
-      tokensOut: use.out,
-      used: use.in + use.out,
-      requestedAt: (u.aiReq || {})[f] || 0,
-    };
+    const x = aiUse(u, f);
+    month[f] = { requests: x.req, tokensIn: x.in, tokensOut: x.out, spent: x.kop / 100 };
   }
-  return { ai: out };
+  return {
+    balance: (u.aiBalance || 0) / 100,
+    month,
+    spentTotal: (u.aiSpent || 0) / 100,
+    requestedAt: typeof u.aiReq === "number" ? u.aiReq : 0,
+    pays: (u.aiPay || []).slice(0, 10).map((p) => ({ at: p.at, amount: p.kop / 100 })),
+  };
+}
+
+function aiAdminView(record) {
+  const users = record.users.filter((u) => u.role !== "client" && u.role !== "admin")
+    .map((u) => ({ login: u.login, email: u.email || "", ai: aiStatus(record, u) }));
+  const admin = siteAdmin(record);
+  return { users, settings: aiSettings(record), self: admin ? aiStatus(record, admin) : null, now: Date.now() };
 }
 
 // Пишем только список пользователей (в хранилище); без него — всё как обычно
@@ -1238,30 +1224,31 @@ async function aiQuotaCheck(env, auth, feature) {
   const record = await readBin(env);
   const u = record.users.find((x) => x.login === auth.login);
   if (!u) return { ok: false, error: "Пользователь не найден" };
-  const st = aiStatus(record, u).ai[feature];
-  if (!(st.until > Date.now())) {
-    return { ok: false, noAccess: true, error: `Нет доступа к ${AI_NAMES[feature]}. Запросите доступ — администратор включит его после оплаты.` };
-  }
-  if (st.limit > 0 && st.used >= st.limit) {
-    const fmt = (n) => n.toLocaleString("ru-RU");
-    return { ok: false, limit: true, error: `Лимит токенов на этот месяц исчерпан: ${fmt(st.used)} из ${fmt(st.limit)}. Напишите администратору, чтобы увеличить.` };
+  if (!((u.aiBalance || 0) > 0)) {
+    return { ok: false, noAccess: true, error: "На балансе нет денег. Пополните баланс — администратор зачислит оплату." };
   }
   return { ok: true };
 }
 
-// После ответа нейросети — сколько токенов ушло (считаем всем, и админу)
+// После ответа нейросети — сколько токенов ушло и сколько это стоит; у мастера
+// списываем с баланса (у админа только считаем)
 async function aiUsageAdd(env, auth, feature, usage) {
   if (!AI_FEATURES.includes(feature)) return { ok: false };
   const n = (v) => { const x = Math.round(Number(v)); return Number.isFinite(x) && x > 0 ? Math.min(x, 5e6) : 0; };
   const record = await readBin(env);
   const u = record.users.find((x) => x.login === auth.login);
   if (!u) return { ok: false };
+  const tin = n(usage && usage.in), tout = n(usage && usage.out);
+  const { prices } = aiSettings(record);
+  const kop = Math.round((tin * prices.in + tout * prices.out) / 1e6 * 100);
   const use = u.aiUse && u.aiUse.month === aiMonth() ? { ...u.aiUse } : { month: aiMonth() };
   const cur = aiUse(u, feature);
-  use[feature] = { req: cur.req + 1, in: cur.in + n(usage && usage.in), out: cur.out + n(usage && usage.out) };
+  use[feature] = { req: cur.req + 1, in: cur.in + tin, out: cur.out + tout, kop: cur.kop + kop };
   u.aiUse = use;
+  u.aiSpent = (u.aiSpent || 0) + kop;
+  if (auth.role !== "admin") u.aiBalance = (u.aiBalance || 0) - kop;
   await writeUsers(env, record);
-  return { ok: true };
+  return { ok: true, kop };
 }
 
 // Токены из ответа сервиса: вход (вместе с кешем) и выход

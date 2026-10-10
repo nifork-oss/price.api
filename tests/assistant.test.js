@@ -19,7 +19,7 @@ function fakeStorage(users) {
   };
 }
 const OPEN = Date.now() + 3600e3;
-const ivanWithAccess = () => [{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', ai: { plan: { until: OPEN }, assistant: { until: OPEN } } }];
+const ivanWithAccess = () => [{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', aiBalance: 100000 }];
 async function token(payload) {
   const b64 = buf => Buffer.from(buf).toString('base64url');
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -382,52 +382,59 @@ async function call(path, { method = 'POST', body, login = 'ivan', role = 'maste
 const ask = { messages: [{ role: 'user', content: 'привет' }] };
 const user = (st, login) => st.map.get('users').find(u => u.login === login);
 
-test('доступ: без доступа и с истёкшим — 402, админу — можно', async () => {
-  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master' }, { login: 'petr', role: 'master', ai: { assistant: { until: Date.now() - 60e3 } } }]);
+test('баланс: без денег — 402, админу — можно', async () => {
+  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master' }, { login: 'petr', role: 'master', aiBalance: -5 }]);
   const a = await call('/assistant', { body: ask, storage: st });
   assert.strictEqual(a.status, 402);
   assert.ok(a.data.noAccess);
+  assert.strictEqual((await call('/recognize-plan', { body: { image: 'AAAA' }, storage: st })).status, 402);
   assert.strictEqual((await call('/assistant', { body: ask, storage: st, login: 'petr' })).status, 402);
   assert.strictEqual((await call('/assistant', { body: ask, storage: st, login: 'admin', role: 'admin' })).status, 200);
-  // Доступ к помощнику не открывает распознавание
-  const st2 = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', ai: { assistant: { until: OPEN } } }]);
-  assert.strictEqual((await call('/assistant', { body: ask, storage: st2 })).status, 200);
-  assert.strictEqual((await call('/recognize-plan', { body: { image: 'AAAA' }, storage: st2 })).status, 402);
+  // У админа расход считается, баланс не трогается
+  const adm = user(st, 'admin');
+  assert.strictEqual(adm.aiUse.assistant.req, 1);
+  assert.strictEqual(adm.aiBalance, undefined);
 });
 
-test('доступ: токены считаются по ответу, лимит в месяц', async () => {
-  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', ai: { assistant: { until: OPEN, limit: 2000 } } }]);
+test('баланс: каждый запрос списывает стоимость токенов по ценам из настроек', async () => {
+  // 1200 токенов на вход × 500 ₽/млн = 0,60 ₽; 300 на выход × 2500 ₽/млн = 0,75 ₽ → 1,35 ₽
+  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', aiBalance: 200 }]);
   assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
-  const use = user(st, 'ivan').aiUse;
-  assert.deepStrictEqual(use.assistant, { req: 1, in: 1200, out: 300 });
-  assert.strictEqual(use.month, new Date().toISOString().slice(0, 7));
-  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200); // 1500 < 2000 — ещё можно
-  const over = await call('/assistant', { body: ask, storage: st }); // 3000 ≥ 2000
-  assert.strictEqual(over.status, 402);
-  assert.ok(over.data.limit);
-  assert.match(over.data.error, /3\s000 из 2\s000/);
-  // Расход прошлого месяца не мешает
-  user(st, 'ivan').aiUse.month = '2000-01';
+  const u = user(st, 'ivan');
+  assert.strictEqual(u.aiBalance, 200 - 135);
+  assert.deepStrictEqual(u.aiUse.assistant, { req: 1, in: 1200, out: 300, kop: 135 });
+  assert.strictEqual(u.aiUse.month, new Date().toISOString().slice(0, 7));
+  // Хватило ещё на один (баланс уходит в минус), дальше — нет
   assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
+  assert.strictEqual(u.aiBalance, 200 - 270);
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 402);
+  // Свои цены админа (с наценкой)
+  user(st, 'admin').aiSettings = { prices: { in: 1000, out: 5000 } };
+  u.aiBalance = 1000;
+  await call('/assistant', { body: ask, storage: st });
+  assert.strictEqual(u.aiBalance, 1000 - 270);
 });
 
-test('доступ: запрос мастера, админ видит и включает до времени', async () => {
+test('баланс: мастер просит пополнить, админ видит и пополняет', async () => {
   const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master' }]);
-  const r = await call('/ai-access-request', { body: { feature: 'plan' }, storage: st });
+  const r = await call('/ai-access-request', { body: {}, storage: st });
   assert.strictEqual(r.status, 200);
-  assert.ok(r.data.ai.plan.requestedAt > 0);
+  assert.ok(r.data.ai.requestedAt > 0);
   assert.strictEqual((await call('/ai-access', { method: 'GET', storage: st })).status, 403);
-  const list = await call('/ai-access', { method: 'GET', storage: st, login: 'admin', role: 'admin' });
+  const admin = { storage: st, login: 'admin', role: 'admin' };
+  const list = await call('/ai-access', { method: 'GET', ...admin });
   assert.strictEqual(list.data.users.length, 1);
-  assert.ok(list.data.users[0].ai.plan.requestedAt > 0);
-  const until = Date.now() + 90 * 60e3;
-  const put = await call('/ai-access', { method: 'PUT', body: { login: 'ivan', feature: 'plan', until, limit: 100000 }, storage: st, login: 'admin', role: 'admin' });
-  assert.strictEqual(put.data.users[0].ai.plan.until, until);
-  assert.strictEqual(put.data.users[0].ai.plan.limit, 100000);
-  assert.strictEqual(put.data.users[0].ai.plan.requestedAt, 0);
-  const set = await call('/ai-access', { method: 'PUT', body: { settings: { offer: '500 ₽ в месяц', limits: { plan: 1, assistant: 2 } } }, storage: st, login: 'admin', role: 'admin' });
-  assert.deepStrictEqual(set.data.settings, { offer: '500 ₽ в месяц', limits: { plan: 1, assistant: 2 } });
-  // Выключить
-  const off = await call('/ai-access', { method: 'PUT', body: { login: 'ivan', feature: 'plan', until: null }, storage: st, login: 'admin', role: 'admin' });
-  assert.strictEqual(off.data.users[0].ai.plan.until, 0);
+  assert.ok(list.data.users[0].ai.requestedAt > 0);
+  assert.deepStrictEqual(list.data.settings.prices, { in: 500, out: 2500 });
+  const put = await call('/ai-access', { method: 'PUT', body: { login: 'ivan', add: 500 }, ...admin });
+  assert.strictEqual(put.data.users[0].ai.balance, 500);
+  assert.strictEqual(put.data.users[0].ai.requestedAt, 0);
+  assert.strictEqual(put.data.users[0].ai.pays[0].amount, 500);
+  const fix = await call('/ai-access', { method: 'PUT', body: { login: 'ivan', add: -120.5 }, ...admin });
+  assert.strictEqual(fix.data.users[0].ai.balance, 379.5);
+  assert.strictEqual((await call('/ai-access', { method: 'PUT', body: { login: 'ivan', add: 'abc' }, ...admin })).status, 400);
+  const set = await call('/ai-access', { method: 'PUT', body: { settings: { offer: 'Перевод на карту', prices: { in: 700, out: 3000 } } }, ...admin });
+  assert.deepStrictEqual(set.data.settings, { offer: 'Перевод на карту', prices: { in: 700, out: 3000 } });
+  // С деньгами на балансе — можно
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
 });
