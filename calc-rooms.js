@@ -542,9 +542,22 @@ invoiceCart.push({ name: srv.name, price: Number(srv.price) || 0, qty: roundQty(
 showAddToast(`${srv.name}: ${mFmt(roundQty(qty, unit))} ${unit}`);
 document.getElementById('wpManualQty').value = '';
 } else {
+const item = addSurfaceWork(srv, rooms, obj, surfaceKey);
+rememberSurface(srv.name, surfaceKey);
+showAddToast(`${srv.name} · ${surfaceInvoiceLabel({ surface: surfaceKey }).toLowerCase()}: ${mFmt(item.qty)} ${item.unit}`);
+}
+// Список вариантов у работы остаётся открытым — можно сразу добавить
+// другую поверхность (потолок, откосы), не выбирая работу заново.
+renderInvoice();
+renderWorkPicker();
+scheduleDraftSave();
+}
+
+// Работа по поверхности отмеченных помещений: объём берётся из замеров.
+// Та же работа по той же поверхности уже есть — добавляем комнаты в неё.
+function addSurfaceWork(srv, rooms, obj, surfaceKey) {
 const unit = sumSurface(rooms, surfaceKey).unit || srv.unit || 'м²';
 const price = Number(srv.price) || 0;
-// Та же работа по той же поверхности уже есть — добавляем комнаты в неё
 let item = invoiceCart.find(i => i.name === srv.name && i.surface === surfaceKey && i.price === price && Array.isArray(i.rooms));
 if (!item) {
 item = { name: srv.name, price, qty: 0, unit, location: '', surface: surfaceKey, rooms: [] };
@@ -554,14 +567,7 @@ rooms.forEach(room => {
 if (!item.rooms.some(r => r.roomId === room.id)) item.rooms.push({ roomId: room.id, name: roomName(room), qty: 0 });
 });
 rebuildRoomItem(item, obj);
-rememberSurface(srv.name, surfaceKey);
-showAddToast(`${srv.name} · ${surfaceInvoiceLabel({ surface: surfaceKey }).toLowerCase()}: ${mFmt(item.qty)} ${item.unit}`);
-}
-// Список вариантов у работы остаётся открытым — можно сразу добавить
-// другую поверхность (потолок, откосы), не выбирая работу заново.
-renderInvoice();
-renderWorkPicker();
-scheduleDraftSave();
+return item;
 }
 
 // Нажатие на поверхность: добавлена — убираем, не добавлена или добавлена не везде — добавляем.
