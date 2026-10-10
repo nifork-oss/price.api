@@ -19,7 +19,7 @@ async function callAssistant(body, { role = 'master', env = {}, reply } = {}) {
   const sent = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
-    sent.push({ url, body: JSON.parse(opts.body) });
+    sent.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
     return new Response(JSON.stringify(reply || { content: [{ type: 'text', text: 'ok' }] }), { status: 200 });
   };
   try {
@@ -66,6 +66,17 @@ test('сервер: передаёт данные калькулятора и р
   assert.ok(sent[0].body.system.includes('"Покраска"'));
   assert.strictEqual(sent[0].body.tools[0].name, 'propose_items');
   assert.strictEqual(sent[0].body.messages.length, 3);
+});
+
+test('сервер: ключ посредника — свой адрес и Bearer-токен', async () => {
+  const msg = { messages: [{ role: 'user', content: 'привет' }] };
+  const { status, sent } = await callAssistant(msg, { env: { ANTHROPIC_API_KEY: '', ANTHROPIC_AUTH_TOKEN: 'tok', ANTHROPIC_BASE_URL: 'https://proxy.example/v1/' } });
+  assert.strictEqual(status, 200);
+  assert.strictEqual(sent[0].url, 'https://proxy.example/v1/messages');
+  assert.strictEqual(sent[0].headers.authorization, 'Bearer tok');
+  assert.strictEqual(sent[0].headers['x-api-key'], undefined);
+  const direct = await callAssistant(msg);
+  assert.strictEqual(direct.sent[0].headers['x-api-key'], 'k');
 });
 
 // Калькулятор: квадратная комната 4×3 м, высота 2,7 м

@@ -29,6 +29,9 @@
  *                     функция не настроена. Модель можно сменить
  *                     переменной ANTHROPIC_MODEL. Этот же ключ включает
  *                     «Помощника» в калькуляторе (чат, тоже платно).
+ *   ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL — вместо ANTHROPIC_API_KEY, если
+ *                     ключ куплен у сервиса-посредника: его токен и адрес
+ *                     (например https://example-proxy.ru, без /v1/messages).
  *
  * BIN_ID и разрешённые адреса сайта ниже захардкожены.
  */
@@ -658,7 +661,7 @@ const handler = {
       // Распознавание обмерного плана по картинке (платно, через Anthropic API)
       if (path === "/recognize-plan" && request.method === "POST") {
         if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
-        if (!env.ANTHROPIC_API_KEY) {
+        if (!anthropicConfigured(env)) {
           return json({ error: "Распознавание не настроено: добавьте в воркер секрет ANTHROPIC_API_KEY.", notConfigured: true }, 501);
         }
         if (await isRateLimited(env.AUTH_LIMITER, "ai:" + auth.login)) return tooManyRequests();
@@ -678,7 +681,7 @@ const handler = {
       // Помощник в калькуляторе: чат по смете (платно, через Anthropic API)
       if (path === "/assistant" && request.method === "POST") {
         if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
-        if (!env.ANTHROPIC_API_KEY) {
+        if (!anthropicConfigured(env)) {
           return json({ error: "Помощник не настроен: добавьте в воркер секрет ANTHROPIC_API_KEY.", notConfigured: true }, 501);
         }
         if (await isRateLimited(env.AUTH_LIMITER, "ai:" + auth.login)) return tooManyRequests();
@@ -1081,6 +1084,27 @@ const handler = {
   },
 };
 
+/* ============== Anthropic API ============== */
+
+// Ключ напрямую от Anthropic — ANTHROPIC_API_KEY. Ключ сервиса-посредника
+// (у них он обычно называется ANTHROPIC_AUTH_TOKEN) — ANTHROPIC_AUTH_TOKEN
+// вместе с адресом посредника в ANTHROPIC_BASE_URL.
+function anthropicConfigured(env) {
+  return !!(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN);
+}
+
+function anthropicUrl(env) {
+  const base = String(env.ANTHROPIC_BASE_URL || "https://api.anthropic.com").replace(/\/+$/, "").replace(/\/v1$/, "");
+  return base + "/v1/messages";
+}
+
+function anthropicHeaders(env) {
+  const headers = { "content-type": "application/json", "anthropic-version": "2023-06-01" };
+  if (env.ANTHROPIC_API_KEY) headers["x-api-key"] = env.ANTHROPIC_API_KEY;
+  else headers.authorization = "Bearer " + env.ANTHROPIC_AUTH_TOKEN;
+  return headers;
+}
+
 /* ============== распознавание обмерного плана ============== */
 
 const PLAN_PROMPT = `Это обмерный план квартиры или дома (чертёж, скриншот или фото).
@@ -1103,13 +1127,9 @@ const PLAN_PROMPT = `Это обмерный план квартиры или д
 type — одно из: "window", "door", "balcony" (для balcony width_m/height_m — окно, door_width_m/door_height_m — дверь).`;
 
 async function recognizePlan(env, image, mediaType) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch(anthropicUrl(env), {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
+    headers: anthropicHeaders(env),
     body: JSON.stringify({
       model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
       max_tokens: 4000,
@@ -1213,13 +1233,9 @@ function sanitizeChat(raw) {
 }
 
 async function askAssistant(env, messages, context) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch(anthropicUrl(env), {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
+    headers: anthropicHeaders(env),
     body: JSON.stringify({
       model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
       max_tokens: 2000,
