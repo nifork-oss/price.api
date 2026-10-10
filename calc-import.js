@@ -352,6 +352,7 @@ if (!pick) return;
 }
 if (!confirm('Распознать план с помощью нейросети?\n\nЭто платная функция: картинка будет отправлена в сторонний сервис, каждое распознавание стоит денег по тарифу ключа API. Результат — черновик, его нужно проверить.')) return;
 const target = aiTarget;
+target.history = false;
 target.runs = [{ thinking: '', text: '', status: 'Готовлю картинку…' }];
 target.preview = null;
 document.getElementById('aiNote').value = '';
@@ -383,8 +384,13 @@ target.mediaType = 'application/pdf';
 target.sentAs = `PDF-документом — ${pageLabel || 'одна страница'} (${fmtSize(one.size)})`;
 }
 }
+// Сначала — выделить нужную часть (или распознать всё)
+target.file = file;
+target.page = pick.page;
+target.isPdf = isPdf;
+target.full = { image: target.image, mediaType: target.mediaType, preview: target.preview, sentAs: target.sentAs };
 target.runs = [];
-runAiRecognition('');
+aiOpenCrop(target);
 } catch (err) {
 target.runs[0].error = 'Не удалось открыть картинку: ' + (err && err.message ? err.message : err);
 target.runs[0].done = true;
@@ -405,7 +411,7 @@ const res = await fetch(`${WORKER_URL}/recognize-plan`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
 body: JSON.stringify({ image: target.image, mediaType: target.mediaType, stream: true,
-turns: aiTurns(target.runs), hints: aiPlanHints() }),
+turns: aiTurns(target.runs), hints: aiPlanHints(), ...(target.pageText ? { pageText: target.pageText } : {}) }),
 signal: target.abort.signal
 });
 let data = null;
@@ -513,6 +519,139 @@ renderAiPanel();
 showAddToast('Правило запомнено — оно в Профиле');
 }
 
+/* ---------- выделить часть плана (фото и PDF) ---------- */
+// Рамка в долях картинки: { x, y, w, h } от 0 до 1, начало — верхний левый угол
+
+function aiOpenCrop(target) {
+if (!target || !target.file) return;
+target.cropStep = true;
+target.crop = target.crop || { x: 0.05, y: 0.05, w: 0.9, h: 0.9 };
+renderAiPanel();
+}
+
+// После неудачи — выделить часть того же плана (новый заход с нуля)
+function aiCropAgain() {
+if (!aiTarget || aiBusy() || !aiTarget.file) return;
+Object.assign(aiTarget, aiTarget.full, { pageText: '', chatId: null, runs: [] });
+aiOpenCrop(aiTarget);
+}
+
+function aiCropHtml(t) {
+return `<div class="mp-body-inner ai-chat">
+<div class="ai-hint">Выделите рамкой только план — без штампа, таблиц и соседних листов. Так дешевле и точнее, а большой план можно распознавать по частям. Тяните за углы, двигайте рамку пальцем.</div>
+<div class="ai-crop-stage" id="aiCropStage"><img src="${t.preview}" alt="План" draggable="false">
+<div class="ai-crop-rect" id="aiCropRect"><span data-h="nw"></span><span data-h="ne"></span><span data-h="sw"></span><span data-h="se"></span></div></div>
+<div class="ai-start">
+<button type="button" class="measure-open-btn ai-btn" onclick="aiCropDone(false)">Распознать всё</button>
+<button type="button" class="mp-btn mp-btn-primary" onclick="aiCropDone(true)">Распознать выделенное</button>
+</div>
+</div>`;
+}
+
+function aiCropPlace() {
+const r = document.getElementById('aiCropRect');
+const c = aiTarget && aiTarget.crop;
+if (!r || !c) return;
+Object.assign(r.style, { left: c.x * 100 + '%', top: c.y * 100 + '%', width: c.w * 100 + '%', height: c.h * 100 + '%' });
+}
+
+// Пальцем: за угол — меняем размер, за середину — двигаем
+function aiCropBind() {
+const stage = document.getElementById('aiCropStage');
+if (!stage) return;
+aiCropPlace();
+stage.onpointerdown = (e) => {
+const c = aiTarget && aiTarget.crop;
+if (!c || !e.target.closest('#aiCropRect')) return;
+e.preventDefault();
+const box = stage.getBoundingClientRect();
+const h = e.target.dataset.h || 'move';
+const start = { ...c }, sx = e.clientX, sy = e.clientY;
+const MIN = 0.05, cl = (v, a, b) => Math.min(b, Math.max(a, v));
+const move = (ev) => {
+const dx = (ev.clientX - sx) / box.width, dy = (ev.clientY - sy) / box.height;
+let { x, y, w, h: hh } = start;
+if (h === 'move') { x = cl(x + dx, 0, 1 - w); y = cl(y + dy, 0, 1 - hh); }
+else {
+if (h.includes('w')) { const nx = cl(x + dx, 0, x + w - MIN); w += x - nx; x = nx; }
+if (h.includes('e')) w = cl(w + dx, MIN, 1 - x);
+if (h.includes('n')) { const ny = cl(y + dy, 0, y + hh - MIN); hh += y - ny; y = ny; }
+if (h.includes('s')) hh = cl(hh + dy, MIN, 1 - y);
+}
+aiTarget.crop = { x, y, w, h: hh };
+aiCropPlace();
+};
+const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+window.addEventListener('pointermove', move);
+window.addEventListener('pointerup', up);
+};
+}
+
+async function aiCropDone(useCrop) {
+const t = aiTarget;
+if (!t || !t.cropStep) return;
+const c = t.crop;
+const whole = !useCrop || (c.w > 0.97 && c.h > 0.97);
+t.cropStep = false;
+if (whole) { runAiRecognition(''); return; }
+t.runs = [{ thinking: '', text: '', status: 'Вырезаю выделенное…' }];
+renderAiPanel();
+try {
+const part = await aiCropImage(t.file, t.page, t.isPdf, c);
+if (aiTarget !== t) return;
+Object.assign(t, { image: part.dataUrl.split(',')[1], mediaType: 'image/jpeg', preview: part.dataUrl, pageText: part.text || '',
+sentAs: `картинкой — выделенная часть${t.isPdf ? ' страницы PDF' + (part.text ? ', с её подписями и размерами текстом' : '') : ''}` });
+t.runs = [];
+runAiRecognition('');
+} catch (err) {
+t.runs[0].error = 'Не удалось вырезать часть: ' + (err && err.message ? err.message : err);
+t.runs[0].done = true;
+renderAiPanel();
+}
+}
+
+// Выделенная часть — заново из исходного файла, в хорошем разрешении: мелкие
+// размеры становятся читаемыми. У PDF заодно берём текст (размеры) внутри рамки.
+async function aiCropImage(file, pageNum, isPdf, c, maxSide = 1568) {
+const out = document.createElement('canvas');
+const ctx = out.getContext('2d');
+if (isPdf) {
+const pdf = await openPdf(file);
+const page = await pdf.getPage(pageNum);
+const vp1 = page.getViewport({ scale: 1 });
+const cw = c.w * vp1.width, ch = c.h * vp1.height;
+const scale = Math.min(maxSide / Math.max(cw, ch), 8);
+const vp = page.getViewport({ scale });
+out.width = Math.round(cw * scale); out.height = Math.round(ch * scale);
+ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height);
+await page.render({ canvasContext: ctx, viewport: vp, transform: [1, 0, 0, 1, -c.x * vp.width, -c.y * vp.height] }).promise;
+const words = [];
+try {
+const tc = await page.getTextContent();
+tc.items.forEach(it => {
+const str = String(it.str || '').trim();
+if (!str) return;
+const [px, py] = vp1.convertToViewportPoint(it.transform[4], it.transform[5]);
+const nx = px / vp1.width, ny = py / vp1.height;
+if (nx >= c.x && nx <= c.x + c.w && ny >= c.y && ny <= c.y + c.h) words.push(str);
+});
+} catch (e) { /* без текста */ }
+return { dataUrl: out.toDataURL('image/jpeg', 0.88), text: words.join(' ').slice(0, 8000) };
+}
+const url = URL.createObjectURL(file);
+try {
+const img = new Image();
+img.src = url;
+await img.decode();
+const sx = c.x * img.naturalWidth, sy = c.y * img.naturalHeight, sw = c.w * img.naturalWidth, sh = c.h * img.naturalHeight;
+const k = Math.min(1, maxSide / Math.max(sw, sh));
+out.width = Math.round(sw * k); out.height = Math.round(sh * k);
+ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height);
+ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out.width, out.height);
+return { dataUrl: out.toDataURL('image/jpeg', 0.88), text: '' };
+} finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+}
+
 // Последний заход не удался — убираем его и пробуем ещё раз с тем же уточнением
 function aiRetry() {
 if (!aiTarget || aiBusy()) return;
@@ -578,6 +717,16 @@ cancel.textContent = 'Закрыть';
 cancel.classList.remove('ai-stop');
 return;
 }
+if (aiTarget.cropStep) {
+body.innerHTML = aiCropHtml(aiTarget);
+aiCropBind();
+document.getElementById('aiApply').style.display = 'none';
+document.getElementById('aiNoteForm').style.display = 'none';
+const cancel = document.getElementById('aiCancel');
+cancel.textContent = 'Отмена';
+cancel.classList.remove('ai-stop');
+return;
+}
 const box = body.querySelector('.ai-chat');
 const stick = !box || body.scrollHeight - body.scrollTop - body.clientHeight < 80;
 const busy = aiBusy();
@@ -608,7 +757,7 @@ html += `<div class="as-text"><b>${escapeHtml(head[0].toUpperCase() + head.slice
 if (run.questions) html += `<div class="as-text"><b>Чтобы не ошибиться, уточните:</b>\n${run.questions.map((q, qi) => (run.questions.length > 1 ? (qi + 1) + '. ' : '') + escapeHtml(q)).join('\n')}</div>`;
 if (run.error) {
 html += `<div class="as-text">${escapeHtml(run.error)}</div>`;
-if (!busy && ri === aiTarget.runs.length - 1) html += `<button type="button" class="ai-retry" onclick="aiRetry()">Повторить</button>`;
+if (!busy && ri === aiTarget.runs.length - 1) html += `<div class="ai-retry-row"><button type="button" class="ai-retry" onclick="aiRetry()">Повторить</button>${aiTarget.file ? '<button type="button" class="ai-retry" onclick="aiCropAgain()">Выделить часть плана</button>' : ''}</div>`;
 }
 else if (live) html += `<div class="as-status">${escapeHtml(run.status)}</div>`;
 else if (run.result && ri < aiTarget.runs.length - 1) html += '<div class="as-status">заменено следующим вариантом</div>';

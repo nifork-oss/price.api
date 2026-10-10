@@ -512,3 +512,11 @@ test('план: стены коротко [длина, поворот, угол]
   const thought = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ stop_reason: 'max_tokens', content: [{ type: 'thinking', thinking: '…' }] }) }]);
   assert.match(JSON.parse(thought.text).error, /не уложилась в лимит длины/);
 });
+
+test('план: выделенная часть PDF — картинка и текст размеров из этой части', async () => {
+  const ok = [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }];
+  const { sent } = await callPlan({ pageText: 'Кухня 3200 2450 S=7,8' }, ok);
+  assert.match(sent[0].messages[0].content[1].text, /<pdf_text>\nКухня 3200 2450 S=7,8\n<\/pdf_text>/);
+  const plain = await callPlan({}, ok);
+  assert.ok(!plain.sent[0].messages[0].content[1].text.includes('<pdf_text>'));
+});
