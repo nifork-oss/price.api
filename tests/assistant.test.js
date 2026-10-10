@@ -62,6 +62,7 @@ test('сервер: передаёт данные калькулятора и р
   assert.strictEqual(data.items.length, 2);
   assert.deepStrictEqual(data.items[0].room_ids, ['r1']);
   assert.strictEqual(data.items[1].qty, 2);
+  assert.strictEqual(data.model, 'claude-sonnet-5-5'); // сервис модель не назвал — какую просили
   assert.strictEqual(sent[0].url, 'https://api.anthropic.com/v1/messages');
   assert.ok(sent[0].body.system.includes('"Покраска"'));
   assert.strictEqual(sent[0].body.tools[0].name, 'propose_items');
@@ -180,7 +181,7 @@ async function callStream(responses, env = {}) {
 }
 
 const STREAM = sse([
-  { type: 'message_start', message: {} },
+  { type: 'message_start', message: { model: 'anthropic/claude-sonnet-5-5' } },
   { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } },
   { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Смотрю замеры' } },
   { type: 'content_block_stop', index: 0 },
@@ -208,6 +209,7 @@ test('поток: размышления и текст по кусочкам, в
   assert.strictEqual(done.t, 'done');
   assert.strictEqual(done.text, 'Предлагаю покраску.');
   assert.deepStrictEqual(done.items[0].room_ids, ['r1']);
+  assert.strictEqual(done.model, 'anthropic/claude-sonnet-5-5');
   assert.strictEqual(sent[0].stream, true);
   assert.deepStrictEqual(sent[0].thinking, { type: 'adaptive', display: 'summarized' });
 });
@@ -233,7 +235,7 @@ test('поток: ошибка сервиса посреди ответа и о�
   assert.strictEqual(last.t, 'error');
   assert.match(last.error, /Overloaded/);
   const b = await callStream([{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: 'целиком' }] }) }]);
-  assert.deepStrictEqual(JSON.parse(b.text), { text: 'целиком', items: [] });
+  assert.deepStrictEqual(JSON.parse(b.text), { text: 'целиком', items: [], model: 'claude-sonnet-5-5' });
   const c = await callStream([{ status: 502, type: 'text/plain', body: 'error code: 502' }]);
   assert.strictEqual(c.status, 502);
   assert.match(JSON.parse(c.text).error, /ответил 502/);
@@ -303,7 +305,7 @@ test('план: нейросеть ответила словами — в оши
 test('план: нейросеть может сначала задать вопросы', async () => {
   const { status, text } = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: '{"questions":["Размеры в мм или см?"]}' }] }) }]);
   assert.strictEqual(status, 200);
-  assert.deepStrictEqual(JSON.parse(text), { rooms: [], warnings: [], questions: ['Размеры в мм или см?'] });
+  assert.deepStrictEqual(JSON.parse(text), { rooms: [], warnings: [], questions: ['Размеры в мм или см?'], model: 'claude-sonnet-5-5' });
   const both = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON.replace('"warnings":[]', '"warnings":[],"questions":["лишний"]') }] }) }]);
   assert.strictEqual(JSON.parse(both.text).questions, undefined);
 });

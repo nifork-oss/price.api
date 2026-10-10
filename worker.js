@@ -1199,12 +1199,19 @@ function planTurns(raw) {
 }
 
 async function recognizePlan(env, image, mediaType, turns) {
+  const payload = planPayload(env, image, mediaType, turns);
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
-    body: JSON.stringify(planPayload(env, image, mediaType, turns)),
+    body: JSON.stringify(payload),
   });
-  return parsePlanReply(await readAnthropicResponse(res, env));
+  return withModel(parsePlanReply, await readAnthropicResponse(res, env), payload);
+}
+
+// К разобранному ответу — какая модель ответила (как её назвал сервис;
+// если не назвал — какую просили), чтобы мастер видел её под ответом
+function withModel(finish, data, payload) {
+  return { ...finish(data), model: String((data && data.model) || payload.model || "").slice(0, 80) };
 }
 
 function parsePlanReply(data) {
@@ -1319,13 +1326,14 @@ function sanitizeChat(raw) {
 }
 
 async function askAssistant(env, messages, context) {
+  const payload = assistantPayload(env, messages, context);
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
-    body: JSON.stringify(assistantPayload(env, messages, context)),
+    body: JSON.stringify(payload),
   });
   const data = await readAnthropicResponse(res, env);
-  return parseAssistantReply(data);
+  return withModel(parseAssistantReply, data, payload);
 }
 
 // Ответ по мере написания: к нейросети — потоком (SSE), в браузер — строками
@@ -1351,7 +1359,7 @@ async function streamAnthropic(env, payload, finish, errorPrefix) {
   }
   // Ошибка или посредник ответил целиком, без потока — обычный ответ JSON
   if (!res.ok || !res.body || !/event-stream/i.test(res.headers.get("content-type") || "")) {
-    return json(finish(await readAnthropicResponse(res, env)));
+    return json(withModel(finish, await readAnthropicResponse(res, env), payload));
   }
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -1362,7 +1370,7 @@ async function streamAnthropic(env, payload, finish, errorPrefix) {
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     const blocks = [];
-    let buf = "", stopReason = null;
+    let buf = "", stopReason = null, model = "";
     try {
       const handle = (chunk) => {
         const data = chunk.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
@@ -1370,6 +1378,7 @@ async function streamAnthropic(env, payload, finish, errorPrefix) {
         let ev;
         try { ev = JSON.parse(data); } catch (e) { return; }
         if (ev.type === "error") throw new Error((ev.error && ev.error.message) || "ошибка сервиса");
+        if (ev.type === "message_start" && ev.message && ev.message.model) model = ev.message.model;
         if (ev.type === "content_block_start" && ev.content_block) {
           blocks[ev.index] = { type: ev.content_block.type, name: ev.content_block.name, text: "", json: "" };
           if (ev.content_block.type === "tool_use") send({ t: "tool" });
@@ -1396,7 +1405,7 @@ async function streamAnthropic(env, payload, finish, errorPrefix) {
         try { input = JSON.parse(b.json || "{}"); } catch (e) { /* ответ оборвался */ }
         return { type: "tool_use", name: b.name, input };
       }).filter(Boolean);
-      await send({ t: "done", ...finish({ content, stop_reason: stopReason }) });
+      await send({ t: "done", ...withModel(finish, { content, stop_reason: stopReason, model }, payload) });
     } catch (e) {
       await reader.cancel().catch(() => {});
       await send({ t: "error", error: errorPrefix + (e && e.message ? e.message : e) });

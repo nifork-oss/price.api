@@ -947,3 +947,4 @@ body.assistant-open .add-toast { z-index: 99; }
 .ai-hist-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-hist-open small { color: var(--s-ink3); font-size: 12px; }
 .ai-hist-del { border: 0; border-left: 1px solid var(--s-line); background: none; color: var(--s-ink3); width: 44px; font-size: 14px; cursor: pointer; }
+.as-model { margin-top: 4px; color: var(--s-ink3); font-size: 11px; }
