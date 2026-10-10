@@ -862,20 +862,25 @@ return key && obj && Array.isArray(obj.rooms) ? obj.rooms.find(r => r.measure &&
 // Распознанное поверх замера, который уже есть в объекте: меняем только
 // контур (стены, повороты, углы, высоту, проёмы), остальное — плитка, лепнина,
 // укрывка и т.п. — остаётся; id помещения и замера те же, работы в счёте не теряются
-const AI_GEOMETRY = ['height', 'shape', 'walls', 'wallHeights', 'turns', 'angles', 'openings'];
+const AI_GEOMETRY = ['height', 'shape', 'walls', 'wallHeights', 'turns', 'angles', 'openings', 'startHeading'];
 function aiUpdateMeasure(old, fresh) {
-AI_GEOMETRY.forEach(k => { old[k] = JSON.parse(JSON.stringify(fresh[k])); });
+AI_GEOMETRY.forEach(k => { if (fresh[k] === undefined) delete old[k]; else old[k] = JSON.parse(JSON.stringify(fresh[k])); });
 return old;
 }
 
 function aiReviewHtml(res) {
-const ms = res.rooms.map(r => aiRoomToMeasure(r, aiTarget.objectId));
+// Новый вид — углами в общей системе координат: замер комнаты + её место на плане квартиры
+const conv = res.rooms.map(r => (r.pts ? flatPtsToMeasure(r, aiTarget.objectId) : { measure: aiRoomToMeasure(r, aiTarget.objectId), plan: null }));
+const ms = conv.map(c => c.measure);
 aiTarget.measures = ms;
+aiTarget.plans = conv.map(c => c.plan);
+const flat = conv.filter(c => c.plan).map((c, i) => flatItem('p' + i, c.measure.room, c.measure, c.plan));
 const obj = (cloudData.objects || []).find(o => o.id === aiTarget.objectId);
 const same = ms.filter(m => aiExistingRoom(obj, m.room)).length;
 return `<div class="ai-review">
 ${res.warnings && res.warnings.length ? `<div class="ai-warn"><b>Нейросеть предупреждает:</b><br>${res.warnings.map(escapeHtml).join('<br>')}</div>` : ''}
-<div class="ai-hint">Это черновик. Отметьте нужные помещения и проверьте размеры — после добавления каждое правится в замере, как обычно. Если что-то не так — напишите уточнение внизу.</div>
+${flat.length > 1 ? `<div class="flat-wrap ai-flat">${flatSvg(flat)}</div>` : ''}
+<div class="ai-hint">Это черновик. Отметьте нужные помещения и проверьте размеры — после добавления каждое правится в замере, как обычно${flat.length > 1 ? ', а весь план виден у объекта — «План квартиры»' : ''}. Если что-то не так — напишите уточнение внизу.</div>
 ${same ? `<label class="ai-update"><input type="checkbox" id="aiUpdateSame" ${aiTarget.updateSame === false ? '' : 'checked'} onchange="aiSetUpdate(this.checked)"> <span>Помещения, которые уже есть в объекте (${same}), — <b>обновить</b>, а не добавлять заново. Меняются стены, высота и проёмы; плитка, лепнина, укрывка и работы в счёте остаются.</span></label>` : ''}
 ${ms.map((m, i) => {
 const g = rulerGeometry(m);
@@ -930,8 +935,9 @@ const m = aiTarget.measures[i];
 const nameEl = document.querySelector(`#aiBody input[data-ai-name="${i}"]`);
 if (nameEl && nameEl.value.trim()) m.room = nameEl.value.trim();
 const old = update ? aiExistingRoom(obj, m.room) : null;
-if (old) { aiUpdateMeasure(old.measure, m); updated++; }
-else { obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: m }); added++; }
+const plan = aiTarget.plans && aiTarget.plans[i];
+if (old) { aiUpdateMeasure(old.measure, m); if (plan) old.plan = plan; updated++; }
+else { obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: m, ...(plan ? { plan } : {}) }); added++; }
 });
 closeAiReview();
 await saveCloudData();

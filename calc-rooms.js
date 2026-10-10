@@ -629,6 +629,7 @@ ${canEdit ? `<button type="button" class="hc-btn hc-btn-more" style="flex:0 0 44
 return `<h2 style="margin-top:18px;">Помещения${rooms.length ? ` (${rooms.length})` : ''}</h2>
 ${list}
 ${canEdit ? `<button type="button" class="measure-open-btn" onclick="addRoom('${obj.id}')">+ Помещение</button>` : ''}
+${typeof objectHasFlat === 'function' && objectHasFlat(obj) ? `<button type="button" class="btn btn-primary plan-btn" onclick="openFlatPlan('${obj.id}')">План квартиры</button>` : ''}
 ${rooms.length ? `<button type="button" class="btn btn-primary plan-btn" onclick="openPlanActions('${obj.id}')">Обмерный план (PDF)</button>` : ''}
 ${canEdit ? `<button type="button" class="measure-open-btn ai-btn" onclick="startPlanRecognition('${obj.id}')">Распознать план по фото или PDF (платно)</button>` : ''}`;
 }

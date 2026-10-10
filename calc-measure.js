@@ -1158,6 +1158,8 @@ if (measureTarget.kind === 'room') {
 measure = null;
 measureTarget = { kind: 'none' };
 }
+// замер открывали с плана квартиры — возвращаемся на план
+if (typeof flatAfterMeasure === 'function') flatAfterMeasure();
 }
 
 function startNewMeasure() {
