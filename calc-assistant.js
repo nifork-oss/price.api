@@ -114,7 +114,7 @@ try {
 const res = await fetch(`${WORKER_URL}/assistant`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-body: JSON.stringify({ messages: history, context: assistantContext(), stream: true }),
+body: JSON.stringify({ messages: history, context: assistantContext(), stream: true, effort: paidEffort('assistant') }),
 signal: assistantAbort.signal
 });
 if (/ndjson/.test(res.headers.get('content-type') || '') && res.body) {

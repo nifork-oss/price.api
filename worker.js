@@ -701,9 +701,12 @@ const handler = {
           const cur = aiSettings(record);
           const price = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 1e6 ? Math.round(Number(v) * 100) / 100 : d);
           const pr = body.settings.prices || {};
+          const ef = body.settings.effort || {};
+          const eff = (v, d) => (AI_EFFORTS.includes(v) ? v : d);
           admin.aiSettings = {
             offer: typeof body.settings.offer === "string" ? body.settings.offer.trim().slice(0, 1000) : cur.offer,
             prices: { in: price(pr.in, cur.prices.in), out: price(pr.out, cur.prices.out) },
+            effort: { plan: eff(ef.plan, cur.effort.plan), assistant: eff(ef.assistant, cur.effort.assistant) },
           };
         } else {
           const u = record.users.find((x) => x.login === (body && body.login));
@@ -740,8 +743,10 @@ const handler = {
           // Выделенная часть PDF уходит картинкой — её подписи и размеры текстом отдельно
           const pageText = typeof body.pageText === "string" ? body.pageText.slice(0, 8000) : "";
           const onUsage = (u) => aiReport(env, request, auth, "plan", u);
-          if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns, hints, pageText), parsePlanReply, "Не удалось распознать план: ", onUsage);
-          const result = await recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText);
+          // Уровень размышлений из настроек админа (страница берёт его из своих данных)
+          const effort = body.effort;
+          if (body.stream) return await streamAnthropic(env, withEffort(planPayload(env, image, mediaType, turns, hints, pageText), effort), parsePlanReply, "Не удалось распознать план: ", onUsage);
+          const result = await recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText, effort);
           return json(result);
         } catch (e) {
           return json({ error: "Не удалось распознать план: " + (e && e.message ? e.message : e) }, 502);
@@ -765,8 +770,8 @@ const handler = {
         if (denied) return denied;
         try {
           const onUsage = (u) => aiReport(env, request, auth, "assistant", u);
-          if (body.stream) return await streamAssistant(env, messages, context, onUsage);
-          return json(await askAssistant(env, messages, context, onUsage));
+          if (body.stream) return await streamAssistant(env, messages, context, onUsage, body.effort);
+          return json(await askAssistant(env, messages, context, onUsage, body.effort));
         } catch (e) {
           return json({ error: "Помощник не ответил: " + (e && e.message ? e.message : e) }, 502);
         }
@@ -850,7 +855,7 @@ const handler = {
         const aiSelf = selfUser ? aiStatus(record, selfUser) : null;
         const aiPending = auth.role === "admin" ? record.users.filter((u) => typeof u.aiReq === "number").length : 0;
         const self = selfUser
-          ? { ai: aiSelf, aiOffer: aiSettings(record).offer, aiPending, login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "" }
+          ? { ai: aiSelf, aiOffer: aiSettings(record).offer, aiEffort: aiSettings(record).effort, aiPending, login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "" }
           : { login: auth.login, email: "", companyName: "", publicPriceEnabled: false, pieNote: "", invoiceNote: "", planHints: "" };
         // Режим "своя компания" — полностью личное пространство: свой
         // прайс-лист, свои объекты и своя история, невидимые админу
@@ -1170,7 +1175,15 @@ const handler = {
 // Деньги храним в копейках.
 const AI_FEATURES = ["plan", "assistant"];
 const AI_DEFAULT_PRICES = { in: 500, out: 2500 }; // ₽ за 1 млн токенов (ProxyAPI, Sonnet 5.5)
-const AI_CACHE_READ = 0.1, AI_CACHE_WRITE = 1.25;   // доля цены отправки: чтение из кеша, запись в кеш
+const AI_CACHE_READ = 0.1, AI_CACHE_WRITE = 1.25;
+// Насколько подробно нейросеть размышляет перед ответом (настройка админа):
+// high — подробно (как по умолчанию у нейросети), medium — умеренно, low — быстро
+const AI_EFFORTS = ["low", "medium", "high"];
+const AI_DEFAULT_EFFORT = { plan: "high", assistant: "high" };
+
+function withEffort(payload, effort) {
+  return AI_EFFORTS.includes(effort) ? { ...payload, output_config: { effort } } : payload;
+}   // доля цены отправки: чтение из кеша, запись в кеш
 
 function siteAdmin(record) {
   return record.users.find((u) => u.login === "admin") || record.users.find((u) => u.role === "admin") || null;
@@ -1178,7 +1191,7 @@ function siteAdmin(record) {
 
 function aiSettings(record) {
   const s = (siteAdmin(record) || {}).aiSettings || {};
-  return { offer: s.offer || "", prices: { ...AI_DEFAULT_PRICES, ...(s.prices || {}) } };
+  return { offer: s.offer || "", prices: { ...AI_DEFAULT_PRICES, ...(s.prices || {}) }, effort: { ...AI_DEFAULT_EFFORT, ...(s.effort || {}) } };
 }
 
 function aiMonth() {
@@ -1491,8 +1504,8 @@ function planTurns(raw) {
   }).filter((t) => t.note);
 }
 
-async function recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText) {
-  const payload = planPayload(env, image, mediaType, turns, hints, pageText);
+async function recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText, effort) {
+  const payload = withEffort(planPayload(env, image, mediaType, turns, hints, pageText), effort);
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
@@ -1637,8 +1650,8 @@ function sanitizeChat(raw) {
   return out.length && out[out.length - 1].role === "user" ? out : null;
 }
 
-async function askAssistant(env, messages, context, onUsage) {
-  const payload = assistantPayload(env, messages, context);
+async function askAssistant(env, messages, context, onUsage, effort) {
+  const payload = withEffort(assistantPayload(env, messages, context), effort);
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
@@ -1659,7 +1672,8 @@ async function streamAnthropic(env, payload, finish, errorPrefix, onUsage) {
     method: "POST",
     headers: anthropicHeaders(env),
     body: JSON.stringify({
-      ...(cache ? payload : stripCache(payload)),
+      // Третья попытка — без меток кеша и без уровня размышлений (если посредник их не знает)
+      ...(cache ? payload : (({ output_config, ...rest }) => stripCache(rest))(payload)),
       max_tokens: payload.max_tokens + (thinking ? 6000 : 0),
       stream: true,
       ...(thinking ? { thinking: { type: "adaptive", display: "summarized" } } : {}),
@@ -1759,8 +1773,8 @@ function assistantPayload(env, messages, context) {
   };
 }
 
-function streamAssistant(env, messages, context, onUsage) {
-  return streamAnthropic(env, assistantPayload(env, messages, context), parseAssistantReply, "Помощник не ответил: ", onUsage);
+function streamAssistant(env, messages, context, onUsage, effort) {
+  return streamAnthropic(env, withEffort(assistantPayload(env, messages, context), effort), parseAssistantReply, "Помощник не ответил: ", onUsage);
 }
 
 function parseAssistantReply(data) {

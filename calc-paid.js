@@ -18,6 +18,22 @@ function paidDate(ts) {
 return new Date(ts).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+// Уровень размышлений нейросети из настроек админа (уходит с запросом)
+function paidEffort(feature) {
+const e = cloudData.self && cloudData.self.aiEffort;
+return (e && e[feature]) || undefined;
+}
+
+const PAID_EFFORTS = [
+['high', 'Подробно — точнее, дороже'],
+['medium', 'Умеренно — в 2–3 раза дешевле'],
+['low', 'Быстро — дешевле всего, может ошибаться'],
+];
+
+function paidEffortSelect(id, value) {
+return `<select id="${id}">${PAID_EFFORTS.map(([v, t]) => `<option value="${v}"${v === value ? ' selected' : ''}>${t}</option>`).join('')}</select>`;
+}
+
 function paidStatus() {
 return (cloudData.self && cloudData.self.ai) || { balance: 0, month: {}, requestedAt: 0, pays: [] };
 }
@@ -153,6 +169,12 @@ box.innerHTML = `
 <label>ответ нейросети <input type="number" id="paidPriceOut" min="0" step="10" value="${settings.prices.out}"></label>
 </div>
 <small class="paid-muted">Ваша цена у ProxyAPI для Sonnet 5.5: 500 и 2500 ₽ (ввод и вывод). Поставите выше — разница остаётся вам. Повтор уже отправленного в течение 5 минут (инструкция, прайс, переписка, картинка плана) идёт из кеша и стоит 10% цены отправки, первая запись в кеш — 125%, как у ProxyAPI. Мастера видят только рубли: под каждым ответом — сколько стоило отправленное и ответ.</small>
+<b>Сколько нейросеть размышляет перед ответом</b>
+<div class="paid-limits">
+<label>распознавание плана ${paidEffortSelect('paidEffortPlan', settings.effort ? settings.effort.plan : 'high')}</label>
+<label>помощник ${paidEffortSelect('paidEffortAssistant', settings.effort ? settings.effort.assistant : 'high')}</label>
+</div>
+<small class="paid-muted">Размышления — основная часть цены ответа. Сравните на своих планах: если «умеренно» распознаёт так же хорошо — оставьте его. Для помощника обычно хватает «умеренно».</small>
 <button type="button" class="btn btn-success btn-sm" onclick="paidSaveSettings()">Сохранить</button>
 </div>
 ${paidAdmin.self ? `<div class="paid-box"><b>Ваш расход в этом месяце (без списаний)</b><small class="paid-muted">${paidMonthHtml(paidAdmin.self.month)}</small></div>` : ''}
@@ -211,5 +233,9 @@ paidAdd(login, v);
 
 async function paidSaveSettings() {
 const num = id => Math.max(0, Number(String(document.getElementById(id).value).replace(',', '.')) || 0);
-if (await paidPut({ settings: { offer: document.getElementById('paidOffer').value, prices: { in: num('paidPriceIn'), out: num('paidPriceOut') } } })) showAddToast('Сохранено');
+const effort = { plan: document.getElementById('paidEffortPlan').value, assistant: document.getElementById('paidEffortAssistant').value };
+if (await paidPut({ settings: { offer: document.getElementById('paidOffer').value, prices: { in: num('paidPriceIn'), out: num('paidPriceOut') }, effort } })) {
+if (cloudData.self) cloudData.self.aiEffort = effort;
+showAddToast('Сохранено');
+}
 }

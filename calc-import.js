@@ -411,7 +411,7 @@ const res = await fetch(`${WORKER_URL}/recognize-plan`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
 body: JSON.stringify({ image: target.image, mediaType: target.mediaType, stream: true,
-turns: aiTurns(target.runs), hints: aiPlanHints(), ...(target.pageText ? { pageText: target.pageText } : {}) }),
+turns: aiTurns(target.runs), hints: aiPlanHints(), effort: paidEffort('plan'), ...(target.pageText ? { pageText: target.pageText } : {}) }),
 signal: target.abort.signal
 });
 let data = null;

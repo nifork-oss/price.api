@@ -470,8 +470,8 @@ test('баланс: мастер просит пополнить, админ в�
   const fix = await call('/ai-access', { method: 'PUT', body: { login: 'ivan', add: -120.5 }, ...admin });
   assert.strictEqual(fix.data.users[0].ai.balance, 379.5);
   assert.strictEqual((await call('/ai-access', { method: 'PUT', body: { login: 'ivan', add: 'abc' }, ...admin })).status, 400);
-  const set = await call('/ai-access', { method: 'PUT', body: { settings: { offer: 'Перевод на карту', prices: { in: 700, out: 3000 } } }, ...admin });
-  assert.deepStrictEqual(set.data.settings, { offer: 'Перевод на карту', prices: { in: 700, out: 3000 } });
+  const set = await call('/ai-access', { method: 'PUT', body: { settings: { offer: 'Перевод на карту', prices: { in: 700, out: 3000 }, effort: { plan: 'medium', assistant: 'бред' } } }, ...admin });
+  assert.deepStrictEqual(set.data.settings, { offer: 'Перевод на карту', prices: { in: 700, out: 3000 }, effort: { plan: 'medium', assistant: 'high' } });
   // С деньгами на балансе — можно
   assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
 });
@@ -532,4 +532,19 @@ test('план: дополнительный файл (перегородки) �
   const r = await callPlan({ turns: many }, ok);
   const imgs = r.sent[0].messages.flatMap(m => Array.isArray(m.content) ? m.content.filter(b => b.type === 'image').map(b => b.source.data) : []);
   assert.deepStrictEqual(imgs, ['AAAA', 'I2', 'I3', 'I4']);
+});
+
+test('уровень размышлений: уходит нейросети, неизвестный — не уходит; посредник не знает — третий раз без него', async () => {
+  const ok = [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }];
+  const a = await callPlan({ effort: 'medium' }, ok);
+  assert.deepStrictEqual(a.sent[0].output_config, { effort: 'medium' });
+  const b = await callPlan({ effort: 'max!' }, ok);
+  assert.strictEqual(b.sent[0].output_config, undefined);
+  const { sent } = await callAssistant({ messages: [{ role: 'user', content: 'привет' }], effort: 'low' });
+  assert.deepStrictEqual(sent[0].body.output_config, { effort: 'low' });
+  const bad = { status: 400, type: 'application/json', body: JSON.stringify({ error: { message: 'unknown field output_config' } }) };
+  const st = await callPlan({ stream: true, effort: 'low' }, [bad, bad, { type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }]);
+  assert.strictEqual(st.sent.length, 3);
+  assert.deepStrictEqual(st.sent[1].output_config, { effort: 'low' });
+  assert.strictEqual(st.sent[2].output_config, undefined);
 });
