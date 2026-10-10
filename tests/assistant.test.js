@@ -318,3 +318,8 @@ test('план: вопросы и план внутри вызова инстр�
   const odd = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'tool_use', name: 'view_image', input: { path: 'a' } }] }) }]);
   assert.match(JSON.parse(odd.text).error, /вызов view_image \{"path":"a"\}/);
 });
+
+test('план: PDF уходит документом', async () => {
+  const { sent } = await callPlan({ mediaType: 'application/pdf' }, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }]);
+  assert.deepStrictEqual(sent[0].messages[0].content[0], { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'AAAA' } });
+});

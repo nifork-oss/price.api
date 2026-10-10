@@ -225,6 +225,12 @@ const img = await fileToJpeg(file, 1568);
 if (aiTarget !== target) return;
 target.preview = img.dataUrl;
 target.image = img.dataUrl.split(',')[1];
+target.mediaType = 'image/jpeg';
+// PDF до 4 МБ отправляем как есть — в нём есть текст с размерами
+if ((file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) && file.size <= 4 * 1024 * 1024) {
+target.image = await fileToBase64(file);
+target.mediaType = 'application/pdf';
+}
 target.runs = [];
 runAiRecognition('');
 } catch (err) {
@@ -246,7 +252,7 @@ try {
 const res = await fetch(`${WORKER_URL}/recognize-plan`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-body: JSON.stringify({ image: target.image, mediaType: 'image/jpeg', stream: true,
+body: JSON.stringify({ image: target.image, mediaType: target.mediaType, stream: true,
 turns: aiTurns(target.runs) }),
 signal: target.abort.signal
 });
@@ -314,6 +320,15 @@ function scheduleAiPanel() {
 if (aiPanelQueued) return;
 aiPanelQueued = true;
 (window.requestAnimationFrame || setTimeout)(() => { aiPanelQueued = false; renderAiPanel(); });
+}
+
+function fileToBase64(file) {
+return new Promise((resolve, reject) => {
+const r = new FileReader();
+r.onload = () => resolve(String(r.result).split(',')[1]);
+r.onerror = () => reject(r.error);
+r.readAsDataURL(file);
+});
 }
 
 // Помещения, которые нейросеть уже записала, — по ещё недописанному JSON
