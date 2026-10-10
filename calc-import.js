@@ -431,6 +431,7 @@ run.questions = data.questions;
 } else if (!run.error && (!data.rooms || !data.rooms.length)) run.error = 'Помещения не распознаны' + (data.warnings && data.warnings.length ? ': ' + data.warnings.join(' ') : '.') + ' Напишите внизу, что на плане (например, «это квартира из 3 комнат, размеры в мм»), или попробуйте более чёткое фото.';
 if (!run.error && !run.questions) run.result = { rooms: data.rooms, warnings: data.warnings || [] };
 if (data && data.model) run.model = data.model;
+if (data && data.cost) { run.cost = data.cost; paidApplyCost(data.cost); }
 } catch (err) {
 if (err && err.name === 'AbortError') {
 // Остановили — убираем заход, уточнение возвращаем в поле
@@ -565,6 +566,7 @@ if (run.questions) html += `<div class="as-text"><b>Чтобы не ошибит
 if (run.error) html += `<div class="as-text">${escapeHtml(run.error)}</div>`;
 else if (live) html += `<div class="as-status">${escapeHtml(run.status)}</div>`;
 else if (run.result && ri < aiTarget.runs.length - 1) html += '<div class="as-status">заменено следующим вариантом</div>';
+if (run.cost && !live) html += paidCostHtml(run.cost);
 if (run.model && !live) html += `<div class="as-model">${escapeHtml(run.model)}</div>`;
 html += '</div>';
 });

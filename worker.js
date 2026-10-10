@@ -1240,7 +1240,10 @@ async function aiUsageAdd(env, auth, feature, usage) {
   if (!u) return { ok: false };
   const tin = n(usage && usage.in), tout = n(usage && usage.out);
   const { prices } = aiSettings(record);
-  const kop = Math.round((tin * prices.in + tout * prices.out) / 1e6 * 100);
+  // Отдельно — за отправленное (вопрос, картинка, прайс) и за ответ нейросети
+  const kopIn = Math.round(tin * prices.in / 1e4);
+  const kopOut = Math.round(tout * prices.out / 1e4);
+  const kop = kopIn + kopOut;
   const use = u.aiUse && u.aiUse.month === aiMonth() ? { ...u.aiUse } : { month: aiMonth() };
   const cur = aiUse(u, feature);
   use[feature] = { req: cur.req + 1, in: cur.in + tin, out: cur.out + tout, kop: cur.kop + kop };
@@ -1248,7 +1251,7 @@ async function aiUsageAdd(env, auth, feature, usage) {
   u.aiSpent = (u.aiSpent || 0) + kop;
   if (auth.role !== "admin") u.aiBalance = (u.aiBalance || 0) - kop;
   await writeUsers(env, record);
-  return { ok: true, kop };
+  return { ok: true, kop, cost: { sent: kopIn / 100, reply: kopOut / 100, total: kop / 100, balance: auth.role === "admin" ? null : u.aiBalance / 100 } };
 }
 
 // Токены из ответа сервиса: вход (вместе с кешем) и выход
@@ -1273,11 +1276,14 @@ async function viaStore(env, request, auth, path, body, direct) {
 }
 
 // Записать расход; ошибка записи не должна ломать ответ мастеру
+// Ответ — стоимость запроса в рублях (показываем под ответом) или null
 async function aiReport(env, request, auth, feature, usage) {
   try {
-    await viaStore(env, request, auth, "/ai-usage", { feature, usage }, () => aiUsageAdd(env, auth, feature, usage));
+    const r = await viaStore(env, request, auth, "/ai-usage", { feature, usage }, () => aiUsageAdd(env, auth, feature, usage));
+    return (r && r.cost) || null;
   } catch (e) {
     console.warn("Не удалось записать расход токенов:", e);
+    return null;
   }
 }
 
@@ -1433,8 +1439,8 @@ async function recognizePlan(env, image, mediaType, turns, hints, onUsage) {
     body: JSON.stringify(payload),
   });
   const data = await readAnthropicResponse(res, env);
-  if (onUsage) await onUsage(usageOf(data.usage));
-  return withModel(parsePlanReply, data, payload);
+  const cost = onUsage ? await onUsage(usageOf(data.usage)) : null;
+  return { ...withModel(parsePlanReply, data, payload), cost };
 }
 
 // К разобранному ответу — какая модель ответила (как её назвал сервис;
@@ -1562,8 +1568,8 @@ async function askAssistant(env, messages, context, onUsage) {
     body: JSON.stringify(payload),
   });
   const data = await readAnthropicResponse(res, env);
-  if (onUsage) await onUsage(usageOf(data.usage));
-  return withModel(parseAssistantReply, data, payload);
+  const cost = onUsage ? await onUsage(usageOf(data.usage)) : null;
+  return { ...withModel(parseAssistantReply, data, payload), cost };
 }
 
 // Ответ по мере написания: к нейросети — потоком (SSE), в браузер — строками
@@ -1590,8 +1596,8 @@ async function streamAnthropic(env, payload, finish, errorPrefix, onUsage) {
   // Ошибка или посредник ответил целиком, без потока — обычный ответ JSON
   if (!res.ok || !res.body || !/event-stream/i.test(res.headers.get("content-type") || "")) {
     const data = await readAnthropicResponse(res, env);
-    if (onUsage) await onUsage(usageOf(data.usage));
-    return json(withModel(finish, data, payload));
+    const cost = onUsage ? await onUsage(usageOf(data.usage)) : null;
+    return json({ ...withModel(finish, data, payload), cost });
   }
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -1643,8 +1649,8 @@ async function streamAnthropic(env, payload, finish, errorPrefix, onUsage) {
         try { input = JSON.parse(b.json || "{}"); } catch (e) { /* ответ оборвался */ }
         return { type: "tool_use", name: b.name, input };
       }).filter(Boolean);
-      if (onUsage) await onUsage(usageOf(usage));
-      await send({ t: "done", ...withModel(finish, { content, stop_reason: stopReason, model }, payload) });
+      const cost = onUsage ? await onUsage(usageOf(usage)) : null;
+      await send({ t: "done", ...withModel(finish, { content, stop_reason: stopReason, model }, payload), cost });
     } catch (e) {
       await reader.cancel().catch(() => {});
       if (onUsage) await onUsage(usageOf(usage));

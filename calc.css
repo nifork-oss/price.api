@@ -991,3 +991,5 @@ body.assistant-open .add-toast { z-index: 99; }
 .paid-user.paid-req { background: #fff8e6; }
 .paid-btns input[type="number"] { width: 110px; padding: 6px 8px; border: 1px solid #cfd5dd; border-radius: 8px; font: inherit; font-size: 13px; }
 .paid-user .paid-btns { margin-top: 8px; }
+.as-cost { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--s-line); color: var(--s-ink2); font-size: 12px; }
+.as-cost b { color: var(--s-ink); }
