@@ -144,6 +144,14 @@ v.w = Math.max(...xs) - v.minX + pad; v.h = Math.max(...ys) - v.minY + pad;
 }
 const fs = opt.fs || Math.max(0.16, Math.min(0.32, Math.max(v.w, v.h) / 45));
 const bridges = flatBridges(items, fs);
+// подложка — чертёж под планом (opt.underlay: { href, x, y, w, ar, rot, op, adjust })
+let under = '';
+const ul = opt.underlay;
+if (ul) {
+const uh = ul.w * ul.ar, tr = `rotate(${ul.rot || 0} ${ul.x + ul.w / 2} ${ul.y + uh / 2})`;
+under = `<image id="flatUlImg" href="${ul.href}" x="${ul.x}" y="${ul.y}" width="${ul.w}" height="${uh}" preserveAspectRatio="none" opacity="${ul.op || 0.45}" transform="${tr}" pointer-events="none"/>`
++ (ul.adjust ? `<rect id="flatUlFrame" x="${ul.x}" y="${ul.y}" width="${ul.w}" height="${uh}" fill="none" stroke="#e8a900" stroke-width="${fs * 0.12}" stroke-dasharray="${fs * 0.5} ${fs * 0.3}" transform="${tr}" pointer-events="none"/>` : '');
+}
 const body = items.map(r => {
 const n = r.pts.length;
 const d = 'M' + r.pts.map(p => p.join(' ')).join('L') + (r.closed ? 'Z' : '');
@@ -170,7 +178,7 @@ const showName = name && rf >= fs * 0.6;
 if (!showName) rf = Math.min(fs, fitW(areaTxt.length, 0.5) / 0.85, bh / 1.6);
 const tap = opt.onTap ? ` onclick="${opt.onTap}('${r.id}')" style="cursor:pointer"` : '';
 return `<g class="flat-room${sel ? ' sel' : ''}"${tap}>
-<path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}" stroke="#14181f" stroke-width="${fs * 0.22}" stroke-linejoin="miter"/>
+<path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}"${ul ? ' fill-opacity="0.35"' : ''} stroke="#14181f" stroke-width="${fs * 0.22}" stroke-linejoin="miter"/>
 ${ops}
 <title>${escapeHtml(name)} — ${areaTxt}</title>
 ${showName ? `<text x="${lx}" y="${ly - rf * 0.15}" font-size="${rf}" text-anchor="middle" font-family="Arial, sans-serif" fill="#14181f" font-weight="700" pointer-events="none">${escapeHtml(name)}</text>` : ''}
@@ -192,7 +200,7 @@ handles += `<text x="${mx + nx * fs * 1.6}" y="${my + ny * fs * 1.6 + fs * 0.35}
 }
 s.pts.forEach((p, i) => { handles += `<circle data-v="${i}" cx="${p[0]}" cy="${p[1]}" r="${hr}" fill="#ffcf3d" stroke="#14181f" stroke-width="${fs * 0.12}"/>`; });
 }
-return `<svg class="flat-svg" viewBox="${v.minX} ${v.minY} ${v.w} ${v.h}" xmlns="http://www.w3.org/2000/svg">${bridges}${body}${handles}</svg>`;
+return `<svg class="flat-svg" viewBox="${v.minX} ${v.minY} ${v.w} ${v.h}" xmlns="http://www.w3.org/2000/svg">${under}${bridges}${body}${handles}</svg>`;
 }
 
 // Проём на плане — отрезок на стене комнаты (в метрах) или null
@@ -347,6 +355,7 @@ return objectRooms(flatObj()).filter(r => r.plan && r.measure);
 
 function openFlatPlan(objectId) {
 flatObjectId = objectId;
+flatUlAdjust = null;
 flatZoom = 1;
 flatEdit = null;
 document.getElementById('flatPanel').classList.add('open');
@@ -386,18 +395,128 @@ const top = ed
 </div>
 <div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — введёте точную длину стены. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}</div>`
 : `<div class="ai-hint">Нажмите на помещение — откроется его замер. После правки план обновится.${rest ? ` Помещений без места на плане: ${rest} (добавлены вручную).` : ''}</div>
-${isCurrentClient() ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button>'}`;
+${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button>'}`;
+const oldWrap = document.getElementById('flatWrap');
+const scroll = oldWrap ? [oldWrap.scrollLeft, oldWrap.scrollTop] : null;
 body.innerHTML = `<div class="mp-body-inner">
 ${top}
 <div class="flat-zoom"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><span>Площадь: <b>${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²</b></span><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button></div>
-<div class="flat-wrap${ed ? ' editing' : ''}" id="flatWrap"><div style="width:${flatZoom * 100}%">${flatSvg(items, ed ? { view: ed.view, sel: ed.sel } : { onTap: 'flatOpenRoom' })}</div></div>
+<div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : { onTap: 'flatOpenRoom', underlay: flatUlOpt(), view: flatViewOf(items) })}</div></div>
+${ed ? '' : flatUlBarHtml()}
 </div>`;
+flatSizeInner();
+const wrap = document.getElementById('flatWrap');
+if (scroll && wrap) { wrap.scrollLeft = scroll[0]; wrap.scrollTop = scroll[1]; }
 if (ed) flatBindEdit();
+else if (flatUlAdjust) flatBindUnderlay();
+if (!flatUlAdjust) flatBindPanZoom();
+}
+
+// Рамка рисунка: план и (если видна) подложка целиком — чтобы были видны все подписи чертежа
+function flatViewOf(items, pad = 0.4) {
+const all = items.flatMap(r => r.pts);
+const u = flatUlOpt();
+if (u) {
+const h = u.w * u.ar, cx = u.x + u.w / 2, cy = u.y + h / 2;
+const [bw, bh] = (u.rot || 0) % 180 ? [h, u.w] : [u.w, h];
+all.push([cx - bw / 2, cy - bh / 2], [cx + bw / 2, cy + bh / 2]);
+}
+if (!all.length) return undefined;
+const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+const v = { minX: Math.min(...xs) - pad, minY: Math.min(...ys) - pad };
+v.w = Math.max(...xs) - v.minX + pad; v.h = Math.max(...ys) - v.minY + pad;
+return v;
+}
+
+// Рисунок в окне: при масштабе 1 — весь целиком, дальше — крупнее (до 8 раз)
+function flatSizeInner() {
+const wrap = document.getElementById('flatWrap');
+const inner = wrap && wrap.firstElementChild;
+const svg = inner && inner.querySelector('svg');
+if (!svg) return;
+const vb = svg.viewBox.baseVal;
+const W = wrap.clientWidth - 12, H = wrap.clientHeight - 12;
+const base = Math.max(100, Math.min(W, H * vb.width / vb.height));
+inner.style.width = Math.round(base * flatZoom) + 'px';
+inner.style.margin = '0 auto';
+}
+
+// Масштаб с сохранением точки под (cx, cy) — координаты внутри окна
+function flatZoomAt(z, cx, cy) {
+const wrap = document.getElementById('flatWrap');
+const inner = wrap && wrap.firstElementChild;
+if (!inner) return;
+z = Math.max(1, Math.min(8, z));
+const ow = inner.offsetWidth || 1, ol = inner.offsetLeft, ot = inner.offsetTop;
+const fx = (wrap.scrollLeft + cx - ol) / ow, fy = (wrap.scrollTop + cy - ot) / (inner.offsetHeight || 1);
+flatZoom = z;
+flatSizeInner();
+wrap.scrollLeft = fx * inner.offsetWidth + inner.offsetLeft - cx;
+wrap.scrollTop = fy * inner.offsetHeight + inner.offsetTop - cy;
 }
 
 function flatSetZoom(d) {
-flatZoom = Math.max(1, Math.min(4, flatZoom * (d > 0 ? 1.5 : 1 / 1.5)));
-renderFlatPlan();
+const wrap = document.getElementById('flatWrap');
+if (!wrap) return;
+flatZoomAt(flatZoom * (d > 0 ? 1.5 : 1 / 1.5), wrap.clientWidth / 2, wrap.clientHeight / 2);
+}
+
+// Окно плана как карта: одним пальцем — двигать (в правке — по пустому месту),
+// двумя — приближать; колесо с Ctrl — тоже масштаб. Нажатие после движения не открывает комнату
+function flatBindPanZoom() {
+const wrap = document.getElementById('flatWrap');
+if (!wrap) return;
+const pts = new Map();
+let start = null, moved = false;
+const snap = () => ({ pts: new Map([...pts].map(([k, v]) => [k, { ...v }])), sl: wrap.scrollLeft, st: wrap.scrollTop, z: flatZoom });
+wrap._pz = pts;
+wrap.addEventListener('pointerdown', e => {
+if (wrap._drag) return;                                   // тянут угол или стену
+pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+if (pts.size === 1) moved = false;
+start = snap();
+});
+wrap.addEventListener('pointermove', e => {
+if (!pts.has(e.pointerId) || !start || wrap._drag) return;
+pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+if (pts.size === 1 && start.pts.size === 1) {
+const p0 = start.pts.get(e.pointerId);
+const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
+if (!moved && Math.hypot(dx, dy) < 6) return;
+if (!moved) { moved = true; try { wrap.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ } }
+wrap.scrollLeft = start.sl - dx; wrap.scrollTop = start.st - dy;
+} else if (pts.size === 2 && start.pts.size === 2) {
+moved = true;
+const a = [...pts.values()], b = [...start.pts.values()];
+const d1 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), d0 = Math.hypot(b[0].x - b[1].x, b[0].y - b[1].y) || 1;
+const r = wrap.getBoundingClientRect();
+const c1 = [(a[0].x + a[1].x) / 2 - r.left, (a[0].y + a[1].y) / 2 - r.top];
+const c0 = [(b[0].x + b[1].x) / 2 - r.left, (b[0].y + b[1].y) / 2 - r.top];
+// масштаб от точки между пальцами в начале, потом — сдвиг за пальцами
+wrap.scrollLeft = start.sl; wrap.scrollTop = start.st; flatZoom = start.z; flatSizeInner();
+flatZoomAt(start.z * d1 / d0, c0[0], c0[1]);
+wrap.scrollLeft -= c1[0] - c0[0]; wrap.scrollTop -= c1[1] - c0[1];
+}
+});
+const end = e => {
+if (!pts.has(e.pointerId)) return;
+pts.delete(e.pointerId);
+start = pts.size ? snap() : null;
+// нажатие мимо комнат в правке — снять выделение
+if (!pts.size && !moved && flatEdit && flatEdit.sel && !(e.target.dataset && (e.target.dataset.room || e.target.dataset.v != null || e.target.dataset.w != null))) {
+flatEdit.sel = null; renderFlatPlan();
+}
+};
+wrap.addEventListener('pointerup', end);
+wrap.addEventListener('pointercancel', end);
+// после движения нажатие не открывает замер комнаты
+wrap.addEventListener('click', e => { if (moved) { e.stopPropagation(); e.preventDefault(); moved = false; } }, true);
+wrap.addEventListener('wheel', e => {
+if (!e.ctrlKey) return;
+e.preventDefault();
+const r = wrap.getBoundingClientRect();
+flatZoomAt(flatZoom * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
 }
 
 function flatOpenRoom(roomId) {
@@ -418,15 +537,165 @@ renderFlatPlan();
 
 /* ---------- правка на плане ---------- */
 
+/* ---------- подложка под планом квартиры: страница PDF или фото чертежа ---------- */
+// Хранится в этом браузере, как подложка комнаты (calc-import.js), — по объекту
+
+let flatUlAdjust = null;   // { view } — подстраиваем подложку (рамка рисунка на это время не меняется)
+
+function flatUlId() { return 'flat_' + flatObjectId; }
+
+function flatUlOpt() {
+const u = typeof getUnderlay === 'function' ? getUnderlay(flatUlId()) : null;
+if (!u || (u.hidden && !flatUlAdjust)) return null;
+return { ...u, href: underlayHref(flatUlId(), u.src), adjust: !!flatUlAdjust };
+}
+
+function flatUlBarHtml() {
+if (isCurrentClient()) return '';
+const u = getUnderlay(flatUlId());
+if (!u) return `<div class="ai-hint">Подложка — страница проекта под планом: сразу видно, где план расходится с чертежом.</div>
+<div class="rl-ul-row"><button type="button" class="rl-ul-add" onclick="flatUlPick('pdf')">Подложка: PDF</button><button type="button" class="rl-ul-add" onclick="flatUlPick('photo')">Подложка: фото</button></div>`;
+if (!flatUlAdjust) return `<div class="rl-ul-row">
+${u.locked ? '<span class="flat-ul-lock">🔒 Подложка закреплена</span>' : ''}
+<button type="button" class="rl-tool" onclick="flatUlAction('adjust')">${u.locked ? 'Подстроить заново' : 'Подложка: подстроить'}</button>
+<button type="button" class="rl-tool" onclick="flatUlAction('toggle')">${u.hidden ? 'Показать подложку' : 'Скрыть подложку'}</button>
+</div>`;
+return `<div class="rl-ul-panel">
+<div class="rl-ul-hint">Двигайте чертёж пальцем, двумя пальцами — размер. Совместите его стены с планом, точно — кнопками. Потом — «Закрепить»: план можно будет двигать и приближать вместе с подложкой.</div>
+<div class="rl-ul-row">
+<button type="button" class="rl-tool" onclick="flatUlAction('smaller5')">−5%</button>
+<button type="button" class="rl-tool" onclick="flatUlAction('smaller')">−1%</button>
+<button type="button" class="rl-tool" onclick="flatUlAction('bigger')">+1%</button>
+<button type="button" class="rl-tool" onclick="flatUlAction('bigger5')">+5%</button>
+<button type="button" class="rl-tool" onclick="flatUlAction('rotate')">↻ 90°</button>
+<button type="button" class="rl-tool" onclick="flatUlAction('lighter')">Светлее</button>
+<button type="button" class="rl-tool" onclick="flatUlAction('darker')">Темнее</button>
+<button type="button" class="rl-tool" onclick="flatUlPick('pdf')">Другая страница</button>
+<button type="button" class="rl-tool rl-tool-del" onclick="flatUlAction('remove')">Убрать</button>
+<button type="button" class="rl-tool rl-tool-close" onclick="flatUlAction('done')">🔒 Закрепить</button>
+</div>
+</div>`;
+}
+
+function flatUlPick(kind) {
+const inp = document.createElement('input');
+inp.type = 'file';
+inp.accept = kind === 'pdf' ? 'application/pdf,.pdf' : 'image/*,application/pdf';
+inp.onchange = () => { if (inp.files && inp.files[0]) flatUlFile(inp.files[0]); };
+inp.click();
+}
+
+async function flatUlFile(file) {
+try {
+const pick = isPdfFile(file) ? await pickPdfPage(file) : { page: 1 };
+if (!pick) return;
+showAddToast('Готовлю подложку…');
+const img = await fileToJpeg(file, 2000, pick.page);
+const id = flatUlId();
+try { localStorage.setItem(ulImgKey(id), img.dataUrl); }
+catch (e) { alert('Не хватает места на телефоне для подложки. Уберите подложки у комнат.'); return; }
+ulCache[id] = img.dataUrl;
+// по умолчанию — по центру плана; лист проекта обычно вдвое шире самого плана
+const all = flatItems().flatMap(r => r.pts);
+const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+const bw = Math.max(...xs) - Math.min(...xs) || 8, cx = (Math.max(...xs) + Math.min(...xs)) / 2 || 0, cy = (Math.max(...ys) + Math.min(...ys)) / 2 || 0;
+const ar = img.h / img.w, w = bw * 2;
+saveUnderlayView(id, { x: cx - w / 2, y: cy - w * ar / 2, w, ar, rot: 0, op: 0.5, hidden: false });
+flatUlStartAdjust();
+showAddToast('Подложка добавлена — совместите её с планом');
+} catch (err) {
+alert('Не удалось открыть файл: ' + (err && err.message ? err.message : err));
+}
+}
+
+// рамка рисунка на время подстройки: план и подложка целиком
+function flatUlStartAdjust() {
+const u = getUnderlay(flatUlId());
+const all = flatItems().flatMap(r => r.pts);
+if (u) { const h = u.w * u.ar; all.push([u.x, u.y], [u.x + u.w, u.y + h]); }
+const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+const pad = 0.4;
+const view = { minX: Math.min(...xs) - pad, minY: Math.min(...ys) - pad };
+view.w = Math.max(...xs) - view.minX + pad; view.h = Math.max(...ys) - view.minY + pad;
+flatUlAdjust = { view };
+if (u && (u.hidden || u.locked)) { u.hidden = false; u.locked = false; saveUnderlayView(flatUlId(), u); }
+renderFlatPlan();
+}
+
+function flatUlAction(act) {
+const id = flatUlId(), u = getUnderlay(id);
+if (!u) return;
+if (act === 'adjust') { flatUlStartAdjust(); return; }
+if (act === 'done') { u.locked = true; saveUnderlayView(id, u); flatUlAdjust = null; renderFlatPlan(); return; }
+if (act === 'remove') {
+if (!confirm('Убрать подложку с плана?')) return;
+removeUnderlay(id); flatUlAdjust = null; renderFlatPlan(); return;
+}
+const k = { smaller5: 0.95, smaller: 0.99, bigger: 1.01, bigger5: 1.05 }[act];
+if (k) { const cx = u.x + u.w / 2, cy = u.y + u.w * u.ar / 2; u.w *= k; u.x = cx - u.w / 2; u.y = cy - u.w * u.ar / 2; }
+if (act === 'rotate') u.rot = ((u.rot || 0) + 90) % 360;
+if (act === 'lighter') u.op = Math.max(0.12, (u.op || 0.5) - 0.12);
+if (act === 'darker') u.op = Math.min(0.9, (u.op || 0.5) + 0.12);
+if (act === 'toggle') u.hidden = !u.hidden;
+saveUnderlayView(id, u);
+renderFlatPlan();
+}
+
+// Пальцем — двигаем подложку, двумя — меняем размер (центр на месте).
+// Рисунок не перерисовываем — меняем только картинку и рамку, чтобы не дёргалось
+function flatBindUnderlay() {
+const svg = document.querySelector('#flatWrap svg');
+if (!svg) return;
+const pts = new Map();
+let start = null;
+const place = (u) => {
+const h = u.w * u.ar, tr = `rotate(${u.rot || 0} ${u.x + u.w / 2} ${u.y + h / 2})`;
+['flatUlImg', 'flatUlFrame'].forEach(idn => {
+const el = document.getElementById(idn);
+if (!el) return;
+el.setAttribute('x', u.x); el.setAttribute('y', u.y); el.setAttribute('width', u.w); el.setAttribute('height', h); el.setAttribute('transform', tr);
+});
+};
+const snap = () => ({ u: getUnderlay(flatUlId()), pts: new Map([...pts].map(([k, v]) => [k, { ...v }])) });
+svg.addEventListener('pointerdown', e => {
+pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+try { svg.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ }
+start = snap();
+e.preventDefault();
+});
+svg.addEventListener('pointermove', e => {
+if (!pts.has(e.pointerId) || !start || !start.u) return;
+pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+const mpp = 1 / (svg.getScreenCTM().a || 1);          // метров на точку экрана
+const u = { ...start.u };
+if (pts.size === 1 && start.pts.size === 1) {
+const p0 = start.pts.get(e.pointerId);
+if (!p0) return;
+u.x += (e.clientX - p0.x) * mpp; u.y += (e.clientY - p0.y) * mpp;
+} else if (pts.size === 2 && start.pts.size === 2) {
+const a = [...pts.values()], b = [...start.pts.values()];
+const d1 = Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y), d0 = Math.hypot(b[0].x - b[1].x, b[0].y - b[1].y) || 1;
+const cx = u.x + u.w / 2, cy = u.y + u.w * u.ar / 2;
+u.w = Math.max(0.5, Math.min(300, start.u.w * d1 / d0));
+u.x = cx - u.w / 2; u.y = cy - u.w * u.ar / 2;
+} else return;
+saveUnderlayView(flatUlId(), u);
+place(u);
+});
+const end = e => { pts.delete(e.pointerId); start = pts.size ? snap() : null; };
+svg.addEventListener('pointerup', end);
+svg.addEventListener('pointercancel', end);
+}
+
 function flatEditStart() {
+flatUlAdjust = null;
 const items = flatItems();
 const all = items.flatMap(r => r.pts);
 if (!all.length) return;
 const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
 // запас по краям — чтобы было куда тянуть
 const pad = Math.max(1, (Math.max(...xs) - Math.min(...xs)) * 0.15);
-const view = { minX: Math.min(...xs) - pad, minY: Math.min(...ys) - pad };
-view.w = Math.max(...xs) - view.minX + pad; view.h = Math.max(...ys) - view.minY + pad;
+const view = flatViewOf(items, pad);                        // вместе с подложкой
 flatEdit = { sel: null, draft: {}, undo: [], view };
 renderFlatPlan();
 }
@@ -531,8 +800,9 @@ const ed = flatEdit;
 if (roomId && roomId !== ed.sel) { ed.sel = roomId; renderFlatPlan(); return; }
 if (!ed.sel) return;
 const kind = t.dataset.v != null ? 'v' : t.dataset.w != null ? 'w' : roomId === ed.sel ? 'room' : null;
-if (!kind) { ed.sel = null; renderFlatPlan(); return; }
+if (!kind || (wrap._pz && wrap._pz.size)) return;          // пустое место или второй палец — двигаем/приближаем план
 e.preventDefault();
+wrap._drag = true;
 const ctm = svg.getScreenCTM().inverse();
 const toM = (ev) => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; const q = p.matrixTransform(ctm); return [q.x, q.y]; };
 const start = toM(e);
@@ -547,6 +817,7 @@ const own = base.filter((_, i) => !moving.includes(i));
 const cx = others.concat(own).map(p => p[0]), cy = others.concat(own).map(p => p[1]);
 let moved = false, pushed = false;
 const move = (ev) => {
+if (ev.pointerId !== e.pointerId) return;
 const [x, y] = toM(ev);
 let dx = x - start[0], dy = y - start[1];
 if (!moved && Math.hypot(dx, dy) < tol * 0.4) return;
@@ -577,7 +848,9 @@ pts.forEach((p, i) => { pts[i] = [base[i][0] + bx, base[i][1] + by]; });
 ed.draft[ed.sel] = pts.map(p => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]);
 flatRedrawSvg();
 };
-const up = () => {
+const up = (ev) => {
+if (ev.pointerId !== e.pointerId) return;
+wrap._drag = false;
 window.removeEventListener('pointermove', move);
 window.removeEventListener('pointerup', up);
 if (!moved && kind === 'w') flatAskWall(idx);
@@ -594,7 +867,7 @@ const wrap = document.getElementById('flatWrap');
 if (!wrap || !flatEdit) return;
 const old = wrap.querySelector('svg');
 const holder = document.createElement('div');
-holder.innerHTML = flatSvg(flatItems(), { view: flatEdit.view, sel: flatEdit.sel });
+holder.innerHTML = flatSvg(flatItems(), { view: flatEdit.view, sel: flatEdit.sel, underlay: flatUlOpt() });
 const svg = holder.firstElementChild;
 old.replaceWith(svg);
 flatBindEdit();

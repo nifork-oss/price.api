@@ -1029,6 +1029,9 @@ body.assistant-open .add-toast { z-index: 99; }
 .flat-zoom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 14px; }
 .flat-zoom .mp-head-btn { width: 44px; font-size: 18px; }
 .flat-wrap.editing { touch-action: none; }
+.flat-view { position: relative; height: 68vh; height: 68dvh; min-height: 260px; touch-action: none; overscroll-behavior: contain; }
+.flat-view .flat-svg { user-select: none; -webkit-user-select: none; }
+.flat-ul-lock { font-size: 13px; color: var(--s-ok); font-weight: 600; align-self: center; }
 .flat-wrap.editing .flat-svg { touch-action: none; user-select: none; -webkit-user-select: none; }
 .flat-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .flat-tools .mp-btn-primary { margin-left: auto; }
