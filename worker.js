@@ -659,6 +659,80 @@ const handler = {
       const auth = await getAuthUser(request, env);
       if (!auth) return json({ error: "Требуется вход" }, 401);
 
+      // Платные функции: проверка доступа и счёт запросов (через хранилище)
+      if (path === "/ai-quota" && request.method === "POST") {
+        let body;
+        try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        return json(await aiQuotaCheck(env, auth, body && body.feature));
+      }
+
+      if (path === "/ai-usage" && request.method === "POST") {
+        let body;
+        try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        return json(await aiUsageAdd(env, auth, body && body.feature, body && body.usage));
+      }
+
+      // Мастер просит доступ к платной функции — админ увидит запрос
+      if (path === "/ai-access-request" && request.method === "POST") {
+        if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
+        let body;
+        try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        const feature = body && body.feature;
+        if (!AI_FEATURES.includes(feature)) return json({ error: "Неизвестная функция" }, 400);
+        const record = await readBin(env);
+        const u = record.users.find((x) => x.login === auth.login);
+        if (!u) return json({ error: "Пользователь не найден" }, 404);
+        u.aiReq = { ...(u.aiReq || {}), [feature]: Date.now() };
+        await writeUsers(env, record);
+        return json(aiStatus(record, u));
+      }
+
+      // Админ: кто просит доступ, у кого он есть, сколько потрачено; настройки
+      if (path === "/ai-access" && request.method === "GET") {
+        if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
+        const record = await readBin(env);
+        const users = record.users.filter((u) => u.role !== "client" && u.role !== "admin")
+          .map((u) => ({ login: u.login, email: u.email || "", ...aiStatus(record, u) }));
+        return json({ users, settings: aiSettings(record), now: Date.now() });
+      }
+
+      // Админ: включить/продлить/выключить доступ, лимит; или общие настройки
+      if (path === "/ai-access" && request.method === "PUT") {
+        if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
+        let body;
+        try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        const record = await readBin(env);
+        if (body && body.settings) {
+          const admin = siteAdmin(record);
+          if (!admin) return json({ error: "Админ не найден" }, 404);
+          const cur = aiSettings(record);
+          const lim = (v, d) => (Number.isInteger(v) && v >= 0 && v <= 1e9 ? v : d);
+          admin.aiSettings = {
+            offer: typeof body.settings.offer === "string" ? body.settings.offer.trim().slice(0, 1000) : cur.offer,
+            limits: { plan: lim(body.settings.limits && body.settings.limits.plan, cur.limits.plan), assistant: lim(body.settings.limits && body.settings.limits.assistant, cur.limits.assistant) },
+          };
+        } else {
+          const feature = body && body.feature;
+          if (!AI_FEATURES.includes(feature)) return json({ error: "Неизвестная функция" }, 400);
+          const u = record.users.find((x) => x.login === (body && body.login));
+          if (!u) return json({ error: "Пользователь не найден" }, 404);
+          const ai = { ...(u.ai || {}) };
+          const cur = ai[feature] || {};
+          const until = body.until === null ? 0 : Number(body.until);
+          ai[feature] = {
+            until: Number.isFinite(until) && until > 0 ? Math.min(until, Date.now() + 10 * 365 * 864e5) : 0,
+            limit: body.limit === null ? null : Number.isInteger(body.limit) && body.limit >= 0 && body.limit <= 1e9 ? body.limit : (cur.limit ?? null),
+          };
+          u.ai = ai;
+          // Доступ включили — запрос выполнен
+          if (ai[feature].until > Date.now() && u.aiReq) { u.aiReq = { ...u.aiReq }; delete u.aiReq[feature]; }
+        }
+        await writeUsers(env, record);
+        const users = record.users.filter((u) => u.role !== "client" && u.role !== "admin")
+          .map((u) => ({ login: u.login, email: u.email || "", ...aiStatus(record, u) }));
+        return json({ users, settings: aiSettings(record), now: Date.now() });
+      }
+
       // Распознавание обмерного плана по картинке (платно, через Anthropic API)
       if (path === "/recognize-plan" && request.method === "POST") {
         if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
@@ -668,6 +742,8 @@ const handler = {
         if (await isRateLimited(env.AUTH_LIMITER, "ai:" + auth.login)) return tooManyRequests();
         let body;
         try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        const denied = await aiQuota(env, request, auth, "plan");
+        if (denied) return denied;
         const image = String((body && body.image) || "");
         const mediaType = ["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(body && body.mediaType) ? body.mediaType : "image/jpeg";
         if (!image || image.length > 14 * 1024 * 1024) return json({ error: "Картинка не передана или слишком большая" }, 400);
@@ -675,8 +751,9 @@ const handler = {
           const turns = planTurns(body.turns);
           // Правила мастера из профиля (страница берёт их из своих данных)
           const hints = typeof body.hints === "string" ? body.hints : "";
-          if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns, hints), parsePlanReply, "Не удалось распознать план: ");
-          const result = await recognizePlan(env, image, mediaType, turns, hints);
+          const onUsage = (u) => aiReport(env, request, auth, "plan", u);
+          if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns, hints), parsePlanReply, "Не удалось распознать план: ", onUsage);
+          const result = await recognizePlan(env, image, mediaType, turns, hints, onUsage);
           return json(result);
         } catch (e) {
           return json({ error: "Не удалось распознать план: " + (e && e.message ? e.message : e) }, 502);
@@ -696,9 +773,12 @@ const handler = {
         if (!messages) return json({ error: "Сообщение не передано или слишком длинное" }, 400);
         const context = JSON.stringify((body && body.context) || {});
         if (context.length > 60000) return json({ error: "Слишком большой объект для помощника" }, 400);
+        const denied = await aiQuota(env, request, auth, "assistant");
+        if (denied) return denied;
         try {
-          if (body.stream) return await streamAssistant(env, messages, context);
-          return json(await askAssistant(env, messages, context));
+          const onUsage = (u) => aiReport(env, request, auth, "assistant", u);
+          if (body.stream) return await streamAssistant(env, messages, context, onUsage);
+          return json(await askAssistant(env, messages, context, onUsage));
         } catch (e) {
           return json({ error: "Помощник не ответил: " + (e && e.message ? e.message : e) }, 502);
         }
@@ -779,8 +859,10 @@ const handler = {
         // общего списка пользователей. Нужно, чтобы вкладка "Профиль"
         // работала и в режиме "своя компания", где полный список
         // пользователей не приходит вовсе (приватность).
+        const aiSelf = selfUser ? aiStatus(record, selfUser).ai : null;
+        const aiPending = auth.role === "admin" ? record.users.filter((u) => u.aiReq && Object.keys(u.aiReq).length).length : 0;
         const self = selfUser
-          ? { login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "" }
+          ? { ai: aiSelf, aiOffer: aiSettings(record).offer, aiPending, login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "" }
           : { login: auth.login, email: "", companyName: "", publicPriceEnabled: false, pieNote: "", invoiceNote: "", planHints: "" };
         // Режим "своя компания" — полностью личное пространство: свой
         // прайс-лист, свои объекты и своя история, невидимые админу
@@ -937,6 +1019,7 @@ const handler = {
             if (incUser.pass) {
               const pass = await hashPassword(incUser.pass);
               newUsersList.push({
+                ...(existing || {}),
                 login: incUser.login,
                 email: incUser.email || "",
                 role: safeRole,
@@ -1091,6 +1174,141 @@ const handler = {
   },
 };
 
+/* ============== платные функции: доступ и лимиты ============== */
+
+// Распознавание плана и помощник — только админу и тем, кому он включил
+// доступ (до даты и времени), с лимитом запросов в месяц.
+const AI_FEATURES = ["plan", "assistant"];
+// Лимит — токенов в месяц (вход + выход вместе); 0 — без лимита
+const AI_DEFAULT_LIMITS = { plan: 500000, assistant: 1000000 };
+const AI_NAMES = { plan: "распознаванию плана", assistant: "помощнику" };
+
+function siteAdmin(record) {
+  return record.users.find((u) => u.login === "admin") || record.users.find((u) => u.role === "admin") || null;
+}
+
+function aiSettings(record) {
+  const s = (siteAdmin(record) || {}).aiSettings || {};
+  const limits = { ...AI_DEFAULT_LIMITS, ...(s.limits || {}) };
+  return { offer: s.offer || "", limits };
+}
+
+function aiMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+// Расход за этот месяц: { req, in, out } по функции
+function aiUse(u, feature) {
+  const use = u.aiUse && u.aiUse.month === aiMonth() ? u.aiUse : {};
+  const f = use[feature];
+  return f && typeof f === "object" ? { req: f.req || 0, in: f.in || 0, out: f.out || 0 } : { req: 0, in: 0, out: 0 };
+}
+
+// Что видит сам мастер и админ: до какого времени доступ, лимит токенов,
+// потрачено (запросы, токены на вход и выход), когда просил доступ
+function aiStatus(record, u) {
+  const settings = aiSettings(record);
+  const out = {};
+  for (const f of AI_FEATURES) {
+    const a = (u.ai || {})[f] || {};
+    const use = aiUse(u, f);
+    out[f] = {
+      until: a.until || 0,
+      limit: a.limit ?? settings.limits[f],
+      customLimit: a.limit ?? null,
+      requests: use.req,
+      tokensIn: use.in,
+      tokensOut: use.out,
+      used: use.in + use.out,
+      requestedAt: (u.aiReq || {})[f] || 0,
+    };
+  }
+  return { ai: out };
+}
+
+// Пишем только список пользователей (в хранилище); без него — всё как обычно
+async function writeUsers(env, record) {
+  if (env.STORAGE) await env.STORAGE.put("users", record.users);
+  else await writeBin(env, record);
+}
+
+async function aiQuotaCheck(env, auth, feature) {
+  if (!AI_FEATURES.includes(feature)) return { ok: false, error: "Неизвестная функция" };
+  if (auth.role === "admin") return { ok: true };
+  const record = await readBin(env);
+  const u = record.users.find((x) => x.login === auth.login);
+  if (!u) return { ok: false, error: "Пользователь не найден" };
+  const st = aiStatus(record, u).ai[feature];
+  if (!(st.until > Date.now())) {
+    return { ok: false, noAccess: true, error: `Нет доступа к ${AI_NAMES[feature]}. Запросите доступ — администратор включит его после оплаты.` };
+  }
+  if (st.limit > 0 && st.used >= st.limit) {
+    const fmt = (n) => n.toLocaleString("ru-RU");
+    return { ok: false, limit: true, error: `Лимит токенов на этот месяц исчерпан: ${fmt(st.used)} из ${fmt(st.limit)}. Напишите администратору, чтобы увеличить.` };
+  }
+  return { ok: true };
+}
+
+// После ответа нейросети — сколько токенов ушло (считаем всем, и админу)
+async function aiUsageAdd(env, auth, feature, usage) {
+  if (!AI_FEATURES.includes(feature)) return { ok: false };
+  const n = (v) => { const x = Math.round(Number(v)); return Number.isFinite(x) && x > 0 ? Math.min(x, 5e6) : 0; };
+  const record = await readBin(env);
+  const u = record.users.find((x) => x.login === auth.login);
+  if (!u) return { ok: false };
+  const use = u.aiUse && u.aiUse.month === aiMonth() ? { ...u.aiUse } : { month: aiMonth() };
+  const cur = aiUse(u, feature);
+  use[feature] = { req: cur.req + 1, in: cur.in + n(usage && usage.in), out: cur.out + n(usage && usage.out) };
+  u.aiUse = use;
+  await writeUsers(env, record);
+  return { ok: true };
+}
+
+// Токены из ответа сервиса: вход (вместе с кешем) и выход
+function usageOf(u) {
+  if (!u || typeof u !== "object") return { in: 0, out: 0 };
+  return {
+    in: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+    out: u.output_tokens || 0,
+  };
+}
+
+// Обращение к хранилищу коротким запросом (сам запрос к нейросети идёт мимо его очереди)
+async function viaStore(env, request, auth, path, body, direct) {
+  if (!env.STORE) return direct();
+  const stub = env.STORE.get(env.STORE.idFromName("main"));
+  const res = await stub.fetch(new Request(new URL(path, request.url), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: request.headers.get("Authorization") || "" },
+    body: JSON.stringify(body),
+  }));
+  return res.json();
+}
+
+// Записать расход; ошибка записи не должна ломать ответ мастеру
+async function aiReport(env, request, auth, feature, usage) {
+  try {
+    await viaStore(env, request, auth, "/ai-usage", { feature, usage }, () => aiUsageAdd(env, auth, feature, usage));
+  } catch (e) {
+    console.warn("Не удалось записать расход токенов:", e);
+  }
+}
+
+// Перед платным запросом: есть ли доступ и не исчерпан ли лимит. Сам запрос
+// к нейросети идёт мимо очереди хранилища, поэтому проверку — отдельным
+// коротким обращением к нему. null — можно; иначе — готовый ответ с ошибкой.
+async function aiQuota(env, request, auth, feature) {
+  if (auth.role === "admin") return null;
+  let q;
+  try {
+    q = await viaStore(env, request, auth, "/ai-quota", { feature }, () => aiQuotaCheck(env, auth, feature));
+  } catch (e) {
+    return json({ error: "Не удалось проверить доступ: " + (e && e.message ? e.message : e) }, 503);
+  }
+  if (q && q.ok) return null;
+  return json({ error: (q && q.error) || "Нет доступа", noAccess: !!(q && q.noAccess), limit: !!(q && q.limit) }, 402);
+}
+
 /* ============== Anthropic API ============== */
 
 // Ключ напрямую от Anthropic — ANTHROPIC_API_KEY. Ключ сервиса-посредника
@@ -1220,14 +1438,16 @@ function planTurns(raw) {
   }).filter((t) => t.note);
 }
 
-async function recognizePlan(env, image, mediaType, turns, hints) {
+async function recognizePlan(env, image, mediaType, turns, hints, onUsage) {
   const payload = planPayload(env, image, mediaType, turns, hints);
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
     body: JSON.stringify(payload),
   });
-  return withModel(parsePlanReply, await readAnthropicResponse(res, env), payload);
+  const data = await readAnthropicResponse(res, env);
+  if (onUsage) await onUsage(usageOf(data.usage));
+  return withModel(parsePlanReply, data, payload);
 }
 
 // К разобранному ответу — какая модель ответила (как её назвал сервис;
@@ -1347,7 +1567,7 @@ function sanitizeChat(raw) {
   return out.length && out[out.length - 1].role === "user" ? out : null;
 }
 
-async function askAssistant(env, messages, context) {
+async function askAssistant(env, messages, context, onUsage) {
   const payload = assistantPayload(env, messages, context);
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
@@ -1355,6 +1575,7 @@ async function askAssistant(env, messages, context) {
     body: JSON.stringify(payload),
   });
   const data = await readAnthropicResponse(res, env);
+  if (onUsage) await onUsage(usageOf(data.usage));
   return withModel(parseAssistantReply, data, payload);
 }
 
@@ -1363,7 +1584,7 @@ async function askAssistant(env, messages, context) {
 // заполнять инструмент, в конце {t:"done", ...finish(ответ)} или {t:"error", error}.
 // Ход рассуждений (thinking) — если посредник его не принимает (400),
 // повторяем запрос без него. Нажали «Стоп» — обрываем запрос к нейросети.
-async function streamAnthropic(env, payload, finish, errorPrefix) {
+async function streamAnthropic(env, payload, finish, errorPrefix, onUsage) {
   const request = (thinking) => fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
@@ -1381,7 +1602,9 @@ async function streamAnthropic(env, payload, finish, errorPrefix) {
   }
   // Ошибка или посредник ответил целиком, без потока — обычный ответ JSON
   if (!res.ok || !res.body || !/event-stream/i.test(res.headers.get("content-type") || "")) {
-    return json(withModel(finish, await readAnthropicResponse(res, env), payload));
+    const data = await readAnthropicResponse(res, env);
+    if (onUsage) await onUsage(usageOf(data.usage));
+    return json(withModel(finish, data, payload));
   }
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -1392,7 +1615,7 @@ async function streamAnthropic(env, payload, finish, errorPrefix) {
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     const blocks = [];
-    let buf = "", stopReason = null, model = "";
+    let buf = "", stopReason = null, model = "", usage = {};
     try {
       const handle = (chunk) => {
         const data = chunk.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
@@ -1401,6 +1624,8 @@ async function streamAnthropic(env, payload, finish, errorPrefix) {
         try { ev = JSON.parse(data); } catch (e) { return; }
         if (ev.type === "error") throw new Error((ev.error && ev.error.message) || "ошибка сервиса");
         if (ev.type === "message_start" && ev.message && ev.message.model) model = ev.message.model;
+        if (ev.type === "message_start" && ev.message && ev.message.usage) usage = { ...ev.message.usage };
+        if (ev.type === "message_delta" && ev.usage) usage = { ...usage, ...ev.usage };
         if (ev.type === "content_block_start" && ev.content_block) {
           blocks[ev.index] = { type: ev.content_block.type, name: ev.content_block.name, text: "", json: "" };
           if (ev.content_block.type === "tool_use") send({ t: "tool" });
@@ -1418,7 +1643,11 @@ async function streamAnthropic(env, payload, finish, errorPrefix) {
         let i;
         while ((i = buf.indexOf("\n\n")) >= 0) { handle(buf.slice(0, i)); buf = buf.slice(i + 2); }
       }
-      if (gone) { await reader.cancel().catch(() => {}); return; }
+      if (gone) {
+        await reader.cancel().catch(() => {});
+        if (onUsage) await onUsage(usageOf(usage));
+        return;
+      }
       if (buf.trim()) handle(buf);
       const content = blocks.filter(Boolean).map((b) => {
         if (b.type === "text") return { type: "text", text: b.text };
@@ -1427,9 +1656,11 @@ async function streamAnthropic(env, payload, finish, errorPrefix) {
         try { input = JSON.parse(b.json || "{}"); } catch (e) { /* ответ оборвался */ }
         return { type: "tool_use", name: b.name, input };
       }).filter(Boolean);
+      if (onUsage) await onUsage(usageOf(usage));
       await send({ t: "done", ...withModel(finish, { content, stop_reason: stopReason, model }, payload) });
     } catch (e) {
       await reader.cancel().catch(() => {});
+      if (onUsage) await onUsage(usageOf(usage));
       await send({ t: "error", error: errorPrefix + (e && e.message ? e.message : e) });
     }
     if (!gone) await writer.close().catch(() => {});
@@ -1449,8 +1680,8 @@ function assistantPayload(env, messages, context) {
   };
 }
 
-function streamAssistant(env, messages, context) {
-  return streamAnthropic(env, assistantPayload(env, messages, context), parseAssistantReply, "Помощник не ответил: ");
+function streamAssistant(env, messages, context, onUsage) {
+  return streamAnthropic(env, assistantPayload(env, messages, context), parseAssistantReply, "Помощник не ответил: ", onUsage);
 }
 
 function parseAssistantReply(data) {

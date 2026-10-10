@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261010-10. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261010-11. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=a0e50360">
+<link rel="stylesheet" href="calc.css?v=c52e6263">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -128,6 +128,7 @@
 <button type="button" class="menu-item" role="menuitem" onclick="toggleUserMenu(false); openPriceDirectory()">Прайсы</button>
 <button type="button" class="menu-item" role="menuitem" id="tabUsersBtn" onclick="switchTab('users')" style="display: none;">Мастера</button>
 <button type="button" class="menu-item" role="menuitem" id="tabStatsBtn" onclick="switchTab('stats')" style="display: none;">Статистика и копии</button>
+<button type="button" class="menu-item" role="menuitem" id="tabPaidBtn" onclick="switchTab('paid')" style="display: none;">Платные функции</button>
 <div class="menu-mode" id="userModeSwitch" style="display:none;">
 <div class="menu-mode-label">Режим</div>
 <div class="menu-mode-row">
@@ -444,6 +445,7 @@
 <div id="profileTab" style="display: none;">
 <h1>Личный кабинет</h1>
 <div class="dimline" aria-hidden="true"><span></span></div>
+<div id="profPaidBox"></div>
 <div class="profile-box">
 <h3 style="font-size: 14px; margin-bottom: 12px;">Данные профиля</h3>
 <div class="form-group">
@@ -511,6 +513,13 @@
 </div>
 
 <!-- Вкладка Управления Пользователями (Admin) -->
+<div id="paidTab" style="display: none;">
+<h1>Платные функции</h1>
+<div class="dimline" aria-hidden="true"><span></span></div>
+<p class="paid-muted" style="margin-top:-8px;">Распознавание плана и помощник. Мастер просит доступ, оплачивает вам — вы включаете ему доступ до нужного времени. Расход токенов — за текущий месяц.</p>
+<div id="paidListContainer">Загрузка...</div>
+</div>
+
 <div id="usersTab" style="display: none;">
 <h1>Пользователи</h1>
 <div class="dimline" aria-hidden="true"><span></span></div>
@@ -601,7 +610,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=24706186"></script>
+<script src="calc-app.js?v=ed64f7f2"></script>
 
 <script src="calc-measure.js?v=2c8fe45d"></script>
 
@@ -627,12 +636,13 @@
 <button type="submit" id="assistantSend" aria-label="Отправить"><svg class="ic"><use href="#i-go"/></svg></button>
 </form>
 </div>
+<script src="calc-paid.js?v=04f038a2"></script>
 <script src="calc-aichats.js?v=08208a53"></script>
-<script src="calc-assistant.js?v=f659ad1f"></script>
+<script src="calc-assistant.js?v=a1663e41"></script>
 
 <script src="calc-plan.js?v=52b816b0"></script>
 
-<script src="calc-import.js?v=10b1e0e8"></script>
+<script src="calc-import.js?v=0d43e737"></script>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
 <div class="update-banner-text">Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>

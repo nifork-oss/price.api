@@ -963,3 +963,26 @@ body.assistant-open .add-toast { z-index: 99; }
 .ai-start { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ai-start .ai-btn { margin: 0; }
 .rl-ul-row .rl-ul-add { flex: 1; width: auto; margin-top: 0; }
+
+/* ===== Платные функции (calc-paid.js) ===== */
+.paid-box { background: #ffffff; border: 1px solid var(--s-line); border-radius: 10px; padding: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.paid-box textarea { width: 100%; box-sizing: border-box; border: 1px solid #cfd5dd; border-radius: 8px; padding: 8px; font: inherit; font-size: 13px; }
+.paid-box .btn { align-self: flex-start; }
+.paid-row { font-size: 13px; line-height: 1.5; }
+.paid-row .btn { margin-top: 4px; }
+.paid-limits { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; }
+.paid-limits input, .paid-lim input { width: 120px; padding: 6px 8px; border: 1px solid #cfd5dd; border-radius: 8px; font: inherit; }
+.paid-muted { color: var(--s-ink3); font-size: 12px; }
+.paid-err { color: var(--s-due); font-size: 13px; }
+.paid-user { background: #ffffff; border: 1px solid var(--s-line); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+.paid-user-head { margin-bottom: 6px; font-size: 15px; }
+.paid-feature { border-top: 1px solid var(--s-line); padding: 8px 0 4px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.paid-feature.paid-req { background: #fff8e6; margin: 0 -12px; padding: 8px 12px 6px; }
+.paid-on { color: var(--s-ok); font-weight: 600; }
+.paid-ask { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: #ffd34d; color: #3a2a00; font-size: 12px; font-weight: 600; }
+.paid-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.paid-btns input[type="datetime-local"] { padding: 5px 6px; border: 1px solid #cfd5dd; border-radius: 8px; font: inherit; font-size: 13px; }
+.paid-lim { font-size: 12px; color: var(--s-ink2); }
+.paid-dot { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: #c2361f; color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.user-chip.has-paid-req { position: relative; }
+.user-chip.has-paid-req::after { content: ''; position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-radius: 50%; background: #c2361f; }

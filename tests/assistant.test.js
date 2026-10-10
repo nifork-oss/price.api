@@ -6,6 +6,20 @@ const vm = require('vm');
 const { loadCalc } = require('./load.js');
 
 const SECRET = 'test-secret';
+
+// Хранилище в памяти вместо Durable Object: пользователи с доступом к платным функциям
+function fakeStorage(users) {
+  const m = new Map(Object.entries({ meta: { test: true }, services: [], users, history: [], objects: [], pirogHistory: [], revs: {} }));
+  return {
+    map: m,
+    async get(k) { return Array.isArray(k) ? new Map(k.map(x => [x, m.get(x)])) : m.get(k); },
+    async put(k, v) { if (typeof k === 'string') m.set(k, v); else Object.entries(k).forEach(([a, b]) => m.set(a, b)); },
+    async list({ prefix }) { return new Map([...m].filter(([k]) => k.startsWith(prefix))); },
+    async delete(keys) { [].concat(keys).forEach(k => m.delete(k)); },
+  };
+}
+const OPEN = Date.now() + 3600e3;
+const ivanWithAccess = () => [{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', ai: { plan: { until: OPEN }, assistant: { until: OPEN } } }];
 async function token(payload) {
   const b64 = buf => Buffer.from(buf).toString('base64url');
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -28,7 +42,7 @@ async function callAssistant(body, { role = 'master', env = {}, reply, status = 
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role })) },
       body: JSON.stringify(body),
     });
-    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', ...env });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: fakeStorage(ivanWithAccess()), ...env });
     return { status: res.status, data: await res.json(), sent };
   } finally {
     globalThis.fetch = realFetch;
@@ -172,7 +186,7 @@ async function callStream(responses, env = {}) {
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) },
       body: JSON.stringify({ messages: [{ role: 'user', content: 'покрась' }], context: {}, stream: true }),
     });
-    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', ...env });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: fakeStorage(ivanWithAccess()), ...env });
     const text = await res.text();
     return { status: res.status, type: res.headers.get('content-type'), text, sent };
   } finally {
@@ -242,7 +256,7 @@ test('поток: ошибка сервиса посреди ответа и о�
 });
 
 // Распознавание плана: поток, уточнение мастера, понятная ошибка
-async function callPlan(body, responses) {
+async function callPlan(body, responses, env = {}) {
   const worker = (await import('../worker.js')).default;
   const sent = [];
   const realFetch = globalThis.fetch;
@@ -257,7 +271,7 @@ async function callPlan(body, responses) {
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) },
       body: JSON.stringify({ image: 'AAAA', mediaType: 'image/png', ...body }),
     });
-    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k' });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: fakeStorage(ivanWithAccess()), ...env });
     return { status: res.status, text: await res.text(), sent };
   } finally {
     globalThis.fetch = realFetch;
@@ -333,7 +347,7 @@ test('план: своя модель из ANTHROPIC_PLAN_MODEL', async () => {
   globalThis.fetch = async (url, opts) => { sent.push(JSON.parse(opts.body)); return new Response(JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }), { headers: { 'content-type': 'application/json' } }); };
   try {
     const req = new Request('https://x/recognize-plan', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) }, body: JSON.stringify({ image: 'AAAA' }) });
-    await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', ANTHROPIC_MODEL: 'claude-sonnet-5', ANTHROPIC_PLAN_MODEL: ' claude-opus-4-8 ' });
+    await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: fakeStorage(ivanWithAccess()), ANTHROPIC_MODEL: 'claude-sonnet-5', ANTHROPIC_PLAN_MODEL: ' claude-opus-4-8 ' });
     assert.strictEqual(sent[0].model, 'claude-opus-4-8');
   } finally { globalThis.fetch = realFetch; }
 });
@@ -347,4 +361,73 @@ test('план: правила мастера уходят нейросети, �
   assert.ok(!plain.sent[0].messages[0].content[1].text.includes('<rules>'));
   const long = await callPlan({ hints: 'х'.repeat(5000) }, ok);
   assert.ok(long.sent[0].messages[0].content[1].text.length < withHints.sent[0].messages[0].content[1].text.length + 3100);
+});
+
+// Платные функции: доступ по времени, лимит токенов, запрос доступа, админ включает
+async function call(path, { method = 'POST', body, login = 'ivan', role = 'master', storage, reply }) {
+  const worker = (await import('../worker.js')).default;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify(reply || { content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1200, output_tokens: 300 } }), { status: 200 });
+  try {
+    const req = new Request('https://x' + path, {
+      method, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login, role })) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: storage });
+    return { status: res.status, data: await res.json() };
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+const ask = { messages: [{ role: 'user', content: 'привет' }] };
+const user = (st, login) => st.map.get('users').find(u => u.login === login);
+
+test('доступ: без доступа и с истёкшим — 402, админу — можно', async () => {
+  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master' }, { login: 'petr', role: 'master', ai: { assistant: { until: Date.now() - 60e3 } } }]);
+  const a = await call('/assistant', { body: ask, storage: st });
+  assert.strictEqual(a.status, 402);
+  assert.ok(a.data.noAccess);
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st, login: 'petr' })).status, 402);
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st, login: 'admin', role: 'admin' })).status, 200);
+  // Доступ к помощнику не открывает распознавание
+  const st2 = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', ai: { assistant: { until: OPEN } } }]);
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st2 })).status, 200);
+  assert.strictEqual((await call('/recognize-plan', { body: { image: 'AAAA' }, storage: st2 })).status, 402);
+});
+
+test('доступ: токены считаются по ответу, лимит в месяц', async () => {
+  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', ai: { assistant: { until: OPEN, limit: 2000 } } }]);
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
+  const use = user(st, 'ivan').aiUse;
+  assert.deepStrictEqual(use.assistant, { req: 1, in: 1200, out: 300 });
+  assert.strictEqual(use.month, new Date().toISOString().slice(0, 7));
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200); // 1500 < 2000 — ещё можно
+  const over = await call('/assistant', { body: ask, storage: st }); // 3000 ≥ 2000
+  assert.strictEqual(over.status, 402);
+  assert.ok(over.data.limit);
+  assert.match(over.data.error, /3\s000 из 2\s000/);
+  // Расход прошлого месяца не мешает
+  user(st, 'ivan').aiUse.month = '2000-01';
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
+});
+
+test('доступ: запрос мастера, админ видит и включает до времени', async () => {
+  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master' }]);
+  const r = await call('/ai-access-request', { body: { feature: 'plan' }, storage: st });
+  assert.strictEqual(r.status, 200);
+  assert.ok(r.data.ai.plan.requestedAt > 0);
+  assert.strictEqual((await call('/ai-access', { method: 'GET', storage: st })).status, 403);
+  const list = await call('/ai-access', { method: 'GET', storage: st, login: 'admin', role: 'admin' });
+  assert.strictEqual(list.data.users.length, 1);
+  assert.ok(list.data.users[0].ai.plan.requestedAt > 0);
+  const until = Date.now() + 90 * 60e3;
+  const put = await call('/ai-access', { method: 'PUT', body: { login: 'ivan', feature: 'plan', until, limit: 100000 }, storage: st, login: 'admin', role: 'admin' });
+  assert.strictEqual(put.data.users[0].ai.plan.until, until);
+  assert.strictEqual(put.data.users[0].ai.plan.limit, 100000);
+  assert.strictEqual(put.data.users[0].ai.plan.requestedAt, 0);
+  const set = await call('/ai-access', { method: 'PUT', body: { settings: { offer: '500 ₽ в месяц', limits: { plan: 1, assistant: 2 } } }, storage: st, login: 'admin', role: 'admin' });
+  assert.deepStrictEqual(set.data.settings, { offer: '500 ₽ в месяц', limits: { plan: 1, assistant: 2 } });
+  // Выключить
+  const off = await call('/ai-access', { method: 'PUT', body: { login: 'ivan', feature: 'plan', until: null }, storage: st, login: 'admin', role: 'admin' });
+  assert.strictEqual(off.data.users[0].ai.plan.until, 0);
 });

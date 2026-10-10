@@ -266,6 +266,7 @@ let aiTarget = null;   // { objectId, image, preview, runs: [{ note, thinking, t
 function startPlanRecognition(objectId) {
 const obj = objectId ? (cloudData.objects || []).find(o => o.id === objectId) : calcObject();
 if (!obj) { alert('Сначала выберите объект.'); return; }
+if (!paidCheck('plan')) return;
 showAiHistory(obj.id);
 }
 
@@ -422,6 +423,7 @@ if (!data && !run.error) run.error = 'Ответ оборвался. Попро�
 } else {
 data = await res.json().catch(() => null);
 if (res.status === 501) run.error = 'Распознавание пока не подключено. Чтобы включить: получите ключ API на console.anthropic.com и добавьте его в Cloudflare → ваш воркер → Settings → Variables and Secrets как секрет ANTHROPIC_API_KEY. Пока можно пользоваться подложкой — это бесплатно.';
+else if (res.status === 402) { run.error = (data && data.error) || 'Нет доступа к распознаванию'; paidDenied('plan', data); }
 else if (!res.ok || !data) run.error = (data && data.error) || 'Не удалось распознать план';
 }
 if (!run.error && data.questions && data.questions.length && !(data.rooms && data.rooms.length)) {
