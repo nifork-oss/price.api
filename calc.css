@@ -950,3 +950,16 @@ body.assistant-open .add-toast { z-index: 99; }
 .as-model { margin-top: 4px; color: var(--s-ink3); font-size: 11px; }
 .ai-rule { align-self: flex-end; margin-top: -4px; border: 0; background: none; color: var(--s-ink2); font-size: 12px; text-decoration: underline; cursor: pointer; padding: 2px 4px; }
 .ai-rule-done { text-decoration: none; color: var(--s-ok); cursor: default; }
+
+/* ===== Выбор страницы PDF (calc-import.js) ===== */
+.pdf-pick { position: fixed; inset: 0; z-index: 120; display: flex; flex-direction: column; background: #f4f6f8; }
+.pdf-pick-head { display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 10px; background: #ffffff; border-bottom: 1px solid var(--s-line); }
+.pdf-pick-head b { flex: 1; font-size: 16px; }
+.pdf-pick-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; padding: 12px; align-content: start; }
+.pdf-pick-page { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--s-line); border-radius: 10px; background: #ffffff; cursor: pointer; }
+.pdf-pick-thumb { width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: #f4f6f8; border-radius: 6px; overflow: hidden; }
+.pdf-pick-thumb canvas { max-width: 100%; max-height: 100%; }
+.pdf-pick-page small { color: var(--s-ink2); font-size: 13px; }
+.ai-start { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ai-start .ai-btn { margin: 0; }
+.rl-ul-row .rl-ul-add { flex: 1; width: auto; margin-top: 0; }
