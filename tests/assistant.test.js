@@ -14,13 +14,13 @@ async function token(payload) {
   return `${body}.${b64(sig)}`;
 }
 
-async function callAssistant(body, { role = 'master', env = {}, reply } = {}) {
+async function callAssistant(body, { role = 'master', env = {}, reply, status = 200, raw } = {}) {
   const worker = (await import('../worker.js')).default;
   const sent = [];
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
     sent.push({ url, headers: opts.headers, body: JSON.parse(opts.body) });
-    return new Response(JSON.stringify(reply || { content: [{ type: 'text', text: 'ok' }] }), { status: 200 });
+    return new Response(raw != null ? raw : JSON.stringify(reply || { content: [{ type: 'text', text: 'ok' }] }), { status });
   };
   try {
     const req = new Request('https://x/assistant', {
@@ -77,6 +77,16 @@ test('сервер: ключ посредника — свой адрес и Bea
   assert.strictEqual(sent[0].headers['x-api-key'], undefined);
   const direct = await callAssistant(msg);
   assert.strictEqual(direct.sent[0].headers['x-api-key'], 'k');
+});
+
+test('сервер: ошибка посредника — в сообщении код, адрес и текст ответа', async () => {
+  const msg = { messages: [{ role: 'user', content: 'привет' }] };
+  const env = { ANTHROPIC_API_KEY: '', ANTHROPIC_AUTH_TOKEN: 'tok', ANTHROPIC_BASE_URL: 'https://proxy.example/api' };
+  const html = await callAssistant(msg, { env, status: 502, raw: '<html><h1>502 Bad Gateway</h1> nginx</html>' });
+  assert.strictEqual(html.status, 502);
+  assert.match(html.data.error, /proxy\.example ответил 502: 502 Bad Gateway nginx/);
+  const js = await callAssistant(msg, { env, status: 400, raw: JSON.stringify({ error: { message: 'model not found' } }) });
+  assert.match(js.data.error, /ответил 400: model not found/);
 });
 
 // Калькулятор: квадратная комната 4×3 м, высота 2,7 м

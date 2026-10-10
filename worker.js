@@ -1105,6 +1105,18 @@ function anthropicHeaders(env) {
   return headers;
 }
 
+// Ответ сервиса; при ошибке — код, адрес и сам текст ответа, чтобы по
+// сообщению в окне было видно причину (особенно у сервисов-посредников).
+async function readAnthropicResponse(res, env) {
+  const raw = await res.text().catch(() => "");
+  let data = null;
+  try { data = JSON.parse(raw); } catch (e) { /* не JSON */ }
+  if (res.ok && data) return data;
+  const msg = data && data.error && (data.error.message || (typeof data.error === "string" ? data.error : ""));
+  const text = msg || raw.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+  throw new Error(`сервис ${new URL(anthropicUrl(env)).host} ответил ${res.status}${text ? ": " + text : res.ok ? ": не JSON" : ""}`);
+}
+
 /* ============== распознавание обмерного плана ============== */
 
 const PLAN_PROMPT = `Это обмерный план квартиры или дома (чертёж, скриншот или фото).
@@ -1142,8 +1154,7 @@ async function recognizePlan(env, image, mediaType) {
       }],
     }),
   });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((data && data.error && data.error.message) || "сервис ответил " + res.status);
+  const data = await readAnthropicResponse(res, env);
   const text = (data.content || []).map((c) => (c.type === "text" ? c.text : "")).join("");
   const clean = text.replace(/```json|```/g, "").trim();
   const start = clean.indexOf("{"), end = clean.lastIndexOf("}");
@@ -1244,8 +1255,7 @@ async function askAssistant(env, messages, context) {
       messages,
     }),
   });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((data && data.error && data.error.message) || "сервис ответил " + res.status);
+  const data = await readAnthropicResponse(res, env);
   return parseAssistantReply(data);
 }
 
