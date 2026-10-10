@@ -2,6 +2,10 @@ name = "price-api"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
+# Не стирать при выкладке переменные, добавленные в панели Cloudflare
+# (ANTHROPIC_BASE_URL, ANTHROPIC_MODEL и т. п.). Ключи лучше хранить как Secret.
+keep_vars = true
+
 # Ограничение частоты запросов (встроенный Rate Limiting Cloudflare).
 # Вход и регистрация: не больше 10 попыток в минуту с одного IP и на один аккаунт.
 [[ratelimits]]
