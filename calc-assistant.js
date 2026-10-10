@@ -173,6 +173,8 @@ const items = assistantPrepareItems(data.items || []);
 reply.content = data.text || (items.length ? 'Предлагаю добавить:' : 'Нечего предложить.');
 reply.items = items;
 reply.model = data.model || '';
+reply.cost = data.cost || null;
+paidApplyCost(reply.cost);
 reply.streaming = false;
 reply.picking = false;
 }
@@ -276,6 +278,7 @@ const cls = m.role === 'user' ? 'as-msg as-user' : 'as-msg as-bot' + (m.error ? 
 let html = `<div class="${cls}">`;
 if (m.thinking) html += `<details class="as-think"${m.streaming && !m.content ? ' open' : ''}><summary>${m.streaming && !m.content ? 'Размышляю…' : 'Ход рассуждений'}</summary><div>${escapeHtml(m.thinking)}</div></details>`;
 if (m.content) html += `<div class="as-text">${m.role === 'user' ? escapeHtml(m.content) : assistantTextHtml(m.content)}</div>`;
+if (m.cost && !m.streaming) html += paidCostHtml(m.cost);
 if (m.model && !m.streaming) html += `<div class="as-model">${escapeHtml(m.model)}</div>`;
 if (m.streaming) html += `<div class="as-status">${m.picking ? 'Подбираю позиции…' : m.content ? 'Пишу…' : m.thinking ? '' : 'Думаю…'}</div>`;
 if (m.items && m.items.length) {

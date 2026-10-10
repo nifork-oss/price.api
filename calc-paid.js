@@ -22,6 +22,19 @@ function paidStatus() {
 return (cloudData.self && cloudData.self.ai) || { balance: 0, month: {}, requestedAt: 0, pays: [] };
 }
 
+// Под ответом нейросети: сколько стоило отправленное, сколько ответ, остаток
+function paidCostHtml(cost) {
+if (!cost || !(cost.total >= 0)) return '';
+return `<div class="as-cost">Отправлено ${paidRub(cost.sent)} · ответ ${paidRub(cost.reply)} · всего <b>${paidRub(cost.total)}</b>`
++ (cost.balance != null ? ` · на балансе ${paidRub(cost.balance)}` : ' · с вас не списано') + '</div>';
+}
+
+// Свежий остаток после запроса — чтобы профиль и проверки видели его сразу
+function paidApplyCost(cost) {
+if (!cost || cost.balance == null || !cloudData.self || !cloudData.self.ai) return;
+cloudData.self.ai.balance = cost.balance;
+}
+
 // Перед платной функцией: админу и тем, у кого есть деньги на балансе, — можно;
 // остальным — как пополнить. Окончательно решает сервер (402).
 function paidCheck(feature) {
@@ -34,7 +47,7 @@ return false;
 async function paidOffer(feature) {
 const st = paidStatus();
 const offer = (cloudData.self && cloudData.self.aiOffer) || '';
-const head = `${feature ? PAID_NAMES[feature] + ' — платная функция. ' : ''}Оплата — с баланса: каждый запрос списывает свою стоимость (обычно от 1 до 25 ₽). Баланс пополняет администратор после оплаты.`
+const head = `${feature ? PAID_NAMES[feature] + ' — платная функция. ' : ''}Вы пополняете баланс, а каждый запрос списывает с него свою цену. Сообщение помощнику обычно стоит 1–10 ₽, распознавание плана — 10–25 ₽. Сколько стоил запрос, видно под каждым ответом.`
 + `\n\nНа балансе: ${paidRub(st.balance)}`
 + (offer ? '\n\n' + offer : '');
 if (st.requestedAt) {
@@ -65,6 +78,14 @@ paidOffer(feature);
 }
 }
 
+// Мастеру — только рубли
+function paidMonthRub(month) {
+return Object.keys(PAID_NAMES).map(f => {
+const m = (month || {})[f] || {};
+return `${PAID_NAMES[f]}: ${paidRub(m.spent)} (запросов: ${paidFmt(m.requests)})`;
+}).join('<br>');
+}
+
 function paidMonthHtml(month) {
 return Object.keys(PAID_NAMES).map(f => {
 const m = (month || {})[f] || {};
@@ -79,7 +100,8 @@ if (isCurrentAdmin()) return '<div class="paid-box"><b>Платные функц
 const st = paidStatus();
 return `<div class="paid-box"><b>Платные функции: распознавание плана и помощник</b>
 <div class="paid-balance">На балансе: <b>${paidRub(st.balance)}</b></div>
-<div class="paid-row"><small>Расход в этом месяце:<br>${paidMonthHtml(st.month)}</small></div>
+<div class="paid-row"><small>Каждый запрос списывает с баланса свою цену: за то, что отправлено нейросети (ваш вопрос, картинка плана, прайс), и за её ответ. Чем больше картинка и длиннее разговор, тем дороже. Обычно сообщение помощнику — 1–10 ₽, распознавание плана — 10–25 ₽. Точная цена — под каждым ответом.</small></div>
+<div class="paid-row"><small>Потрачено в этом месяце:<br>${paidMonthRub(st.month)}</small></div>
 ${st.pays && st.pays.length ? `<div class="paid-row"><small>Пополнения: ${st.pays.slice(0, 5).map(p => `${paidDate(p.at)} — ${paidRub(p.amount)}`).join('; ')}</small></div>` : ''}
 <button type="button" class="btn btn-sm" onclick="paidOffer()">${st.requestedAt ? 'Как пополнить' : 'Пополнить баланс'}</button>
 </div>`;
@@ -125,12 +147,12 @@ box.innerHTML = `
 <div class="paid-box">
 <b>Что видят мастера, когда на балансе нет денег</b>
 <textarea id="paidOffer" rows="3" placeholder="Например: перевод на карту по номеру +7… с пометкой «баланс», потом напишите мне — зачислю">${escapeHtml(settings.offer || '')}</textarea>
-<b>Цены, ₽ за 1 млн токенов</b>
+<b>Цены для мастеров, ₽ за 1 млн токенов</b>
 <div class="paid-limits">
-<label>ввод <input type="number" id="paidPriceIn" min="0" step="10" value="${settings.prices.in}"></label>
-<label>вывод <input type="number" id="paidPriceOut" min="0" step="10" value="${settings.prices.out}"></label>
+<label>что отправлено нейросети <input type="number" id="paidPriceIn" min="0" step="10" value="${settings.prices.in}"></label>
+<label>ответ нейросети <input type="number" id="paidPriceOut" min="0" step="10" value="${settings.prices.out}"></label>
 </div>
-<small class="paid-muted">Сейчас у ProxyAPI для Sonnet 5.5: 500 и 2500 ₽. Поставите выше — разница остаётся вам.</small>
+<small class="paid-muted">Ваша цена у ProxyAPI для Sonnet 5.5: 500 и 2500 ₽ (ввод и вывод). Поставите выше — разница остаётся вам. Мастера видят только рубли: под каждым ответом — сколько стоило отправленное и ответ.</small>
 <button type="button" class="btn btn-success btn-sm" onclick="paidSaveSettings()">Сохранить</button>
 </div>
 ${paidAdmin.self ? `<div class="paid-box"><b>Ваш расход в этом месяце (без списаний)</b><small class="paid-muted">${paidMonthHtml(paidAdmin.self.month)}</small></div>` : ''}

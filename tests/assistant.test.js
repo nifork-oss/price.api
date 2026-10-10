@@ -114,7 +114,7 @@ test('сервер: пробелы, переносы и кавычки вокр�
 
 // Калькулятор: квадратная комната 4×3 м, высота 2,7 м
 function setupCalc() {
-  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-rooms.js', 'calc-aichats.js', 'calc-assistant.js']);
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-rooms.js', 'calc-paid.js', 'calc-aichats.js', 'calc-assistant.js']);
   vm.runInContext(`
     var DEFAULT_UNITS = ['м²', 'пог. м', 'шт.', 'компл.', 'час', 'усл.'];
     var invoiceCart = [];
@@ -249,7 +249,8 @@ test('поток: ошибка сервиса посреди ответа и о�
   assert.strictEqual(last.t, 'error');
   assert.match(last.error, /Overloaded/);
   const b = await callStream([{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: 'целиком' }] }) }]);
-  assert.deepStrictEqual(JSON.parse(b.text), { text: 'целиком', items: [], model: 'claude-sonnet-5-5' });
+  const { cost: _c, ...whole } = JSON.parse(b.text);
+  assert.deepStrictEqual(whole, { text: 'целиком', items: [], model: 'claude-sonnet-5-5' });
   const c = await callStream([{ status: 502, type: 'text/plain', body: 'error code: 502' }]);
   assert.strictEqual(c.status, 502);
   assert.match(JSON.parse(c.text).error, /ответил 502/);
@@ -319,7 +320,8 @@ test('план: нейросеть ответила словами — в оши
 test('план: нейросеть может сначала задать вопросы', async () => {
   const { status, text } = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: '{"questions":["Размеры в мм или см?"]}' }] }) }]);
   assert.strictEqual(status, 200);
-  assert.deepStrictEqual(JSON.parse(text), { rooms: [], warnings: [], questions: ['Размеры в мм или см?'], model: 'claude-sonnet-5-5' });
+  const { cost: _c, ...asked } = JSON.parse(text);
+  assert.deepStrictEqual(asked, { rooms: [], warnings: [], questions: ['Размеры в мм или см?'], model: 'claude-sonnet-5-5' });
   const both = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON.replace('"warnings":[]', '"warnings":[],"questions":["лишний"]') }] }) }]);
   assert.strictEqual(JSON.parse(both.text).questions, undefined);
 });
@@ -399,10 +401,13 @@ test('баланс: без денег — 402, админу — можно', asy
 test('баланс: каждый запрос списывает стоимость токенов по ценам из настроек', async () => {
   // 1200 токенов на вход × 500 ₽/млн = 0,60 ₽; 300 на выход × 2500 ₽/млн = 0,75 ₽ → 1,35 ₽
   const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', aiBalance: 200 }]);
-  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
+  const first = await call('/assistant', { body: ask, storage: st });
+  assert.strictEqual(first.status, 200);
+  assert.deepStrictEqual(first.data.cost, { sent: 0.6, reply: 0.75, total: 1.35, balance: 0.65 });
   const u = user(st, 'ivan');
   assert.strictEqual(u.aiBalance, 200 - 135);
   assert.deepStrictEqual(u.aiUse.assistant, { req: 1, in: 1200, out: 300, kop: 135 });
+  // Стоимость приходит вместе с ответом: отправлено, ответ, всего, остаток
   assert.strictEqual(u.aiUse.month, new Date().toISOString().slice(0, 7));
   // Хватило ещё на один (баланс уходит в минус), дальше — нет
   assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
