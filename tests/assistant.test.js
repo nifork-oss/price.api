@@ -238,3 +238,72 @@ test('поток: ошибка сервиса посреди ответа и о�
   assert.strictEqual(c.status, 502);
   assert.match(JSON.parse(c.text).error, /ответил 502/);
 });
+
+// Распознавание плана: поток, уточнение мастера, понятная ошибка
+async function callPlan(body, responses) {
+  const worker = (await import('../worker.js')).default;
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    sent.push(JSON.parse(opts.body));
+    const r = responses[Math.min(sent.length - 1, responses.length - 1)];
+    return new Response(r.body, { status: r.status || 200, headers: { 'content-type': r.type || 'text/event-stream' } });
+  };
+  try {
+    const req = new Request('https://x/recognize-plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) },
+      body: JSON.stringify({ image: 'AAAA', mediaType: 'image/png', ...body }),
+    });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k' });
+    return { status: res.status, text: await res.text(), sent };
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+const PLAN_JSON = '{"rooms":[{"name":"Кухня","height_m":2.7,"walls":[{"length_m":3,"turn_after":"R"},{"length_m":2,"turn_after":"R"},{"length_m":3,"turn_after":"R"},{"length_m":2,"turn_after":"R"}],"openings":[]}],"warnings":[]}';
+
+test('план: поток с размышлениями, уточнение уходит вместе с прошлым ответом', async () => {
+  const stream = sse([
+    { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'Вижу кухню' } },
+    { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } },
+    { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: PLAN_JSON.slice(0, 40) } },
+    { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: PLAN_JSON.slice(40) } },
+    { type: 'message_delta', delta: { stop_reason: 'end_turn' } },
+  ]);
+  const { text, sent } = await callPlan({ stream: true, turns: [{ note: 'в мм', answer: '{"questions":["единицы?"]}' }, { note: 'высота 2,7', answer: '{"rooms":[]}' }] }, [{ body: stream }]);
+  const lines = text.trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(lines[0], { t: 'thinking', d: 'Вижу кухню' });
+  const done = lines.pop();
+  assert.strictEqual(done.t, 'done');
+  assert.strictEqual(done.rooms[0].name, 'Кухня');
+  assert.strictEqual(done.rooms[0].walls.length, 4);
+  const msgs = sent[0].messages;
+  assert.strictEqual(msgs.length, 5);
+  assert.strictEqual(msgs[0].content[0].source.media_type, 'image/png');
+  assert.strictEqual(msgs[1].content, '{"questions":["единицы?"]}');
+  assert.match(msgs[2].content, /в мм/);
+  assert.strictEqual(msgs[3].content, '{"rooms":[]}');
+  assert.match(msgs[4].content, /высота 2,7/);
+  const first = await callPlan({ turns: [{ note: 'это одна комната' }] }, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }]);
+  assert.strictEqual(first.sent[0].messages.length, 1);
+  assert.match(first.sent[0].messages[0].content[2].text, /одна комната/);
+});
+
+test('план: нейросеть ответила словами — в ошибке видно, что она написала', async () => {
+  const { status, text } = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: 'Не вижу размеров на картинке.' }], stop_reason: 'end_turn' }) }]);
+  assert.strictEqual(status, 502);
+  assert.match(JSON.parse(text).error, /ответила не планом: «Не вижу размеров на картинке\.»/);
+  const empty = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [], stop_reason: 'refusal' }) }]);
+  assert.match(JSON.parse(empty.text).error, /пустой ответ \(нет блоков, refusal\)/);
+});
+
+test('план: нейросеть может сначала задать вопросы', async () => {
+  const { status, text } = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: '{"questions":["Размеры в мм или см?"]}' }] }) }]);
+  assert.strictEqual(status, 200);
+  assert.deepStrictEqual(JSON.parse(text), { rooms: [], warnings: [], questions: ['Размеры в мм или см?'] });
+  const both = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON.replace('"warnings":[]', '"warnings":[],"questions":["лишний"]') }] }) }]);
+  assert.strictEqual(JSON.parse(both.text).questions, undefined);
+});

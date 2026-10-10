@@ -120,29 +120,15 @@ if (assistantAbort) assistantAbort.abort();
 }
 
 // Строки JSON от сервера: размышления и текст по кусочкам, в конце — позиции
-async function assistantReadStream(body, reply) {
-const reader = body.getReader();
-const dec = new TextDecoder();
-let buf = '';
-const line = (l) => {
-if (!l.trim()) return;
-let ev;
-try { ev = JSON.parse(l); } catch (e) { return; }
+function assistantReadStream(body, reply) {
+return readAiStream(body, ev => {
 if (ev.t === 'thinking') reply.thinking += ev.d || '';
 else if (ev.t === 'text') reply.content += ev.d || '';
 else if (ev.t === 'tool') reply.picking = true;
 else if (ev.t === 'done') assistantFinish(reply, ev);
 else if (ev.t === 'error') assistantFail(reply, ev.error || 'Помощник не ответил.');
 scheduleAssistantRender();
-};
-for (;;) {
-const { done, value } = await reader.read();
-if (done) break;
-buf += dec.decode(value, { stream: true });
-let i;
-while ((i = buf.indexOf('\n')) >= 0) { line(buf.slice(0, i)); buf = buf.slice(i + 1); }
-}
-line(buf);
+});
 }
 
 function assistantFinish(reply, data) {
