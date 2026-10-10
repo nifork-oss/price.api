@@ -53,6 +53,7 @@ return { id: room.id, name: roomName(room), surfaces };
 const cart = invoiceCart.map(it => ({ name: it.name, qty: it.qty, unit: it.unit, price: it.price, ...(it.location ? { where: it.location } : {}) }));
 return {
 doc: selectedDocType === 'estimate' ? 'предварительный расчёт' : 'счёт',
+currency: '₽',
 object: obj ? (obj.name || obj.address || '') : 'не выбран',
 services, rooms, cart,
 total: invoiceCart.reduce((a, it) => a + it.qty * it.price, 0),
@@ -166,7 +167,7 @@ box.innerHTML = `<div class="as-hint">Опишите, что нужно сдел
 } else {
 box.innerHTML = assistantChat.map((m, mi) => {
 const cls = m.role === 'user' ? 'as-msg as-user' : 'as-msg as-bot' + (m.error ? ' as-error' : '');
-let html = `<div class="${cls}"><div class="as-text">${escapeHtml(m.content)}</div>`;
+let html = `<div class="${cls}"><div class="as-text">${m.role === 'user' ? escapeHtml(m.content) : assistantTextHtml(m.content)}</div>`;
 if (m.items && m.items.length) {
 html += '<div class="as-items">' + m.items.map((it, ii) => `
 <label class="as-item${it.added ? ' added' : ''}">
@@ -187,6 +188,17 @@ if (assistantBusy) box.innerHTML += '<div class="as-msg as-bot as-wait"><div cla
 }
 box.scrollTop = box.scrollHeight;
 document.getElementById('assistantSend').disabled = assistantBusy;
+}
+
+// Ответ нейросети обычным текстом: **жирный** — жирным, остальная разметка
+// и служебные номера услуг «(i=25)» убираются.
+function assistantTextHtml(text) {
+return escapeHtml(String(text || '')
+.replace(/\s*\(?\bi\s*=\s*\d+\)?/g, '')
+.replace(/^#{1,6}\s+/gm, '')
+.replace(/`/g, ''))
+.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+.replace(/(^|\s)\*(\S[^*\n]*?)\*(?=\s|$|[.,:;!?])/g, '$1$2');
 }
 
 function assistantExample(btn) {

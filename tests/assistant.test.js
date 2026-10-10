@@ -144,3 +144,9 @@ test('калькулятор: «Добавить отмеченное» клад
   run('addAssistantItems(0)'); // повторно уже добавленное не дублируется
   assert.strictEqual(run('invoiceCart.length'), 1);
 });
+
+test('калькулятор: ответ без звёздочек, решёток и служебных номеров услуг', () => {
+  const run = setupCalc();
+  const html = run(`assistantTextHtml('**Нанесение Замши (i=25)** — 1000 ₽\\n## Итог\\n2*3 = 6')`);
+  assert.strictEqual(html, '<b>Нанесение Замши</b> — 1000 ₽\nИтог\n2*3 = 6');
+});
