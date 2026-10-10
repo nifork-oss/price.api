@@ -24,6 +24,7 @@
  *   Если Cloudinary не настроен, загрузка файлов вернёт понятную ошибку,
  *   а остальной сайт продолжит работать.
  *   ANTHROPIC_API_KEY — необязательно: ключ API Anthropic (console.anthropic.com)
+ *   ANTHROPIC_PLAN_MODEL — необязательно: отдельная модель для распознавания плана
  *                     для платного распознавания обмерных планов по фото.
  *                     Без ключа кнопка «Распознать план» сообщит, что
  *                     функция не настроена. Модель можно сменить
@@ -1179,7 +1180,8 @@ function planPayload(env, image, mediaType, turns) {
     if (t.answer) messages.push({ role: "user", content: text });
     else if (last.role === "user") last.content = [].concat(last.content, [{ type: "text", text }]);
   });
-  return { model: anthropicModel(env), max_tokens: 8000, messages };
+  // Для плана можно задать свою модель (ANTHROPIC_PLAN_MODEL), помощник останется на основной
+  return { model: envValue(env, "ANTHROPIC_PLAN_MODEL") || anthropicModel(env), max_tokens: 8000, messages };
 }
 
 // Переписка из окна распознавания: до 10 реплик мастера по 2000 знаков,

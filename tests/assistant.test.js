@@ -323,3 +323,15 @@ test('план: PDF уходит документом', async () => {
   const { sent } = await callPlan({ mediaType: 'application/pdf' }, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }]);
   assert.deepStrictEqual(sent[0].messages[0].content[0], { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'AAAA' } });
 });
+
+test('план: своя модель из ANTHROPIC_PLAN_MODEL', async () => {
+  const worker = (await import('../worker.js')).default;
+  const sent = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => { sent.push(JSON.parse(opts.body)); return new Response(JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }), { headers: { 'content-type': 'application/json' } }); };
+  try {
+    const req = new Request('https://x/recognize-plan', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) }, body: JSON.stringify({ image: 'AAAA' }) });
+    await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', ANTHROPIC_MODEL: 'claude-sonnet-5', ANTHROPIC_PLAN_MODEL: ' claude-opus-4-8 ' });
+    assert.strictEqual(sent[0].model, 'claude-opus-4-8');
+  } finally { globalThis.fetch = realFetch; }
+});
