@@ -874,12 +874,12 @@ const conv = res.rooms.map(r => (r.pts ? flatPtsToMeasure(r, aiTarget.objectId) 
 const ms = conv.map(c => c.measure);
 aiTarget.measures = ms;
 aiTarget.plans = conv.map(c => c.plan);
-const flat = conv.filter(c => c.plan).map((c, i) => ({ id: 'p' + i, name: c.measure.room, measure: c.measure, plan: c.plan }));
+const flat = conv.filter(c => c.plan).map((c, i) => flatItem('p' + i, c.measure.room, c.measure, c.plan));
 const obj = (cloudData.objects || []).find(o => o.id === aiTarget.objectId);
 const same = ms.filter(m => aiExistingRoom(obj, m.room)).length;
 return `<div class="ai-review">
 ${res.warnings && res.warnings.length ? `<div class="ai-warn"><b>Нейросеть предупреждает:</b><br>${res.warnings.map(escapeHtml).join('<br>')}</div>` : ''}
-${flat.length > 1 ? `<div class="flat-wrap ai-flat">${flatSvg(flat, '')}</div>` : ''}
+${flat.length > 1 ? `<div class="flat-wrap ai-flat">${flatSvg(flat)}</div>` : ''}
 <div class="ai-hint">Это черновик. Отметьте нужные помещения и проверьте размеры — после добавления каждое правится в замере, как обычно${flat.length > 1 ? ', а весь план виден у объекта — «План квартиры»' : ''}. Если что-то не так — напишите уточнение внизу.</div>
 ${same ? `<label class="ai-update"><input type="checkbox" id="aiUpdateSame" ${aiTarget.updateSame === false ? '' : 'checked'} onchange="aiSetUpdate(this.checked)"> <span>Помещения, которые уже есть в объекте (${same}), — <b>обновить</b>, а не добавлять заново. Меняются стены, высота и проёмы; плитка, лепнина, укрывка и работы в счёте остаются.</span></label>` : ''}
 ${ms.map((m, i) => {

@@ -586,3 +586,22 @@ test('план квартиры: углы от нейросети → замер
   assert.strictEqual(wallLen, 3);
   assert.strictEqual(out.door.off, '1,6'); // 3 − 0,5 − 0,9
 });
+
+test('план квартиры: правка углов на плане → замер комнаты пересчитан, проёмы на месте', async () => {
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-flat.js']);
+  const out = JSON.parse(JSON.stringify(vm.runInContext(`(() => {
+    const conv = flatPtsToMeasure({ name: 'Кухня', height_m: 2.7, pts: [[5120, 0], [8120, 0], [8120, 2900], [5120, 2900]],
+      openings: [{ type: 'window', wall_index: 0, offset_m: 2, width_m: 0.9 }] }, 'o');
+    const room = { id: 'r', measure: conv.measure, plan: conv.plan };
+    // стену вниз до 4 м, верхнюю — короче до 2,5 м (окно в 2 м от начала шириной 0,9 — подвинется)
+    flatApplyPolygon(room, [[5.12, 0], [7.62, 0], [7.62, 4], [5.12, 4]]);
+    const g = rulerGeometry(room.measure);
+    return { walls: room.measure.walls, closed: g.closed, plan: room.plan, win: room.measure.openings[0], abs: flatRoomPoints(room.measure, room.plan).pts };
+  })()`, c.ctx || c)));
+  assert.deepStrictEqual(out.walls, ['2,5', '4', '2,5', '4']);
+  assert.strictEqual(out.closed, true);
+  assert.deepStrictEqual(out.plan, { x: 5.12, y: 0 });
+  assert.strictEqual(out.win.wall, 0);
+  assert.strictEqual(out.win.off, '1,6'); // 2 + 0,9 > 2,5 → не дальше конца стены
+  assert.deepStrictEqual(out.abs.map(p => p.map(v => Math.round(v * 1000))), [[5120, 0], [7620, 0], [7620, 4000], [5120, 4000]]);
+});

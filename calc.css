@@ -1028,3 +1028,8 @@ body.assistant-open .add-toast { z-index: 99; }
 .ai-flat { margin-bottom: 10px; }
 .flat-zoom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font-size: 14px; }
 .flat-zoom .mp-head-btn { width: 44px; font-size: 18px; }
+.flat-wrap.editing { touch-action: none; }
+.flat-wrap.editing .flat-svg { touch-action: none; user-select: none; -webkit-user-select: none; }
+.flat-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.flat-tools .mp-btn-primary { margin-left: auto; }
+.flat-tools button:disabled { opacity: 0.45; }
