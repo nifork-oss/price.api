@@ -5,7 +5,7 @@
 //
 // При каждом заметном обновлении сайта меняйте номер версии ниже —
 // старый кэш удалится, и у всех подтянутся новые файлы.
-const CACHE_NAME = 'prise-shell-v41';
+const CACHE_NAME = 'prise-shell-v42';
 const SHELL_FILES = [
   './calc.html',
   './calc.css',
@@ -20,6 +20,7 @@ const SHELL_FILES = [
   './calc-plan.js',
   './calc-flat.js',
   './calc-import.js',
+  './calc-planfile.js',
   './calc-paid.js',
   './calc-aichats.js',
   './calc-assistant.js',

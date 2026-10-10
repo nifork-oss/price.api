@@ -642,3 +642,19 @@ test('план квартиры: подпись в маленькой комна
   assert.ok(!svg.includes('>Гардеробная комната</text>')); // не влезает — только площадь
   assert.ok(svg.includes('<title>Гардеробная комната — 1,4 м²</title>'));
 });
+
+test('план из файла: свой формат, углы нейросети (мм и метры), текст из чата с пояснениями', () => {
+  const c = loadCalc(['calc-planfile.js']);
+  const run = (code) => JSON.parse(JSON.stringify(vm.runInContext(code, c.ctx || c)));
+  const own = JSON.stringify({ format: 'kabinet-plan', rooms: [{ name: 'Кухня', measure: { room: 'Кухня', walls: ['3', '2'], tiles: [1] }, plan: { x: 1, y: 2 } }] });
+  const a = run(`parsePlanText(${JSON.stringify(own)})`);
+  assert.deepStrictEqual(a.rooms[0], { name: 'Кухня', measure: { room: 'Кухня', walls: ['3', '2'], tiles: [1] }, plan: { x: 1, y: 2 } });
+  const chat = 'Вот план:\n```json\n{"rooms":[{"name":"Комната","height_mm":2700,"pts":[[0,0],[2.79,0],[2.79,4.97],[0,4.97]],"openings":[{"type":"door","at":[[0.85,4.97],[1.72,4.97]]}]},{"name":"Битая","pts":[[0,0],[1,"x"],[2,2]]}]}\n```\nПроверьте размеры.';
+  const b = run(`parsePlanText(${JSON.stringify(chat)})`);
+  assert.strictEqual(b.skipped, 1);
+  assert.deepStrictEqual(b.rooms[0].pts, [[0, 0], [2790, 0], [2790, 4970], [0, 4970]]); // метры → мм
+  assert.strictEqual(b.rooms[0].height_m, 2.7);
+  assert.deepStrictEqual(b.rooms[0].openings[0].at, [[850, 4970], [1720, 4970]]);
+  assert.strictEqual(b.rooms[0].openings[0].width_m, 0.87);
+  assert.throws(() => run(`parsePlanText('просто текст')`), /нет плана/);
+});

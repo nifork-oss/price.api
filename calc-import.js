@@ -730,8 +730,10 @@ function renderAiPanel() {
 if (!aiTarget) return;
 const body = document.getElementById('aiBody');
 document.getElementById('aiAttachBox').innerHTML = '';
+const title = document.getElementById('aiTitle');
+if (title) title.textContent = aiTarget.imported ? 'Загрузка плана' : 'Распознавание плана';
 const histBtn = document.getElementById('aiHistBtn');
-histBtn.style.display = !aiTarget.history && aiChatsList('plan', aiTarget.objectId).length ? '' : 'none';
+histBtn.style.display = !aiTarget.history && !aiTarget.imported && aiChatsList('plan', aiTarget.objectId).length ? '' : 'none';
 histBtn.disabled = aiBusy();
 if (aiTarget.history) {
 body.innerHTML = `<div class="mp-body-inner ai-chat">
@@ -786,7 +788,8 @@ const p = run.patch;
 const parts = [p.changed.length ? 'поправил: ' + p.changed.join(', ') : '', p.added.length ? 'добавил: ' + p.added.join(', ') : '', p.removed.length ? 'убрал: ' + p.removed.join(', ') : ''].filter(Boolean);
 const head = parts.length ? parts.join('; ') : 'без изменений';
 html += `<div class="as-text"><b>${escapeHtml(head[0].toUpperCase() + head.slice(1))}</b>\nОстальное как было. Помещений в плане: ${rooms.length}</div>`;
-} else if (rooms.length) html += `<div class="as-text"><b>${run.result ? 'Распознал' : 'Нашёл'} помещений: ${rooms.length}</b>\n${rooms.map(escapeHtml).join(', ')}</div>`;
+} else if (run.imported) html += `<div class="as-text"><b>${escapeHtml(run.imported)}</b>\nПомещений: ${rooms.length} — ${rooms.map(escapeHtml).join(', ')}</div>`;
+else if (rooms.length) html += `<div class="as-text"><b>${run.result ? 'Распознал' : 'Нашёл'} помещений: ${rooms.length}</b>\n${rooms.map(escapeHtml).join(', ')}</div>`;
 if (run.questions) html += `<div class="as-text"><b>Чтобы не ошибиться, уточните:</b>\n${run.questions.map((q, qi) => (run.questions.length > 1 ? (qi + 1) + '. ' : '') + escapeHtml(q)).join('\n')}</div>`;
 if (run.error) {
 html += `<div class="as-text">${escapeHtml(run.error)}</div>`;
@@ -870,7 +873,8 @@ return old;
 
 function aiReviewHtml(res) {
 // Новый вид — углами в общей системе координат: замер комнаты + её место на плане квартиры
-const conv = res.rooms.map(r => (r.pts ? flatPtsToMeasure(r, aiTarget.objectId) : { measure: aiRoomToMeasure(r, aiTarget.objectId), plan: null }));
+const conv = res.rooms.map(r => (r.measure ? { measure: { ...JSON.parse(JSON.stringify(r.measure)), id: newMeasure().id, objectId: aiTarget.objectId, room: r.name }, plan: r.plan || null }
+: r.pts ? flatPtsToMeasure(r, aiTarget.objectId) : { measure: aiRoomToMeasure(r, aiTarget.objectId), plan: null }));
 const ms = conv.map(c => c.measure);
 aiTarget.measures = ms;
 aiTarget.plans = conv.map(c => c.plan);
@@ -878,9 +882,9 @@ const flat = conv.filter(c => c.plan).map((c, i) => flatItem('p' + i, c.measure.
 const obj = (cloudData.objects || []).find(o => o.id === aiTarget.objectId);
 const same = ms.filter(m => aiExistingRoom(obj, m.room)).length;
 return `<div class="ai-review">
-${res.warnings && res.warnings.length ? `<div class="ai-warn"><b>Нейросеть предупреждает:</b><br>${res.warnings.map(escapeHtml).join('<br>')}</div>` : ''}
+${res.warnings && res.warnings.length ? `<div class="ai-warn"><b>${aiTarget.imported ? 'Обратите внимание' : 'Нейросеть предупреждает'}:</b><br>${res.warnings.map(escapeHtml).join('<br>')}</div>` : ''}
 ${flat.length > 1 ? `<div class="flat-wrap ai-flat">${flatSvg(flat)}</div>` : ''}
-<div class="ai-hint">Это черновик. Отметьте нужные помещения и проверьте размеры — после добавления каждое правится в замере, как обычно${flat.length > 1 ? ', а весь план виден у объекта — «План квартиры»' : ''}. Если что-то не так — напишите уточнение внизу.</div>
+<div class="ai-hint">${aiTarget.imported ? 'Отметьте нужные помещения' : 'Это черновик. Отметьте нужные помещения и проверьте размеры'} — после добавления каждое правится в замере, как обычно${flat.length > 1 ? ', а весь план виден у объекта — «План квартиры»' : ''}.${aiTarget.imported ? '' : ' Если что-то не так — напишите уточнение внизу.'}</div>
 ${same ? `<label class="ai-update"><input type="checkbox" id="aiUpdateSame" ${aiTarget.updateSame === false ? '' : 'checked'} onchange="aiSetUpdate(this.checked)"> <span>Помещения, которые уже есть в объекте (${same}), — <b>обновить</b>, а не добавлять заново. Меняются стены, высота и проёмы; плитка, лепнина, укрывка и работы в счёте остаются.</span></label>` : ''}
 ${ms.map((m, i) => {
 const g = rulerGeometry(m);
