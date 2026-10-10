@@ -307,3 +307,19 @@ test('план: нейросеть может сначала задать воп
   const both = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON.replace('"warnings":[]', '"warnings":[],"questions":["лишний"]') }] }) }]);
   assert.strictEqual(JSON.parse(both.text).questions, undefined);
 });
+
+test('план: вопросы и план внутри вызова инструмента тоже понимаем', async () => {
+  const ask = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [
+    { type: 'tool_use', name: 'AskUserQuestion', input: { questions: [{ question: 'Размеры в мм?', options: [] }] } },
+    { type: 'tool_use', name: 'Other', input: { foo: 1 } } ] }) }]);
+  assert.deepStrictEqual(JSON.parse(ask.text).questions, ['Размеры в мм?']);
+  const plan = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'tool_use', name: 'x', input: JSON.parse(PLAN_JSON) }] }) }]);
+  assert.strictEqual(JSON.parse(plan.text).rooms[0].name, 'Кухня');
+  const odd = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'tool_use', name: 'view_image', input: { path: 'a' } }] }) }]);
+  assert.match(JSON.parse(odd.text).error, /вызов view_image \{"path":"a"\}/);
+});
+
+test('план: PDF уходит документом', async () => {
+  const { sent } = await callPlan({ mediaType: 'application/pdf' }, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }]);
+  assert.deepStrictEqual(sent[0].messages[0].content[0], { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'AAAA' } });
+});
