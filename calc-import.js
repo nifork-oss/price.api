@@ -399,10 +399,10 @@ renderAiPanel();
 }
 
 // Один заход нейросети; note — уточнение мастера к прошлому результату
-async function runAiRecognition(note) {
+async function runAiRecognition(note, attach) {
 const target = aiTarget;
 if (!target || !target.image || aiBusy()) return;
-const run = { note, thinking: '', text: '', status: 'Отправляю в нейросеть…' };
+const run = { note, thinking: '', text: '', status: 'Отправляю в нейросеть…', ...(attach ? { attach } : {}) };
 target.runs.push(run);
 target.abort = new AbortController();
 renderAiPanel();
@@ -452,6 +452,7 @@ if (err && err.name === 'AbortError') {
 // Остановили — убираем заход, уточнение возвращаем в поле
 target.runs = target.runs.filter(r => r !== run);
 if (note) document.getElementById('aiNote').value = note;
+if (run.attach) target.attach = run.attach;
 } else {
 run.error = 'Ошибка: ' + (err && err.message ? err.message : err);
 }
@@ -489,7 +490,8 @@ runs.forEach((r, i) => {
 if (!r.note) return;
 const prev = runs[i - 1];
 const answer = prev && (prev.result || prev.questions) ? JSON.stringify(prev.result || { questions: prev.questions }) : '';
-turns.push({ note: r.note, answer });
+const a = r.attach;
+turns.push({ note: r.note, answer, ...(a ? { image: a.image, mediaType: a.mediaType, ...(a.pageText ? { pageText: a.pageText } : {}) } : {}) });
 });
 return turns;
 }
@@ -658,7 +660,7 @@ if (!aiTarget || aiBusy()) return;
 const last = aiTarget.runs[aiTarget.runs.length - 1];
 if (!last || !last.error) return;
 aiTarget.runs.pop();
-runAiRecognition(last.note || '');
+runAiRecognition(last.note || '', last.attach);
 }
 
 function aiBusy() {
@@ -667,10 +669,40 @@ return !!(aiTarget && aiTarget.runs.some(r => !r.done));
 
 function sendAiNote() {
 const el = document.getElementById('aiNote');
-const note = el.value.trim();
+const attach = aiTarget && aiTarget.attach;
+const note = el.value.trim() || (attach ? 'Добавь в план то, что есть на этом чертеже (например, перегородки).' : '');
 if (!note || aiBusy()) return;
 el.value = '';
-runAiRecognition(note);
+if (attach) aiTarget.attach = null;
+runAiRecognition(note, attach || undefined);
+}
+
+/* ---------- ещё один чертёж к тому же плану (перегородки и т.п.) ---------- */
+
+async function handleAiAttach(input) {
+const file = input.files && input.files[0];
+input.value = '';
+if (!file || !aiTarget || !aiTarget.image) return;
+const target = aiTarget;
+try {
+const isPdf = isPdfFile(file);
+const pick = isPdf ? await pickPdfPage(file) : { page: 1, total: 1 };
+if (!pick) return;
+showAddToast('Готовлю файл…');
+const part = await aiCropImage(file, pick.page, isPdf, { x: 0, y: 0, w: 1, h: 1 });
+if (aiTarget !== target) return;
+target.attach = { image: part.dataUrl.split(',')[1], mediaType: 'image/jpeg', preview: part.dataUrl, pageText: part.text || '',
+name: (file.name || (isPdf ? 'PDF' : 'фото')) + (pick.total > 1 ? `, стр. ${pick.page}` : '') };
+renderAiPanel();
+setTimeout(() => document.getElementById('aiNote').focus(), 0);
+} catch (err) {
+alert('Не удалось открыть файл: ' + (err && err.message ? err.message : err));
+}
+}
+
+function aiDropAttach() {
+if (aiTarget) aiTarget.attach = null;
+renderAiPanel();
 }
 
 let aiPanelQueued = false;
@@ -697,6 +729,7 @@ return [...String(text || '').matchAll(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map
 function renderAiPanel() {
 if (!aiTarget) return;
 const body = document.getElementById('aiBody');
+document.getElementById('aiAttachBox').innerHTML = '';
 const histBtn = document.getElementById('aiHistBtn');
 histBtn.style.display = !aiTarget.history && aiChatsList('plan', aiTarget.objectId).length ? '' : 'none';
 histBtn.disabled = aiBusy();
@@ -739,7 +772,7 @@ const rules = aiPlanHintsCount();
 if (rules) html += `<div class="ai-sent">Учитываю ваши правила: ${rules} (изменить — в Профиле)</div>`;
 aiTarget.runs.forEach((run, ri) => {
 if (run.note) {
-html += `<div class="as-msg as-user ai-note"><div class="as-text">${escapeHtml(run.note)}</div></div>`;
+html += `<div class="as-msg as-user ai-note">${run.attach ? `<img class="ai-attach-thumb" src="${run.attach.preview}" alt="Чертёж"><div class="ai-attach-name">📎 ${escapeHtml(run.attach.name || 'чертёж')}</div>` : ''}<div class="as-text">${escapeHtml(run.note)}</div></div>`;
 if (run.done && !run.error) html += run.remembered
 ? '<div class="ai-rule ai-rule-done">Запомнено как правило</div>'
 : `<button type="button" class="ai-rule" onclick="rememberAiRule(${ri})">Запомнить как правило</button>`;
@@ -778,6 +811,9 @@ cancel.textContent = busy ? 'Стоп' : showReview ? 'Отмена' : 'Закр
 cancel.classList.toggle('ai-stop', busy);
 const form = document.getElementById('aiNoteForm');
 form.style.display = aiTarget.image ? '' : 'none';
+const att = aiTarget.attach;
+document.getElementById('aiAttachBox').innerHTML = att && aiTarget.image
+? `<img src="${att.preview}" alt=""><span>📎 ${escapeHtml(att.name)} — напишите, что с ним сделать, или просто отправьте</span><button type="button" onclick="aiDropAttach()" aria-label="Убрать файл">✕</button>` : '';
 document.getElementById('aiNoteSend').disabled = busy;
 document.getElementById('aiNote').placeholder = last && last.questions ? 'Ваш ответ' : last && last.result ? 'Уточнение, например: высота 2,7' : 'Что на плане? Подскажите — попробую ещё раз';
 if (last && last.questions && last.done && !busy) setTimeout(() => document.getElementById('aiNote').focus(), 0);
