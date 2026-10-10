@@ -99,7 +99,7 @@ test('сервер: пробелы, переносы и кавычки вокр�
 
 // Калькулятор: квадратная комната 4×3 м, высота 2,7 м
 function setupCalc() {
-  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-rooms.js', 'calc-assistant.js']);
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-rooms.js', 'calc-aichats.js', 'calc-assistant.js']);
   vm.runInContext(`
     var DEFAULT_UNITS = ['м²', 'пог. м', 'шт.', 'компл.', 'час', 'усл.'];
     var invoiceCart = [];

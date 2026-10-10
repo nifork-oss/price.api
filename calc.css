@@ -938,3 +938,12 @@ body.assistant-open .add-toast { z-index: 99; }
 .as-form button { width: 46px; border: none; border-radius: 10px; background: var(--s-ink); color: #ffffff; cursor: pointer; }
 .as-form button:disabled { opacity: .4; }
 .as-form button.as-stop { background: var(--s-due); }
+
+/* ===== История чатов с нейросетью (calc-aichats.js) ===== */
+.ai-hist-title { margin: 14px 0 6px; color: var(--s-ink3); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.ai-hist { display: flex; flex-direction: column; gap: 6px; }
+.ai-hist-row { display: flex; align-items: stretch; border: 1px solid var(--s-line); border-radius: 10px; background: #ffffff; overflow: hidden; }
+.ai-hist-open { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; text-align: left; border: 0; background: none; color: var(--s-ink); padding: 10px 12px; font-size: 14px; cursor: pointer; }
+.ai-hist-open span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-hist-open small { color: var(--s-ink3); font-size: 12px; }
+.ai-hist-del { border: 0; border-left: 1px solid var(--s-line); background: none; color: var(--s-ink3); width: 44px; font-size: 14px; cursor: pointer; }

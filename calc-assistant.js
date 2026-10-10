@@ -6,6 +6,7 @@
 
 let assistantChat = [];      // [{ role: 'user'|'assistant', content, items? }]
 let assistantBusy = false;
+let assistantChatId = null;  // под каким id чат лежит в истории (calc-aichats.js)
 
 function assistantConsentKey() { return 'assistantConsent:' + (currentUser || ''); }
 
@@ -27,9 +28,40 @@ document.getElementById('assistantPanel').classList.remove('open');
 document.body.classList.remove('assistant-open');
 }
 
+// «Новый чат»: текущий остаётся в истории, на пустом экране — список прошлых
 function clearAssistant() {
 if (assistantBusy) return;
 assistantChat = [];
+assistantChatId = null;
+renderAssistant();
+}
+
+function saveAssistantChat() {
+const messages = assistantChat.filter(m => !m.streaming).map(m => {
+const { streaming, picking, ...rest } = m;
+return rest;
+});
+if (!messages.some(m => m.role === 'assistant')) return;
+if (!assistantChatId) assistantChatId = aiChatNewId();
+const first = messages.find(m => m.role === 'user');
+const obj = calcObject();
+aiChatSave({ id: assistantChatId, kind: 'assistant', objectId: obj ? obj.id : '',
+title: first ? first.content.slice(0, 80) : 'Чат' }, { messages });
+}
+
+async function openAssistantChat(id) {
+if (assistantBusy) return;
+const data = await aiChatGet(id);
+if (!data || !Array.isArray(data.messages)) { alert('Не удалось открыть чат.'); aiChatDelete(id); renderAssistant(); return; }
+assistantChat = data.messages;
+assistantChatId = id;
+renderAssistant();
+}
+
+function deleteAssistantChat(id) {
+if (!confirm('Удалить этот чат из истории?')) return;
+aiChatDelete(id);
+if (assistantChatId === id) assistantChatId = null;
 renderAssistant();
 }
 
@@ -111,6 +143,7 @@ assistantFail(reply, 'Нет связи с сервером: ' + (err && err.mes
 if (!stopped && reply.streaming) assistantFail(reply, reply.content ? reply.content + '\n\n(ответ оборвался)' : 'Помощник не ответил. Попробуйте ещё раз.');
 assistantBusy = false;
 assistantAbort = null;
+if (!stopped) saveAssistantChat();
 renderAssistant();
 if (stopped) setTimeout(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }, 0);
 }
@@ -188,7 +221,7 @@ return out;
 
 function toggleAssistantItem(mi, ii, on) {
 const it = assistantChat[mi] && assistantChat[mi].items && assistantChat[mi].items[ii];
-if (it) it.checked = on;
+if (it) { it.checked = on; saveAssistantChat(); }
 }
 
 function addAssistantItems(mi) {
@@ -214,6 +247,7 @@ if (!n) { alert('Отметьте позиции, которые нужно до
 renderInvoice();
 scheduleDraftSave();
 showAddToast(`Добавлено в счёт: ${n}`);
+saveAssistantChat();
 renderAssistant();
 }
 
@@ -229,6 +263,8 @@ box.innerHTML = `<div class="as-hint">Опишите, что нужно сдел
 <button type="button" onclick="assistantExample(this)">Что я мог забыть в этом счёте?</button>
 <button type="button" onclick="assistantExample(this)">Объясни, из чего складывается сумма</button>
 </div></div>`;
+const past = aiChatsList('assistant');
+if (past.length) box.innerHTML += '<div class="ai-hist-title">Прошлые чаты</div>' + aiChatsListHtml(past, 'openAssistantChat', 'deleteAssistantChat');
 } else {
 box.innerHTML = assistantChat.map((m, mi) => {
 const cls = m.role === 'user' ? 'as-msg as-user' : 'as-msg as-bot' + (m.error ? ' as-error' : '');

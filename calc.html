@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261010-6. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261010-7. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -195,6 +195,7 @@
 <div class="mp-head"><div class="mp-head-inner">
 <div class="mp-head-row">
 <div class="mp-title">Распознавание плана</div>
+<button type="button" class="mp-head-btn" id="aiHistBtn" onclick="showAiHistory(aiTarget.objectId)" style="display:none;">История</button>
 <button type="button" class="mp-head-btn mp-close" onclick="closeAiReview()" aria-label="Закрыть">✕</button>
 </div>
 </div></div>
@@ -611,7 +612,7 @@
 <div class="as-panel" id="assistantPanel" role="dialog" aria-label="Помощник">
 <div class="as-head">
 <b>Помощник</b>
-<button type="button" class="as-head-btn" onclick="clearAssistant()">Очистить</button>
+<button type="button" class="as-head-btn" onclick="clearAssistant()">Новый чат</button>
 <button type="button" class="as-head-btn" onclick="closeAssistant()" aria-label="Закрыть">✕</button>
 </div>
 <div class="as-messages" id="assistantMessages"></div>
@@ -620,11 +621,12 @@
 <button type="submit" id="assistantSend" aria-label="Отправить"><svg class="ic"><use href="#i-go"/></svg></button>
 </form>
 </div>
-<script src="calc-assistant.js?v=40776cd8"></script>
+<script src="calc-aichats.js?v=08208a53"></script>
+<script src="calc-assistant.js?v=58ce0e8e"></script>
 
 <script src="calc-plan.js?v=52b816b0"></script>
 
-<script src="calc-import.js?v=3e298e04"></script>
+<script src="calc-import.js?v=16977221"></script>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
 <div class="update-banner-text">Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>
