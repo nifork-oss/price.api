@@ -1207,9 +1207,19 @@ function parsePlanReply(data) {
   const clean = text.replace(/```json|```/g, "").trim();
   const start = clean.indexOf("{"), end = clean.lastIndexOf("}");
   if (start < 0 || end < 0) {
+    // Нейросеть могла ответить вызовом инструмента (посредник подставляет свои):
+    // план или вопросы мастеру берём и оттуда
+    const calls = (data.content || []).filter((c) => c.type === "tool_use");
+    const withRooms = calls.find((c) => c.input && Array.isArray(c.input.rooms));
+    if (withRooms) return sanitizePlan(withRooms.input);
+    const asked = calls.flatMap((c) => {
+      const v = c.input && (c.input.questions || c.input.question || c.input.text || c.input.message);
+      return (Array.isArray(v) ? v : v ? [v] : []).map((q) => (q && typeof q === "object" ? q.question || q.text || "" : String(q)));
+    }).map((q) => q.trim()).filter(Boolean);
+    if (asked.length) return { rooms: [], warnings: [], questions: asked.slice(0, 10).map((q) => q.slice(0, 300)) };
     // Без JSON — показываем, что нейросеть ответила на самом деле
     const said = text.replace(/\s+/g, " ").trim();
-    const kinds = (data.content || []).map((c) => c.type).join(", ");
+    const kinds = (data.content || []).map((c) => c.type === "tool_use" ? `вызов ${c.name || "?"} ${JSON.stringify(c.input || {}).slice(0, 120)}` : c.type).join(", ");
     throw new Error(data.stop_reason === "max_tokens" ? "ответ не поместился, план слишком большой"
       : said ? "нейросеть ответила не планом: «" + said.slice(0, 300) + "»"
       : `нейросеть вернула пустой ответ (${kinds || "нет блоков"}${data.stop_reason ? ", " + data.stop_reason : ""})`);
