@@ -89,6 +89,14 @@ test('сервер: ошибка посредника — в сообщении 
   assert.match(js.data.error, /ответил 400: model not found/);
 });
 
+test('сервер: пробелы, переносы и кавычки вокруг значений из панели не мешают', async () => {
+  const msg = { messages: [{ role: 'user', content: 'привет' }] };
+  const { sent } = await callAssistant(msg, { env: { ANTHROPIC_API_KEY: '', ANTHROPIC_AUTH_TOKEN: ' tok\n', ANTHROPIC_BASE_URL: '"https://proxy.example/api" ', ANTHROPIC_MODEL: ' "claude-sonnet-5"\n' } });
+  assert.strictEqual(sent[0].url, 'https://proxy.example/api/v1/messages');
+  assert.strictEqual(sent[0].headers.authorization, 'Bearer tok');
+  assert.strictEqual(sent[0].body.model, 'claude-sonnet-5');
+});
+
 // Калькулятор: квадратная комната 4×3 м, высота 2,7 м
 function setupCalc() {
   const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-rooms.js', 'calc-assistant.js']);

@@ -1089,19 +1089,30 @@ const handler = {
 // Ключ напрямую от Anthropic — ANTHROPIC_API_KEY. Ключ сервиса-посредника
 // (у них он обычно называется ANTHROPIC_AUTH_TOKEN) — ANTHROPIC_AUTH_TOKEN
 // вместе с адресом посредника в ANTHROPIC_BASE_URL.
+// Значение из панели Cloudflare без случайных пробелов, переносов и кавычек
+// (их легко захватить при копировании, а сервис потом не узнаёт ключ или модель).
+function envValue(env, name) {
+  return String(env[name] || "").trim().replace(/^["'`]+|["'`]+$/g, "").trim();
+}
+
 function anthropicConfigured(env) {
-  return !!(env.ANTHROPIC_API_KEY || env.ANTHROPIC_AUTH_TOKEN);
+  return !!(envValue(env, "ANTHROPIC_API_KEY") || envValue(env, "ANTHROPIC_AUTH_TOKEN"));
+}
+
+function anthropicModel(env) {
+  return envValue(env, "ANTHROPIC_MODEL") || "claude-sonnet-5-5";
 }
 
 function anthropicUrl(env) {
-  const base = String(env.ANTHROPIC_BASE_URL || "https://api.anthropic.com").replace(/\/+$/, "").replace(/\/v1$/, "");
+  const base = (envValue(env, "ANTHROPIC_BASE_URL") || "https://api.anthropic.com").replace(/\/+$/, "").replace(/\/v1$/, "");
   return base + "/v1/messages";
 }
 
 function anthropicHeaders(env) {
   const headers = { "content-type": "application/json", "anthropic-version": "2023-06-01" };
-  if (env.ANTHROPIC_API_KEY) headers["x-api-key"] = env.ANTHROPIC_API_KEY;
-  else headers.authorization = "Bearer " + env.ANTHROPIC_AUTH_TOKEN;
+  const apiKey = envValue(env, "ANTHROPIC_API_KEY");
+  if (apiKey) headers["x-api-key"] = apiKey;
+  else headers.authorization = "Bearer " + envValue(env, "ANTHROPIC_AUTH_TOKEN");
   return headers;
 }
 
@@ -1143,7 +1154,7 @@ async function recognizePlan(env, image, mediaType) {
     method: "POST",
     headers: anthropicHeaders(env),
     body: JSON.stringify({
-      model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
+      model: anthropicModel(env),
       max_tokens: 4000,
       messages: [{
         role: "user",
@@ -1248,7 +1259,7 @@ async function askAssistant(env, messages, context) {
     method: "POST",
     headers: anthropicHeaders(env),
     body: JSON.stringify({
-      model: env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
+      model: anthropicModel(env),
       max_tokens: 2000,
       system: ASSISTANT_PROMPT + "\n\n<calc>\n" + context + "\n</calc>",
       tools: [ASSISTANT_TOOL],
