@@ -1452,9 +1452,11 @@ function planPayload(env, image, mediaType, turns, hints, pageText) {
     // План уже есть — правим только то, что касается уточнения, остальное не трогаем
     let hasPlan = false;
     try { hasPlan = (JSON.parse(t.answer || "{}").rooms || []).length > 0; } catch (e) { /* не JSON */ }
-    const text = "Мастер пишет: " + t.note + "\n\n" + (hasPlan ? PLAN_PATCH : "Учти это и верни весь план целиком в том же формате JSON (или вопросы, если без них никак).");
-    if (t.answer) messages.push({ role: "user", content: text });
-    else if (last.role === "user") last.content = [].concat(last.content, [{ type: "text", text }]);
+    const text = (t.image ? "Мастер прикрепил дополнительный чертёж того же объекта (картинка выше)" + (t.pageText ? ". Текст с него:\n<pdf_text>\n" + t.pageText + "\n</pdf_text>" : "") + ". Сопоставь его с планом по размерам и подписям.\n\n" : "")
+      + "Мастер пишет: " + t.note + "\n\n" + (hasPlan ? PLAN_PATCH : "Учти это и верни весь план целиком в том же формате JSON (или вопросы, если без них никак).");
+    const blocks = [...(t.image ? [{ type: "image", source: { type: "base64", media_type: t.mediaType, data: t.image } }] : []), { type: "text", text }];
+    if (t.answer) messages.push({ role: "user", content: blocks });
+    else if (last.role === "user") last.content = [].concat(last.content, blocks);
   });
   if (messages.length > 1) messages[messages.length - 1] = cacheLast(messages[messages.length - 1]);
   // Для плана можно задать свою модель (ANTHROPIC_PLAN_MODEL), помощник останется на основной
@@ -1468,12 +1470,24 @@ function planPayload(env, image, mediaType, turns, hints, pageText) {
 function planTurns(raw) {
   if (!Array.isArray(raw)) return [];
   let size = 0;
-  return raw.slice(-10).map((t) => {
+  // Дополнительные файлы (например, план перегородок) — не больше трёх, до 7 млн знаков каждый
+  let files = 0;
+  return raw.slice(-10).reverse().map((t) => {
     const note = String((t && t.note) || "").trim().slice(0, 2000);
     let answer = String((t && t.answer) || "").trim();
-    size += answer.length;
-    if (size > 60000) answer = "";
-    return { note, answer };
+    const out = { note, answer };
+    const image = String((t && t.image) || "");
+    if (image && image.length <= 7e6 && files < 3) {
+      files++;
+      out.image = image;
+      out.mediaType = ["image/jpeg", "image/png", "image/webp"].includes(t.mediaType) ? t.mediaType : "image/jpeg";
+      if (typeof t.pageText === "string") out.pageText = t.pageText.slice(0, 8000);
+    }
+    return out;
+  }).reverse().map((t) => {
+    size += t.answer.length;
+    if (size > 60000) t.answer = "";
+    return t;
   }).filter((t) => t.note);
 }
 

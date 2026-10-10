@@ -314,7 +314,7 @@ test('план: поток с размышлениями, уточнение у�
   assert.strictEqual(msgs.length, 5);
   assert.strictEqual(msgs[0].content[0].source.media_type, 'image/png');
   assert.strictEqual(msgs[1].content, '{"questions":["единицы?"]}');
-  assert.match(msgs[2].content, /в мм/);
+  assert.match(msgs[2].content[0].text, /в мм/);
   assert.strictEqual(msgs[3].content, '{"rooms":[]}');
   assert.match(msgs[4].content[0].text, /высота 2,7/);
   assert.ok(msgs[4].content[0].cache_control);
@@ -519,4 +519,17 @@ test('план: выделенная часть PDF — картинка и те
   assert.match(sent[0].messages[0].content[1].text, /<pdf_text>\nКухня 3200 2450 S=7,8\n<\/pdf_text>/);
   const plain = await callPlan({}, ok);
   assert.ok(!plain.sent[0].messages[0].content[1].text.includes('<pdf_text>'));
+});
+
+test('план: дополнительный файл (перегородки) уходит картинкой вместе с уточнением', async () => {
+  const ok = [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }];
+  const { sent } = await callPlan({ turns: [{ note: 'добавь перегородки', answer: PLAN_JSON, image: 'BBBB', mediaType: 'image/png', pageText: 'Перегородка 1200' }] }, ok);
+  const u = sent[0].messages[2].content;
+  assert.deepStrictEqual(u[0], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'BBBB' } });
+  assert.match(u[1].text, /дополнительный чертёж[\s\S]*Перегородка 1200[\s\S]*добавь перегородки[\s\S]*только изменённые/);
+  // Не больше трёх файлов — берутся последние
+  const many = Array.from({ length: 5 }, (_, i) => ({ note: 'н' + i, answer: PLAN_JSON, image: 'I' + i }));
+  const r = await callPlan({ turns: many }, ok);
+  const imgs = r.sent[0].messages.flatMap(m => Array.isArray(m.content) ? m.content.filter(b => b.type === 'image').map(b => b.source.data) : []);
+  assert.deepStrictEqual(imgs, ['AAAA', 'I2', 'I3', 'I4']);
 });

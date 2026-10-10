@@ -1006,3 +1006,13 @@ body.assistant-open .add-toast { z-index: 99; }
 .ai-crop-rect span[data-h="se"] { right: -14px; bottom: -14px; cursor: nwse-resize; }
 .ai-crop-stage .ai-crop-rect { overflow: visible; }
 .ai-retry-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ===== Ещё один чертёж к плану (calc-import.js) ===== */
+.ai-note-form .ai-attach-btn { width: 40px; flex-shrink: 0; font-size: 13px; font-weight: 700; }
+.ai-attach-box:empty { display: none; }
+.ai-attach-box { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.12); color: #ffffff; font-size: 13px; }
+.ai-attach-box img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background: #ffffff; }
+.ai-attach-box span { flex: 1; min-width: 0; }
+.ai-attach-box button { border: none; background: none; color: #ffffff; font-size: 16px; cursor: pointer; padding: 4px 8px; }
+.ai-attach-thumb { display: block; max-width: 160px; max-height: 120px; border-radius: 6px; background: #ffffff; margin-bottom: 4px; }
+.ai-attach-name { font-size: 12px; opacity: 0.85; margin-bottom: 4px; }
