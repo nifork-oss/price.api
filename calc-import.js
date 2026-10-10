@@ -179,11 +179,62 @@ return [[-u.w / 2, -h / 2], [u.w / 2, -h / 2], [u.w / 2, h / 2], [-u.w / 2, h / 
 // «добавь балкон»), и нейросеть переделает план с учётом поправки.
 let aiTarget = null;   // { objectId, image, preview, runs: [{ note, thinking, text, status, error, done, result }], abort, measures }
 
+// Есть прошлые распознавания этого объекта — сначала их список, иначе сразу выбор фото
 function startPlanRecognition(objectId) {
 const obj = objectId ? (cloudData.objects || []).find(o => o.id === objectId) : calcObject();
 if (!obj) { alert('Сначала выберите объект.'); return; }
+if (aiChatsList('plan', obj.id).length) { showAiHistory(obj.id); return; }
 aiTarget = { objectId: obj.id, runs: [] };
 document.getElementById('aiFile').click();
+}
+
+function showAiHistory(objectId) {
+if (aiBusy()) return;
+aiTarget = { objectId, runs: [], history: true };
+document.getElementById('aiPanel').classList.add('open');
+document.body.classList.add('measure-open');
+renderAiPanel();
+}
+
+function aiPickNewPhoto() {
+if (!aiTarget) return;
+aiTarget = { objectId: aiTarget.objectId, runs: [] };
+document.getElementById('aiFile').click();
+}
+
+// Сохраняем после каждого законченного захода — вместе с картинкой, чтобы
+// из истории можно было и добавить помещения, и продолжить уточнять
+function saveAiChat(target) {
+const runs = target.runs.filter(r => r.done).map(r => {
+const { status, ...rest } = r;
+return rest;
+});
+if (!runs.length || !target.image) return;
+if (!target.chatId) target.chatId = aiChatNewId();
+const last = [...runs].reverse().find(r => r.result);
+const n = last ? last.result.rooms.length : 0;
+const note = runs.map(r => r.note).filter(Boolean).pop();
+aiChatSave({ id: target.chatId, kind: 'plan', objectId: target.objectId,
+title: (n ? `${n} ${pluralRu(n, 'помещение', 'помещения', 'помещений')}: ${last.result.rooms.map(r => r.name).join(', ')}` : 'Без результата') + (note ? ` · «${note}»` : '') },
+{ runs, image: target.image, mediaType: target.mediaType, preview: target.preview, sentAs: target.sentAs });
+}
+
+async function openAiChat(id) {
+if (!aiTarget || aiBusy()) return;
+const objectId = aiTarget.objectId;
+const data = await aiChatGet(id);
+if (!aiTarget || aiTarget.objectId !== objectId) return;
+if (!data || !Array.isArray(data.runs)) { alert('Не удалось открыть распознавание.'); aiChatDelete(id); renderAiPanel(); return; }
+aiTarget = { objectId, chatId: id, runs: data.runs, image: data.image, mediaType: data.mediaType, preview: data.preview, sentAs: data.sentAs };
+document.getElementById('aiNote').value = '';
+renderAiPanel();
+}
+
+function deleteAiChat(id) {
+if (!confirm('Удалить это распознавание из истории?')) return;
+aiChatDelete(id);
+if (aiTarget && !aiChatsList('plan', aiTarget.objectId).length) { closeAiReview(); return; }
+renderAiPanel();
 }
 
 // Ответ нейросети строками JSON (воркер передаёт поток): по ходу —
@@ -281,6 +332,7 @@ if (!run.error && data.questions && data.questions.length && !(data.rooms && dat
 run.questions = data.questions;
 } else if (!run.error && (!data.rooms || !data.rooms.length)) run.error = 'Помещения не распознаны' + (data.warnings && data.warnings.length ? ': ' + data.warnings.join(' ') : '.') + ' Напишите внизу, что на плане (например, «это квартира из 3 комнат, размеры в мм»), или попробуйте более чёткое фото.';
 if (!run.error && !run.questions) run.result = { rooms: data.rooms, warnings: data.warnings || [] };
+if (data && data.model) run.model = data.model;
 } catch (err) {
 if (err && err.name === 'AbortError') {
 // Остановили — убираем заход, уточнение возвращаем в поле
@@ -292,6 +344,7 @@ run.error = 'Ошибка: ' + (err && err.message ? err.message : err);
 }
 run.done = true;
 target.abort = null;
+saveAiChat(target);
 if (aiTarget === target) renderAiPanel();
 }
 
@@ -343,6 +396,22 @@ return [...String(text || '').matchAll(/"name"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map
 function renderAiPanel() {
 if (!aiTarget) return;
 const body = document.getElementById('aiBody');
+const histBtn = document.getElementById('aiHistBtn');
+histBtn.style.display = !aiTarget.history && aiChatsList('plan', aiTarget.objectId).length ? '' : 'none';
+histBtn.disabled = aiBusy();
+if (aiTarget.history) {
+body.innerHTML = `<div class="mp-body-inner ai-chat">
+<button type="button" class="measure-open-btn ai-btn" onclick="aiPickNewPhoto()">Распознать новое фото</button>
+<div class="ai-hist-title">Прошлые распознавания</div>
+${aiChatsListHtml(aiChatsList('plan', aiTarget.objectId), 'openAiChat', 'deleteAiChat')}
+</div>`;
+document.getElementById('aiApply').style.display = 'none';
+document.getElementById('aiNoteForm').style.display = 'none';
+const cancel = document.getElementById('aiCancel');
+cancel.textContent = 'Закрыть';
+cancel.classList.remove('ai-stop');
+return;
+}
 const box = body.querySelector('.ai-chat');
 const stick = !box || body.scrollHeight - body.scrollTop - body.clientHeight < 80;
 const busy = aiBusy();
@@ -362,6 +431,7 @@ if (run.questions) html += `<div class="as-text"><b>Чтобы не ошибит
 if (run.error) html += `<div class="as-text">${escapeHtml(run.error)}</div>`;
 else if (live) html += `<div class="as-status">${escapeHtml(run.status)}</div>`;
 else if (run.result && ri < aiTarget.runs.length - 1) html += '<div class="as-status">заменено следующим вариантом</div>';
+if (run.model && !live) html += `<div class="as-model">${escapeHtml(run.model)}</div>`;
 html += '</div>';
 });
 if (showReview) html += aiReviewHtml(last.result);
