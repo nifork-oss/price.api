@@ -737,9 +737,11 @@ const handler = {
           const turns = planTurns(body.turns);
           // Правила мастера из профиля (страница берёт их из своих данных)
           const hints = typeof body.hints === "string" ? body.hints : "";
+          // Выделенная часть PDF уходит картинкой — её подписи и размеры текстом отдельно
+          const pageText = typeof body.pageText === "string" ? body.pageText.slice(0, 8000) : "";
           const onUsage = (u) => aiReport(env, request, auth, "plan", u);
-          if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns, hints), parsePlanReply, "Не удалось распознать план: ", onUsage);
-          const result = await recognizePlan(env, image, mediaType, turns, hints, onUsage);
+          if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns, hints, pageText), parsePlanReply, "Не удалось распознать план: ", onUsage);
+          const result = await recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText);
           return json(result);
         } catch (e) {
           return json({ error: "Не удалось распознать план: " + (e && e.message ? e.message : e) }, 502);
@@ -1432,7 +1434,7 @@ function stripCache(payload) {
 
 // turns — переписка в окне распознавания: что нейросеть ответила (план или
 // вопросы, JSON) и что мастер на это написал, по порядку; hints — правила мастера
-function planPayload(env, image, mediaType, turns, hints) {
+function planPayload(env, image, mediaType, turns, hints, pageText) {
   const messages = [{
     role: "user",
     content: [
@@ -1441,7 +1443,7 @@ function planPayload(env, image, mediaType, turns, hints) {
         ? { type: "document", source: { type: "base64", media_type: mediaType, data: image } }
         : { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
       // До этого места запрос одинаковый при каждом уточнении — кешируется
-      { type: "text", text: PLAN_PROMPT + planHintsText(hints), cache_control: CACHE },
+      { type: "text", text: (pageText ? "На картинке — выделенная мастером часть страницы PDF. Текст этой части из PDF (подписи и размеры, точнее, чем на картинке):\n<pdf_text>\n" + pageText + "\n</pdf_text>\n\n" : "") + PLAN_PROMPT + planHintsText(hints), cache_control: CACHE },
     ],
   }];
   (turns || []).forEach((t) => {
@@ -1475,8 +1477,8 @@ function planTurns(raw) {
   }).filter((t) => t.note);
 }
 
-async function recognizePlan(env, image, mediaType, turns, hints, onUsage) {
-  const payload = planPayload(env, image, mediaType, turns, hints);
+async function recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText) {
+  const payload = planPayload(env, image, mediaType, turns, hints, pageText);
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
