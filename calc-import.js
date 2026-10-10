@@ -853,12 +853,30 @@ ${g.closed ? '' : `<path d="M${pts[pts.length - 1]}L${pts[0]}" stroke="#c2361f" 
 }
 
 // Последний результат — помещения с галочками, как раньше
+// Помещение объекта с таким же названием (без учёта регистра и пробелов по краям)
+function aiExistingRoom(obj, name) {
+const key = String(name || '').trim().toLowerCase();
+return key && obj && Array.isArray(obj.rooms) ? obj.rooms.find(r => r.measure && String(r.measure.room || '').trim().toLowerCase() === key) : null;
+}
+
+// Распознанное поверх замера, который уже есть в объекте: меняем только
+// контур (стены, повороты, углы, высоту, проёмы), остальное — плитка, лепнина,
+// укрывка и т.п. — остаётся; id помещения и замера те же, работы в счёте не теряются
+const AI_GEOMETRY = ['height', 'shape', 'walls', 'wallHeights', 'turns', 'angles', 'openings'];
+function aiUpdateMeasure(old, fresh) {
+AI_GEOMETRY.forEach(k => { old[k] = JSON.parse(JSON.stringify(fresh[k])); });
+return old;
+}
+
 function aiReviewHtml(res) {
 const ms = res.rooms.map(r => aiRoomToMeasure(r, aiTarget.objectId));
 aiTarget.measures = ms;
+const obj = (cloudData.objects || []).find(o => o.id === aiTarget.objectId);
+const same = ms.filter(m => aiExistingRoom(obj, m.room)).length;
 return `<div class="ai-review">
 ${res.warnings && res.warnings.length ? `<div class="ai-warn"><b>Нейросеть предупреждает:</b><br>${res.warnings.map(escapeHtml).join('<br>')}</div>` : ''}
 <div class="ai-hint">Это черновик. Отметьте нужные помещения и проверьте размеры — после добавления каждое правится в замере, как обычно. Если что-то не так — напишите уточнение внизу.</div>
+${same ? `<label class="ai-update"><input type="checkbox" id="aiUpdateSame" ${aiTarget.updateSame === false ? '' : 'checked'} onchange="aiSetUpdate(this.checked)"> <span>Помещения, которые уже есть в объекте (${same}), — <b>обновить</b>, а не добавлять заново. Меняются стены, высота и проёмы; плитка, лепнина, укрывка и работы в счёте остаются.</span></label>` : ''}
 ${ms.map((m, i) => {
 const g = rulerGeometry(m);
 const ops = m.openings.length;
@@ -869,6 +887,7 @@ return `<label class="ai-room">
 <input type="text" class="mp-name-in" value="${escapeHtml(m.room)}" data-ai-name="${i}" aria-label="Название помещения">
 <div class="ai-meta">${m.walls.length} ${pluralRu(m.walls.length, 'стена', 'стены', 'стен')}${ops ? ` · проёмов ${ops}` : ''}${mNum(m.height) ? ` · h ${mFmt(mNum(m.height))}` : ''}</div>
 <div class="${g.closed ? 'rl-ok' : 'rl-bad'}">${g.closed ? 'Комната сошлась' : `Не сходится на ${mFmt(g.gap)} м — поправите в замере`}</div>
+${aiExistingRoom(obj, m.room) ? `<div class="ai-upd">${aiUpdateOn() ? 'Обновит помещение в объекте' : 'Добавится ещё одно с таким же названием'}</div>` : ''}
 </div>
 </label>`;
 }).join('')}
@@ -888,21 +907,35 @@ document.getElementById('aiPanel').classList.remove('open');
 document.body.classList.remove('measure-open');
 }
 
+function aiUpdateOn() {
+return !aiTarget || aiTarget.updateSame !== false;
+}
+
+// Только подписи у помещений — названия, которые мастер успел поправить, не сбрасываем
+function aiSetUpdate(on) {
+if (aiTarget) aiTarget.updateSame = on;
+document.querySelectorAll('#aiBody .ai-upd').forEach(e => { e.textContent = on ? 'Обновит помещение в объекте' : 'Добавится ещё одно с таким же названием'; });
+}
+
 async function applyAiRooms() {
 const obj = (cloudData.objects || []).find(o => o.id === aiTarget.objectId);
 if (!obj) return;
 const picked = [...document.querySelectorAll('#aiBody input[data-ai]')].filter(c => c.checked).map(c => Number(c.dataset.ai));
 if (!picked.length) { alert('Не выбрано ни одного помещения.'); return; }
 if (!Array.isArray(obj.rooms)) obj.rooms = [];
+const update = aiUpdateOn();
+let added = 0, updated = 0;
 picked.forEach(i => {
 const m = aiTarget.measures[i];
 const nameEl = document.querySelector(`#aiBody input[data-ai-name="${i}"]`);
 if (nameEl && nameEl.value.trim()) m.room = nameEl.value.trim();
-obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: m });
+const old = update ? aiExistingRoom(obj, m.room) : null;
+if (old) { aiUpdateMeasure(old.measure, m); updated++; }
+else { obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: m }); added++; }
 });
 closeAiReview();
 await saveCloudData();
 renderInvoice();
 if (typeof currentObjectId !== 'undefined' && currentObjectId === obj.id) renderObjectDetail();
-showAddToast(`Добавлено помещений: ${picked.length} — проверьте замеры`);
+showAddToast([updated ? `обновлено: ${updated}` : '', added ? `добавлено: ${added}` : ''].filter(Boolean).join(', ').replace(/^./, c => c.toUpperCase()) + ' — проверьте замеры');
 }
