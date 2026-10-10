@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261003-1. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261010-1. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=22af5782">
+<link rel="stylesheet" href="calc.css?v=f3258304">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -40,6 +40,7 @@
 <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
 <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
 <symbol id="i-clear" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-go" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 </svg>
 
@@ -275,6 +276,8 @@
 <option value="__new__">Создать новый объект</option>
 </select>
 </div>
+
+<button type="button" class="measure-open-btn as-open-btn" id="assistantBtn" onclick="openAssistant()"><svg class="ic"><use href="#i-chat"/></svg>Помощник по счёту</button>
 
 <details class="calc-details" id="calcDetails">
 <summary>
@@ -590,7 +593,7 @@
 
 <script src="calc-measure.js?v=2c8fe45d"></script>
 
-<script src="calc-rooms.js?v=770ea2cb"></script>
+<script src="calc-rooms.js?v=11e5f93b"></script>
 <script src="calc-wpview.js?v=ec762275"></script>
 
 <script src="calc-ruler.js?v=39bf04eb"></script>
@@ -599,6 +602,20 @@
 
 <script src="calc-tile.js?v=73f1f2bc"></script>
 <script src="calc-mask.js?v=5a581f09"></script>
+
+<div class="as-panel" id="assistantPanel" role="dialog" aria-label="Помощник">
+<div class="as-head">
+<b>Помощник</b>
+<button type="button" class="as-head-btn" onclick="clearAssistant()">Очистить</button>
+<button type="button" class="as-head-btn" onclick="closeAssistant()" aria-label="Закрыть">✕</button>
+</div>
+<div class="as-messages" id="assistantMessages"></div>
+<form class="as-form" onsubmit="event.preventDefault(); sendAssistant();">
+<textarea id="assistantInput" rows="2" placeholder="Например: шпаклёвка и покраска стен в спальне" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendAssistant(); }"></textarea>
+<button type="submit" id="assistantSend" aria-label="Отправить"><svg class="ic"><use href="#i-go"/></svg></button>
+</form>
+</div>
+<script src="calc-assistant.js?v=6fd8fae3"></script>
 
 <script src="calc-plan.js?v=52b816b0"></script>
 
