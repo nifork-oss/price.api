@@ -658,3 +658,20 @@ test('план из файла: свой формат, углы нейросет
   assert.strictEqual(b.rooms[0].openings[0].width_m, 0.87);
   assert.throws(() => run(`parsePlanText('просто текст')`), /нет плана/);
 });
+
+test('план квартиры: перемычка в двери сквозь стену и подгонка — двери напротив, стены одной линией', () => {
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-flat.js']);
+  const out = JSON.parse(JSON.stringify(vm.runInContext(`(() => {
+    const room = (id, pts, ops) => { const c = flatPtsToMeasure({ name: id, pts, openings: ops }, 'o'); return flatItem(id, id, c.measure, c.plan); };
+    // комната и коридор под ней: стена 0,2 м, двери разошлись на 4 см; левые стены — на 5 см
+    const a = room('a', [[0,0],[3000,0],[3000,4000],[0,4000]], [{ type: 'door', at: [[1000,4000],[1900,4000]] }]);
+    const b = room('b', [[-50,4200],[3300,4200],[3300,6000],[-50,6000]], [{ type: 'door', at: [[1040,4200],[1940,4200]] }]);
+    const svg = flatSvg([a, b]);
+    const sh = flatAutoFit([a, b]);
+    return { bridge: (svg.match(/fill="#d9b48f"/g) || []).length, dx: Math.round((sh[1][0] - sh[0][0]) * 1000), dy: Math.round((sh[1][1] - sh[0][1]) * 1000) };
+  })()`, c.ctx || c)));
+  assert.strictEqual(out.bridge, 1);
+  // дверь важнее стены: сдвиг −4 см; левые стены (расхождение 5 см) тогда не сойдутся — остаются как были
+  assert.strictEqual(out.dx, -40);
+  assert.strictEqual(out.dy, 0);
+});

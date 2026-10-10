@@ -143,20 +143,15 @@ v = { minX: Math.min(...xs) - pad, minY: Math.min(...ys) - pad };
 v.w = Math.max(...xs) - v.minX + pad; v.h = Math.max(...ys) - v.minY + pad;
 }
 const fs = opt.fs || Math.max(0.16, Math.min(0.32, Math.max(v.w, v.h) / 45));
+const bridges = flatBridges(items, fs);
 const body = items.map(r => {
 const n = r.pts.length;
 const d = 'M' + r.pts.map(p => p.join(' ')).join('L') + (r.closed ? 'Z' : '');
 // окна — голубые, двери — коричневые, балконные блоки — зелёные; поверх стены
 const ops = r.openings.map(o => {
-const i = o.wall;
-if (!(i >= 0 && i < n) || (!r.closed && i >= n - 1)) return '';
-const a = r.pts[i], b = r.pts[(i + 1) % n];
-const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-const ow = mNum(o.w), off = mNum(o.off);
-if (!(len > 0) || !(ow > 0)) return '';
-const ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len;
-const st = isFinite(off) ? off : (len - ow) / 2;
-const x1 = a[0] + ux * st, y1 = a[1] + uy * st;
+const sg = flatOpeningSeg(r, o);
+if (!sg) return '';
+const { x: x1, y: y1, ux, uy, w: ow } = sg;
 const col = o.type === 'door' ? '#9a6b3c' : o.type === 'balcony' ? '#3a9a5c' : '#3d8bd9';
 return `<line x1="${x1}" y1="${y1}" x2="${x1 + ux * ow}" y2="${y1 + uy * ow}" stroke="${col}" stroke-width="${fs * 0.5}"/>`;
 }).join('');
@@ -197,7 +192,136 @@ handles += `<text x="${mx + nx * fs * 1.6}" y="${my + ny * fs * 1.6 + fs * 0.35}
 }
 s.pts.forEach((p, i) => { handles += `<circle data-v="${i}" cx="${p[0]}" cy="${p[1]}" r="${hr}" fill="#ffcf3d" stroke="#14181f" stroke-width="${fs * 0.12}"/>`; });
 }
-return `<svg class="flat-svg" viewBox="${v.minX} ${v.minY} ${v.w} ${v.h}" xmlns="http://www.w3.org/2000/svg">${body}${handles}</svg>`;
+return `<svg class="flat-svg" viewBox="${v.minX} ${v.minY} ${v.w} ${v.h}" xmlns="http://www.w3.org/2000/svg">${bridges}${body}${handles}</svg>`;
+}
+
+// Проём на плане — отрезок на стене комнаты (в метрах) или null
+function flatOpeningSeg(r, o) {
+const n = r.pts.length, i = o.wall;
+if (!(i >= 0 && i < n) || (!r.closed && i >= n - 1)) return null;
+const a = r.pts[i], b = r.pts[(i + 1) % n];
+const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+const ow = mNum(o.w), off = mNum(o.off);
+if (!(len > 0) || !(ow > 0)) return null;
+const ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len;
+const st = isFinite(off) ? off : (len - ow) / 2;
+return { x: a[0] + ux * st, y: a[1] + uy * st, ux, uy, w: ow };
+}
+
+// Двери, записанные у обеих комнат: на плане это две полоски по разные
+// стороны стены. Пара — параллельны, между ними не толще 0,7 м и хотя бы
+// 20 см друг напротив друга. { a, b, d — толщина стены со знаком, t0..t1 — общая часть на a }
+function flatDoorPairs(items) {
+const segs = [];
+items.forEach((r, ri) => r.openings.forEach(o => {
+if (o.type !== 'door' && o.type !== 'balcony') return;
+const sg = flatOpeningSeg(r, o);
+if (sg) segs.push({ ...sg, ri, type: o.type });
+}));
+const pairs = [];
+for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+const a = segs[i], b = segs[j];
+if (a.ri === b.ri || (a.type === 'balcony' && b.type === 'balcony')) continue;
+if (Math.abs(a.ux * b.uy - a.uy * b.ux) > 0.02) continue;          // не параллельны
+const dx = b.x - a.x, dy = b.y - a.y;
+const d = dx * -a.uy + dy * a.ux;
+if (Math.abs(d) < 0.01 || Math.abs(d) > 0.7) continue;
+const tb1 = dx * a.ux + dy * a.uy, tb2 = tb1 + b.w * (a.ux * b.ux + a.uy * b.uy);
+const t0 = Math.max(0, Math.min(tb1, tb2)), t1 = Math.min(a.w, Math.max(tb1, tb2));
+if (t1 - t0 < 0.2) continue;
+pairs.push({ a, b, d, t0, t1, tb1, tb2 });
+}
+return pairs;
+}
+
+// Перемычка сквозь стену между парой дверей — проём читается одним
+function flatBridges(items, fs) {
+return flatDoorPairs(items).map(({ a, d, t0, t1 }) => {
+const p = t => [a.x + a.ux * t, a.y + a.uy * t];
+const q = ([x, y]) => [x - a.uy * d, y + a.ux * d];
+const pts = [p(t0), p(t1), q(p(t1)), q(p(t0))];
+return `<path d="M${pts.map(v => v.join(' ')).join('L')}Z" fill="#d9b48f" stroke="#9a6b3c" stroke-width="${fs * 0.06}"/>`;
+}).join('');
+}
+
+// Подгонка плана: комнаты только сдвигаются (размеры и проёмы не меняются),
+// чтобы двери у соседних комнат стояли друг напротив друга, а стены, которые
+// почти продолжают друг друга (расхождение до 10 см), шли одной линией.
+// Важнее всего — не сбить уже ровные стены, потом — двери. Что не выходит — остаётся как было.
+// Возвращает сдвиги [dx, dy] по номерам комнат
+function flatAutoFit(items, tol = 0.1) {
+const n = items.length;
+const solve = (eqs) => {                                   // наименьшие квадраты: Σ w·(x_i − x_j − b)²
+const A = Array.from({ length: n }, () => new Array(n).fill(0)), B = new Array(n).fill(0);
+for (let i = 0; i < n; i++) A[i][i] += 1e-4;               // точка отсчёта — где стояли
+eqs.forEach(({ i, j, b, w }) => {
+A[i][i] += w; A[j][j] += w; A[i][j] -= w; A[j][i] -= w;
+B[i] += w * b; B[j] -= w * b;
+});
+for (let c = 0; c < n; c++) {                              // метод Гаусса
+let m = c;
+for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[m][c])) m = r;
+[A[c], A[m]] = [A[m], A[c]]; [B[c], B[m]] = [B[m], B[c]];
+for (let r = c + 1; r < n; r++) {
+const f = A[r][c] / A[c][c];
+for (let k = c; k < n; k++) A[r][k] -= f * A[c][k];
+B[r] -= f * B[c];
+}
+}
+const x = new Array(n).fill(0);
+for (let r = n - 1; r >= 0; r--) {
+let v = B[r];
+for (let k = r + 1; k < n; k++) v -= A[r][k] * x[k];
+x[r] = v / A[r][r];
+}
+return x;
+};
+const eqs = [[], []];                                      // по x и по y
+// двери: середины друг напротив друга
+flatDoorPairs(items).forEach(({ a, b }) => {
+const ca = [a.x + a.ux * a.w / 2, a.y + a.uy * a.w / 2], cb = [b.x + b.ux * b.w / 2, b.y + b.uy * b.w / 2];
+const ax = Math.abs(a.ux) > 0.99 ? 0 : Math.abs(a.uy) > 0.99 ? 1 : -1;  // стена вдоль x или y
+if (ax < 0 || Math.abs(a.w - b.w) > 0.1 || Math.abs(cb[ax] - ca[ax]) > 0.3) return;   // разной ширины — не один проём
+eqs[ax].push({ i: a.ri, j: b.ri, b: cb[ax] - ca[ax], w: 5 });
+});
+// стены одной линией: одинаково направлены, расхождение до tol, по длине рядом (до 1 м)
+const edges = [];
+items.forEach((r, ri) => {
+const m = r.closed ? r.pts.length : r.pts.length - 1;
+for (let i = 0; i < m; i++) {
+const p = r.pts[i], q = r.pts[(i + 1) % r.pts.length];
+const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+if (len < 0.3) continue;
+const ux = (q[0] - p[0]) / len, uy = (q[1] - p[1]) / len;
+if (Math.abs(ux) > 0.999) edges.push({ ri, ax: 1, at: p[1], s: Math.min(p[0], q[0]), e: Math.max(p[0], q[0]), dir: Math.sign(ux) });
+else if (Math.abs(uy) > 0.999) edges.push({ ri, ax: 0, at: p[0], s: Math.min(p[1], q[1]), e: Math.max(p[1], q[1]), dir: Math.sign(uy) });
+}
+});
+for (let i = 0; i < edges.length; i++) for (let j = i + 1; j < edges.length; j++) {
+const a = edges[i], b = edges[j];
+if (a.ri === b.ri || a.ax !== b.ax || a.dir !== b.dir) continue;
+if (Math.abs(b.at - a.at) > tol || Math.max(a.s, b.s) - Math.min(a.e, b.e) > 1) continue;
+// сдвиг по оси, поперёк стены: для вертикальной стены — x
+eqs[a.ax].push({ i: a.ri, j: b.ri, b: b.at - a.at, w: Math.abs(b.at - a.at) < 0.002 ? 20 : 1 });   // уже ровные — так и остаются
+}
+// что не выровнять, не сбив более важное, остаётся как было:
+// убираем самое большое расхождение и считаем заново
+const fit = (list) => {
+let x = solve(list);
+for (;;) {
+let worst = null, wv = 0.003;
+list.forEach(e => {
+if (e.w === 20) return;                                     // уже ровные стены не трогаем
+const r = Math.abs(x[e.i] - x[e.j] - e.b);
+if (r > wv) { wv = r; worst = e; }
+});
+if (!worst) return x;
+list = list.filter(e => e !== worst);
+x = solve(list);
+}
+};
+const sx = fit(eqs[0]), sy = fit(eqs[1]);
+return items.map((_, i) => [Math.round(sx[i] * 1000) / 1000, Math.round(sy[i] * 1000) / 1000]);
 }
 
 /* ---------- экран «План квартиры» у объекта ---------- */
@@ -256,12 +380,13 @@ const ed = flatEdit;
 const top = ed
 ? `<div class="flat-tools">
 <button type="button" class="mp-head-btn" onclick="flatUndo()" ${ed.undo.length ? '' : 'disabled'}>↶ Шаг назад</button>
+<button type="button" class="mp-head-btn" onclick="flatFit()">Подогнать</button>
 <button type="button" class="mp-head-btn" onclick="flatEditCancel()">Отмена</button>
 <button type="button" class="mp-btn mp-btn-primary" onclick="flatEditSave()">Сохранить</button>
 </div>
 <div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — введёте точную длину стены. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}</div>`
 : `<div class="ai-hint">Нажмите на помещение — откроется его замер. После правки план обновится.${rest ? ` Помещений без места на плане: ${rest} (добавлены вручную).` : ''}</div>
-${isCurrentClient() ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button>'}`;
+${isCurrentClient() ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button>'}`;
 body.innerHTML = `<div class="mp-body-inner">
 ${top}
 <div class="flat-zoom"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><span>Площадь: <b>${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²</b></span><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button></div>
@@ -316,6 +441,23 @@ function flatUndo() {
 if (!flatEdit || !flatEdit.undo.length) return;
 flatEdit.draft = flatEdit.undo.pop();
 renderFlatPlan();
+}
+
+// Кнопка «Подогнать»: сдвигает комнаты (черновик правки — можно «Шаг назад» или «Отмена»)
+function flatFit() {
+if (!flatEdit) return;
+const items = flatItems();
+const sh = flatAutoFit(items);
+const moved = items.filter((_, i) => Math.hypot(sh[i][0], sh[i][1]) >= 0.002);
+if (!moved.length) { showAddToast('Уже ровно — подгонять нечего'); return; }
+flatPushUndo();
+items.forEach((r, i) => {
+if (Math.hypot(sh[i][0], sh[i][1]) < 0.002) return;
+flatEdit.draft[r.id] = r.pts.map(([x, y]) => [Math.round((x + sh[i][0]) * 1000) / 1000, Math.round((y + sh[i][1]) * 1000) / 1000]);
+});
+renderFlatPlan();
+const max = Math.max(...sh.map(v => Math.hypot(v[0], v[1])));
+showAddToast(`Подогнано помещений: ${moved.length} (сдвиг до ${Math.round(max * 100)} см). Проверьте и нажмите «Сохранить»`);
 }
 
 function flatPushUndo() {
