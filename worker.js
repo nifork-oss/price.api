@@ -669,7 +669,7 @@ const handler = {
         try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
         const image = String((body && body.image) || "");
         const mediaType = ["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(body && body.mediaType) ? body.mediaType : "image/jpeg";
-        if (!image || image.length > 7 * 1024 * 1024) return json({ error: "Картинка не передана или слишком большая" }, 400);
+        if (!image || image.length > 14 * 1024 * 1024) return json({ error: "Картинка не передана или слишком большая" }, 400);
         try {
           const turns = planTurns(body.turns);
           if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns), parsePlanReply, "Не удалось распознать план: ");

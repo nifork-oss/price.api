@@ -226,10 +226,14 @@ if (aiTarget !== target) return;
 target.preview = img.dataUrl;
 target.image = img.dataUrl.split(',')[1];
 target.mediaType = 'image/jpeg';
-// PDF до 4 МБ отправляем как есть — в нём есть текст с размерами
-if ((file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) && file.size <= 4 * 1024 * 1024) {
+const size = file.size < 1048576 ? Math.max(1, Math.round(file.size / 1024)) + ' КБ' : (file.size / 1048576).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' МБ';
+const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+target.sentAs = isPdf ? `картинкой первой страницы: PDF ${size}, больше 10 МБ` : 'картинкой';
+// PDF до 10 МБ отправляем как есть — в нём есть текст с размерами
+if (isPdf && file.size <= 10 * 1024 * 1024) {
 target.image = await fileToBase64(file);
 target.mediaType = 'application/pdf';
+target.sentAs = `PDF-документом целиком (${size})`;
 }
 target.runs = [];
 runAiRecognition('');
@@ -346,6 +350,7 @@ const last = aiTarget.runs[aiTarget.runs.length - 1];
 const showReview = !busy && last && last.result;
 let html = '<div class="mp-body-inner ai-chat">';
 if (aiTarget.preview) html += `<img class="ai-preview" src="${aiTarget.preview}" alt="План">`;
+if (aiTarget.sentAs) html += `<div class="ai-sent">Отправлено ${escapeHtml(aiTarget.sentAs)}</div>`;
 aiTarget.runs.forEach((run, ri) => {
 if (run.note) html += `<div class="as-msg as-user ai-note"><div class="as-text">${escapeHtml(run.note)}</div></div>`;
 const live = !run.done;

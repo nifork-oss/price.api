@@ -772,6 +772,7 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .ai-info .mp-name-in { width: 100%; margin-bottom: 4px; }
 .ai-meta { color: var(--s-ink2); margin-bottom: 2px; }
 .ai-preview { display: block; max-width: 100%; max-height: 220px; margin: 0 auto 10px; border: 1px solid var(--s-line); border-radius: 6px; background: #ffffff; }
+.ai-sent { text-align: center; font-size: 12px; color: var(--s-ink3); margin: -4px 0 4px; }
 .ai-status { font-size: 14px; color: var(--s-ink2); margin-bottom: 8px; }
 .ai-found { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: #ffffff; border: 1px solid var(--s-line); margin-bottom: 8px; line-height: 1.45; }
 .ai-chat { display: flex; flex-direction: column; gap: 10px; }
