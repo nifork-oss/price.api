@@ -605,3 +605,40 @@ test('план квартиры: правка углов на плане → з�
   assert.strictEqual(out.win.off, '1,6'); // 2 + 0,9 > 2,5 → не дальше конца стены
   assert.deepStrictEqual(out.abs.map(p => p.map(v => Math.round(v * 1000))), [[5120, 0], [7620, 0], [7620, 4000], [5120, 4000]]);
 });
+
+test('план квартиры: проёмы по координатам концов (at) встают на свою стену и не выходят за неё', async () => {
+  // сервер: at пропускается, ширина — по длине отрезка
+  const plan = '{"rooms":[{"name":"Комната 1","pts":[[0,0],[2790,0],[2790,4970],[0,4970]],"openings":[{"type":"window","at":[[680,0],[2580,0]],"height_mm":1500}]}],"warnings":[]}';
+  const r = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: plan }] }) }]);
+  const op = JSON.parse(r.text).rooms[0].openings[0];
+  assert.deepStrictEqual(op.at, [[680, 0], [2580, 0]]);
+  assert.strictEqual(op.width_m, 1.9);
+
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-flat.js']);
+  const out = JSON.parse(JSON.stringify(vm.runInContext(`(() => {
+    const { measure: m } = flatPtsToMeasure({ name: 'Комната 1', pts: [[0,0],[2790,0],[2790,4970],[0,4970]], openings: [
+      { type: 'window', at: [[680, 0], [2580, 0]], width_m: 1.9 },
+      { type: 'door', at: [[1720, 4980], [850, 4960]], width_m: 0.87 },    // концы в обратном порядке, чуть мимо стены
+      { type: 'door', at: [[0, 4500], [0, 5300]], width_m: 0.8 },          // вылезает за угол
+      { type: 'window', wall_index: 1, offset_m: 4.5, width_m: 1.2 },      // по номеру стены, за краем
+    ] }, 'o');
+    return { walls: m.walls, ops: m.openings.map(o => [o.wall, o.off, o.w]) };
+  })()`, c.ctx || c)));
+  assert.deepStrictEqual(out.walls, ['2,79', '4,97', '2,79', '4,97']);
+  // стены по часовой с верхнего левого: 0 — верх, 1 — правая, 2 — низ (справа налево), 3 — левая (снизу вверх)
+  assert.deepStrictEqual(out.ops[0], [0, '0,68', '1,9']);
+  assert.deepStrictEqual(out.ops[1], [2, '1,07', '0,87']);   // 2,79 − 1,72
+  assert.deepStrictEqual(out.ops[2], [3, '0', '0,47']);      // только часть на стене
+  assert.deepStrictEqual(out.ops[3], [1, '3,77', '1,2']);    // 4,97 − 1,2
+});
+
+test('план квартиры: подпись в маленькой комнате — мельче или только площадь', () => {
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-flat.js']);
+  const svg = vm.runInContext(`flatSvg([
+    { id: 'a', name: 'Гостиная', pts: [[0,0],[6,0],[6,5],[0,5]], closed: true, openings: [] },
+    { id: 'b', name: 'Гардеробная комната', pts: [[6,0],[7.2,0],[7.2,1.2],[6,1.2]], closed: true, openings: [] },
+  ])`, c.ctx || c);
+  assert.ok(svg.includes('>Гостиная</text>'));
+  assert.ok(!svg.includes('>Гардеробная комната</text>')); // не влезает — только площадь
+  assert.ok(svg.includes('<title>Гардеробная комната — 1,4 м²</title>'));
+});
