@@ -692,6 +692,7 @@ const handler = {
         const context = JSON.stringify((body && body.context) || {});
         if (context.length > 60000) return json({ error: "Слишком большой объект для помощника" }, 400);
         try {
+          if (body.stream) return await streamAssistant(env, messages, context);
           return json(await askAssistant(env, messages, context));
         } catch (e) {
           return json({ error: "Помощник не ответил: " + (e && e.message ? e.message : e) }, 502);
@@ -1272,6 +1273,89 @@ async function askAssistant(env, messages, context) {
   });
   const data = await readAnthropicResponse(res, env);
   return parseAssistantReply(data);
+}
+
+// Ответ по мере написания: к нейросети — потоком (SSE), мастеру — строками
+// JSON: {t:"thinking"|"text", d} по ходу, {t:"tool"} когда начала подбирать
+// позиции, в конце {t:"done", text, items} или {t:"error", error}.
+// Ход рассуждений (thinking) — если посредник его не принимает (400),
+// повторяем запрос без него. Мастер нажал «Стоп» — обрываем запрос к нейросети.
+async function streamAssistant(env, messages, context) {
+  const request = (thinking) => fetch(anthropicUrl(env), {
+    method: "POST",
+    headers: anthropicHeaders(env),
+    body: JSON.stringify({
+      model: anthropicModel(env),
+      max_tokens: thinking ? 8000 : 2000,
+      stream: true,
+      ...(thinking ? { thinking: { type: "adaptive", display: "summarized" } } : {}),
+      system: ASSISTANT_PROMPT + "\n\n<calc>\n" + context + "\n</calc>",
+      tools: [ASSISTANT_TOOL],
+      messages,
+    }),
+  });
+  let res = await request(true);
+  if (res.status === 400) {
+    await res.body?.cancel();
+    res = await request(false);
+  }
+  // Ошибка или посредник ответил целиком, без потока — обычный ответ JSON
+  if (!res.ok || !res.body || !/event-stream/i.test(res.headers.get("content-type") || "")) {
+    return json(parseAssistantReply(await readAnthropicResponse(res, env)));
+  }
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const enc = new TextEncoder();
+  let gone = false;
+  const send = (obj) => gone ? null : writer.write(enc.encode(JSON.stringify(obj) + "\n")).catch(() => { gone = true; });
+  (async () => {
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    const blocks = [];
+    let buf = "";
+    try {
+      const handle = (chunk) => {
+        const data = chunk.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()).join("");
+        if (!data) return;
+        let ev;
+        try { ev = JSON.parse(data); } catch (e) { return; }
+        if (ev.type === "error") throw new Error((ev.error && ev.error.message) || "ошибка сервиса");
+        if (ev.type === "content_block_start" && ev.content_block) {
+          blocks[ev.index] = { type: ev.content_block.type, name: ev.content_block.name, text: "", json: "" };
+          if (ev.content_block.type === "tool_use") send({ t: "tool" });
+        } else if (ev.type === "content_block_delta" && ev.delta && blocks[ev.index]) {
+          const b = blocks[ev.index];
+          if (ev.delta.type === "text_delta") { b.text += ev.delta.text; send({ t: "text", d: ev.delta.text }); }
+          else if (ev.delta.type === "thinking_delta") send({ t: "thinking", d: ev.delta.thinking });
+          else if (ev.delta.type === "input_json_delta") b.json += ev.delta.partial_json || "";
+        }
+      };
+      while (!gone) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true }).replace(/\r/g, "");
+        let i;
+        while ((i = buf.indexOf("\n\n")) >= 0) { handle(buf.slice(0, i)); buf = buf.slice(i + 2); }
+      }
+      if (gone) { await reader.cancel().catch(() => {}); return; }
+      if (buf.trim()) handle(buf);
+      const content = blocks.filter(Boolean).map((b) => {
+        if (b.type === "text") return { type: "text", text: b.text };
+        if (b.type !== "tool_use") return null;
+        let input = {};
+        try { input = JSON.parse(b.json || "{}"); } catch (e) { /* ответ оборвался */ }
+        return { type: "tool_use", name: b.name, input };
+      }).filter(Boolean);
+      await send({ t: "done", ...parseAssistantReply({ content }) });
+    } catch (e) {
+      await reader.cancel().catch(() => {});
+      await send({ t: "error", error: "Помощник не ответил: " + (e && e.message ? e.message : e) });
+    }
+    if (!gone) await writer.close().catch(() => {});
+  })();
+  return new Response(readable, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache", ...corsHeaders() },
+  });
 }
 
 function parseAssistantReply(data) {
