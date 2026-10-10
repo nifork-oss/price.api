@@ -1360,7 +1360,7 @@ const PLAN_PROMPT = `Это обмерный план квартиры или д
 - обходи стены по часовой стрелке, начиная с верхнего левого угла; первая стена идёт вправо;
 - длина каждой стены — в метрах (на чертежах размеры обычно в миллиметрах: 3200 → 3.2);
 - после каждой стены укажи поворот к следующей: "R" — направо (по часовой), "L" — налево;
-- если угол между стенами явно не прямой — укажи внутренний угол в градусах в angle_deg, иначе null;
+- если угол между стенами явно не прямой — укажи внутренний угол в градусах третьим числом стены, иначе не пиши;
 - контур идёт по ВСЕМ изломам стен: выступы, короба, пилоны и колонны у стены, ниши, эркеры, скошенные углы.
   Каждая грань выступа или ниши — отдельная стена, даже короткая (100–300 мм). Не упрощай комнату
   до прямоугольника: прямоугольная комната с одним коробом у стены — это 8 стен, а не 4.
@@ -1382,11 +1382,13 @@ const PLAN_PROMPT = `Это обмерный план квартиры или д
 не повод спрашивать: построй план и опиши их в warnings.
 Отвечать словами вместо JSON нельзя.
 
-Ответ — только JSON без пояснений и без markdown, строго такой формы:
-{"rooms":[{"name":"Гостиная","height_m":null,"walls":[{"length_m":4.6,"turn_after":"R","angle_deg":null}],
-"openings":[{"type":"window","wall_index":0,"width_m":1.4,"height_m":1.5,"door_width_m":null,"door_height_m":null,"offset_m":null}]}],
+Ответ — только JSON без пояснений, без markdown и без пробелов для красоты, строго такой формы:
+{"rooms":[{"name":"Гостиная","height_m":2.7,"walls":[[4.6,"R"],[3.2,"R"],[1.5,"R",135]],
+"openings":[{"type":"window","wall_index":0,"width_m":1.4,"height_m":1.5,"offset_m":0.8}]}],
 "warnings":["..."]}
-type — одно из: "window", "door", "balcony" (для balcony width_m/height_m — окно, door_width_m/door_height_m — дверь).`;
+Стена — [длина в метрах, поворот после неё "R" или "L", внутренний угол — только если не 90°].
+Поля без значения (null) не пиши. type — одно из: "window", "door", "balcony"
+(для balcony width_m/height_m — окно, door_width_m/door_height_m — дверь).`;
 
 // Правила мастера к распознаванию (профиль, «Запомнить как правило»)
 const PLAN_HINTS_MAX = 3000;
@@ -1454,7 +1456,9 @@ function planPayload(env, image, mediaType, turns, hints) {
   });
   if (messages.length > 1) messages[messages.length - 1] = cacheLast(messages[messages.length - 1]);
   // Для плана можно задать свою модель (ANTHROPIC_PLAN_MODEL), помощник останется на основной
-  return { model: envValue(env, "ANTHROPIC_PLAN_MODEL") || anthropicModel(env), max_tokens: 8000, messages };
+  // Запас по длине ответа: большой план со всеми выступами и размышлениями не должен
+  // обрываться на середине (платится только написанное)
+  return { model: envValue(env, "ANTHROPIC_PLAN_MODEL") || anthropicModel(env), max_tokens: 24000, messages };
 }
 
 // Переписка из окна распознавания: до 10 реплик мастера по 2000 знаков,
@@ -1507,11 +1511,19 @@ function parsePlanReply(data) {
     // Без JSON — показываем, что нейросеть ответила на самом деле
     const said = text.replace(/\s+/g, " ").trim();
     const kinds = (data.content || []).map((c) => c.type === "tool_use" ? `вызов ${c.name || "?"} ${JSON.stringify(c.input || {}).slice(0, 120)}` : c.type).join(", ");
-    throw new Error(data.stop_reason === "max_tokens" ? "ответ не поместился, план слишком большой"
+    throw new Error(data.stop_reason === "max_tokens" ? "нейросеть не уложилась в лимит длины ответа — план слишком сложный. Нажмите «Повторить» или распознайте часть плана (обрежьте фото)"
       : said ? "нейросеть ответила не планом: «" + said.slice(0, 300) + "»"
       : `нейросеть вернула пустой ответ (${kinds || "нет блоков"}${data.stop_reason ? ", " + data.stop_reason : ""})`);
   }
-  return sanitizePlan(JSON.parse(clean.slice(start, end + 1)));
+  let parsed;
+  try {
+    parsed = JSON.parse(clean.slice(start, end + 1));
+  } catch (e) {
+    throw new Error(data.stop_reason === "max_tokens"
+      ? "ответ не поместился в лимит длины — план слишком большой. Попробуйте ещё раз или распознайте часть плана (обрежьте фото)"
+      : "нейросеть прислала неполный ответ. Нажмите «Повторить»");
+  }
+  return sanitizePlan(parsed);
 }
 
 // Приводим ответ к строгому виду: только числа в разумных пределах
@@ -1519,7 +1531,10 @@ function sanitizePlan(raw) {
   const num = (v, min, max) => { const n = Number(v); return Number.isFinite(n) && n >= min && n <= max ? Math.round(n * 1000) / 1000 : null; };
   const rooms = (Array.isArray(raw && raw.rooms) ? raw.rooms : []).slice(0, 40).map((r, i) => {
     const walls = (Array.isArray(r && r.walls) ? r.walls : []).slice(0, 60)
-      .map((w) => ({ length_m: num(w && w.length_m, 0.01, 100), turn_after: w && w.turn_after === "L" ? "L" : "R", angle_deg: num(w && w.angle_deg, 1, 359) }))
+      // Стена — коротко [длина, "R"|"L", угол?] или объектом {length_m, turn_after, angle_deg}
+      .map((w) => (Array.isArray(w)
+        ? { length_m: num(w[0], 0.01, 100), turn_after: w[1] === "L" ? "L" : "R", angle_deg: num(w[2], 1, 359) }
+        : { length_m: num(w && w.length_m, 0.01, 100), turn_after: w && w.turn_after === "L" ? "L" : "R", angle_deg: num(w && w.angle_deg, 1, 359) }))
       .filter((w) => w.length_m);
     const openings = (Array.isArray(r && r.openings) ? r.openings : []).slice(0, 60).map((o) => ({
       type: ["window", "door", "balcony"].includes(o && o.type) ? o.type : "window",

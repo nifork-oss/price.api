@@ -496,3 +496,19 @@ test('план: уточнение к готовому плану — тольк
   assert.deepStrictEqual(JSON.parse(JSON.stringify(merged.patch)), { changed: ['Кухня'], added: ['Балкон'], removed: ['Кладовка'] });
   assert.deepStrictEqual(JSON.parse(JSON.stringify(merged.warnings)), ['старое']);
 });
+
+test('план: стены коротко [длина, поворот, угол]; оборванный ответ — понятная ошибка', async () => {
+  const compact = '{"rooms":[{"name":"Кухня","height_m":2.7,"walls":[[3,"R"],[2,"R"],[3,"L",135],[2,"R"]]}],"warnings":[]}';
+  const ok = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: compact }] }) }]);
+  const w = JSON.parse(ok.text).rooms[0].walls;
+  assert.deepStrictEqual(w[2], { length_m: 3, turn_after: 'L', angle_deg: 135 });
+  assert.deepStrictEqual(w[0], { length_m: 3, turn_after: 'R', angle_deg: null });
+  assert.ok(ok.sent[0].max_tokens >= 24000);
+  const cut = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ stop_reason: 'max_tokens', content: [{ type: 'text', text: compact.slice(0, 60) + '}' }] }) }]);
+  assert.match(JSON.parse(cut.text).error, /не поместился в лимит длины/);
+  const broken = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: '{"rooms":[{"name":"К"' + '}' }] }) }]);
+  assert.match(JSON.parse(broken.text).error, /неполный ответ/);
+  // Все токены ушли на размышления, план не начат
+  const thought = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ stop_reason: 'max_tokens', content: [{ type: 'thinking', thinking: '…' }] }) }]);
+  assert.match(JSON.parse(thought.text).error, /не уложилась в лимит длины/);
+});
