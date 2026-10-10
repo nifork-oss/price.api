@@ -508,4 +508,7 @@ test('план: стены коротко [длина, поворот, угол]
   assert.match(JSON.parse(cut.text).error, /не поместился в лимит длины/);
   const broken = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: '{"rooms":[{"name":"К"' + '}' }] }) }]);
   assert.match(JSON.parse(broken.text).error, /неполный ответ/);
+  // Все токены ушли на размышления, план не начат
+  const thought = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ stop_reason: 'max_tokens', content: [{ type: 'thinking', thinking: '…' }] }) }]);
+  assert.match(JSON.parse(thought.text).error, /не уложилась в лимит длины/);
 });

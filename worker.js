@@ -1511,7 +1511,7 @@ function parsePlanReply(data) {
     // Без JSON — показываем, что нейросеть ответила на самом деле
     const said = text.replace(/\s+/g, " ").trim();
     const kinds = (data.content || []).map((c) => c.type === "tool_use" ? `вызов ${c.name || "?"} ${JSON.stringify(c.input || {}).slice(0, 120)}` : c.type).join(", ");
-    throw new Error(data.stop_reason === "max_tokens" ? "ответ не поместился, план слишком большой"
+    throw new Error(data.stop_reason === "max_tokens" ? "нейросеть не уложилась в лимит длины ответа — план слишком сложный. Нажмите «Повторить» или распознайте часть плана (обрежьте фото)"
       : said ? "нейросеть ответила не планом: «" + said.slice(0, 300) + "»"
       : `нейросеть вернула пустой ответ (${kinds || "нет блоков"}${data.stop_reason ? ", " + data.stop_reason : ""})`);
   }
