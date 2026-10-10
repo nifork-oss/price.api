@@ -513,6 +513,15 @@ renderAiPanel();
 showAddToast('Правило запомнено — оно в Профиле');
 }
 
+// Последний заход не удался — убираем его и пробуем ещё раз с тем же уточнением
+function aiRetry() {
+if (!aiTarget || aiBusy()) return;
+const last = aiTarget.runs[aiTarget.runs.length - 1];
+if (!last || !last.error) return;
+aiTarget.runs.pop();
+runAiRecognition(last.note || '');
+}
+
 function aiBusy() {
 return !!(aiTarget && aiTarget.runs.some(r => !r.done));
 }
@@ -597,7 +606,10 @@ const head = parts.length ? parts.join('; ') : 'без изменений';
 html += `<div class="as-text"><b>${escapeHtml(head[0].toUpperCase() + head.slice(1))}</b>\nОстальное как было. Помещений в плане: ${rooms.length}</div>`;
 } else if (rooms.length) html += `<div class="as-text"><b>${run.result ? 'Распознал' : 'Нашёл'} помещений: ${rooms.length}</b>\n${rooms.map(escapeHtml).join(', ')}</div>`;
 if (run.questions) html += `<div class="as-text"><b>Чтобы не ошибиться, уточните:</b>\n${run.questions.map((q, qi) => (run.questions.length > 1 ? (qi + 1) + '. ' : '') + escapeHtml(q)).join('\n')}</div>`;
-if (run.error) html += `<div class="as-text">${escapeHtml(run.error)}</div>`;
+if (run.error) {
+html += `<div class="as-text">${escapeHtml(run.error)}</div>`;
+if (!busy && ri === aiTarget.runs.length - 1) html += `<button type="button" class="ai-retry" onclick="aiRetry()">Повторить</button>`;
+}
 else if (live) html += `<div class="as-status">${escapeHtml(run.status)}</div>`;
 else if (run.result && ri < aiTarget.runs.length - 1) html += '<div class="as-status">заменено следующим вариантом</div>';
 if (run.cost && !live) html += paidCostHtml(run.cost);
