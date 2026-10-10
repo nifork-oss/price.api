@@ -40,6 +40,38 @@ let s = 0;
 pts.forEach((p, i) => { const q = pts[s]; if (p[1] < q[1] - 1e-6 || (Math.abs(p[1] - q[1]) <= 1e-6 && p[0] < q[0])) s = i; });
 pts = pts.slice(s).concat(pts.slice(0, s));
 ops = ops.map(o => (o.wall_index == null ? o : { ...o, wall_index: (o.wall_index - s + n) % n }));
+// Проём по координатам концов (at, мм): ближайшая стена, сдвиг — по проекции
+ops = ops.map(o => {
+if (!Array.isArray(o.at) || o.at.length !== 2) return o;
+const [a, b] = o.at.map(([x, y]) => [x / 1000, y / 1000]);
+let best = null;
+for (let i = 0; i < n; i++) {
+const p = pts[i], q = pts[(i + 1) % n];
+const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+if (len < 1e-6) continue;
+const ux = (q[0] - p[0]) / len, uy = (q[1] - p[1]) / len;
+const proj = c => (c[0] - p[0]) * ux + (c[1] - p[1]) * uy;
+const dist = c => Math.abs((c[0] - p[0]) * uy - (c[1] - p[1]) * ux);
+const ta = proj(a), tb = proj(b);
+// расстояние от концов до стены + насколько проём вылезает за её края
+const out = Math.max(0, -Math.min(ta, tb)) + Math.max(0, Math.max(ta, tb) - len);
+const score = dist(a) + dist(b) + out;
+if (!best || score < best.score) best = { score, i, len, t0: Math.max(0, Math.min(ta, tb)), t1: Math.min(len, Math.max(ta, tb)) };
+}
+if (!best) return o;
+// часть за краями стены отрезаем
+const w = best.t1 - best.t0 > 0.05 ? best.t1 - best.t0 : Math.min(o.width_m || 0, best.len);
+return { ...o, wall_index: best.i, width_m: Math.round(w * 1000) / 1000, offset_m: Math.round(best.t0 * 1000) / 1000 };
+});
+// Проём не выходит за стену
+ops = ops.map(o => {
+if (o.wall_index == null || o.wall_index < 0 || o.wall_index >= n) return { ...o, wall_index: null };
+const p = pts[o.wall_index], q = pts[(o.wall_index + 1) % n];
+const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+const w = Math.min(o.width_m || 0, len);
+const off = o.offset_m != null ? Math.round(Math.min(Math.max(0, o.offset_m), len - w) * 1000) / 1000 : null;
+return { ...o, width_m: w, offset_m: off };
+});
 
 const m = newMeasure(objectId);
 m.room = r.name;
@@ -131,12 +163,23 @@ return `<line x1="${x1}" y1="${y1}" x2="${x1 + ux * ow}" y2="${y1 + uy * ow}" st
 const [lx, ly] = flatLabelPoint(r.pts);
 const area = flatPolyArea(r.pts);
 const sel = opt.sel === r.id;
+// размер подписи — по комнате: длинное название в узкой комнате мельче,
+// в совсем маленькой — только площадь (полное название — во всплывающей подсказке)
+const name = r.name || '';
+const xs = r.pts.map(p => p[0]), ys = r.pts.map(p => p[1]);
+const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
+const areaTxt = (Math.round(area * 10) / 10).toLocaleString('ru-RU') + ' м²' + (r.closed ? '' : ' · не сходится');
+const fitW = (chars, k) => (bw * 0.9) / Math.max(1, chars * k);
+let rf = Math.min(fs, fitW(name.length, 0.62), bh / 3);
+const showName = name && rf >= fs * 0.6;
+if (!showName) rf = Math.min(fs, fitW(areaTxt.length, 0.5) / 0.85, bh / 1.6);
 const tap = opt.onTap ? ` onclick="${opt.onTap}('${r.id}')" style="cursor:pointer"` : '';
 return `<g class="flat-room${sel ? ' sel' : ''}"${tap}>
 <path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}" stroke="#14181f" stroke-width="${fs * 0.22}" stroke-linejoin="miter"/>
 ${ops}
-<text x="${lx}" y="${ly - fs * 0.15}" font-size="${fs}" text-anchor="middle" font-family="Arial, sans-serif" fill="#14181f" font-weight="700" pointer-events="none">${escapeHtml(r.name || '')}</text>
-<text x="${lx}" y="${ly + fs * 1.05}" font-size="${fs * 0.85}" text-anchor="middle" font-family="Arial, sans-serif" fill="#5a6470" pointer-events="none">${(Math.round(area * 10) / 10).toLocaleString('ru-RU')} м²${r.closed ? '' : ' · не сходится'}</text>
+<title>${escapeHtml(name)} — ${areaTxt}</title>
+${showName ? `<text x="${lx}" y="${ly - rf * 0.15}" font-size="${rf}" text-anchor="middle" font-family="Arial, sans-serif" fill="#14181f" font-weight="700" pointer-events="none">${escapeHtml(name)}</text>` : ''}
+<text x="${lx}" y="${showName ? ly + rf * 1.05 : ly + rf * 0.3}" font-size="${rf * 0.85}" text-anchor="middle" font-family="Arial, sans-serif" fill="#5a6470" pointer-events="none">${areaTxt}</text>
 </g>`;
 }).join('');
 // Ручки выделенной комнаты: углы — кружки, середины стен — квадратики с длиной

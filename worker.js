@@ -1385,9 +1385,11 @@ x растёт вправо, y — вниз. Бери их из размерны
 - проверь себя: длины сторон контура совпадают с размерами на чертеже, площадь — с подписанной (если есть),
   соседние помещения не налезают друг на друга;
 - колонна посреди помещения (не у стены) в контур не входит — упомяни её в warnings;
-- окна, двери и балконные блоки (окно с дверью в одном проёме): wall — номер стороны контура
-  (сторона i идёт от pts[i] к pts[i+1], последняя — к pts[0]), offset_mm — от начала этой стороны
-  до проёма, ширина, высота (если указана).
+- длина стены — это сумма цепочки размеров вдоль неё (например, 960+1230+700+760 = 3650); бери размеры,
+  подписанные внутри этого помещения, а не соседнего; посчитай площадь по своим углам и сверь с подписью;
+- окна, двери и балконные блоки (окно с дверью в одном проёме): at — координаты двух концов проёма
+  на стене помещения, в той же системе координат, что и углы (по размерам вдоль стены); высота — если указана.
+  Дверь между помещениями укажи у обоих; входная дверь квартиры — у прихожей.
 
 Если размер не подписан — оцени по масштабу и добавь предупреждение. Не выдумывай помещения, которых нет.
 Если без ответа мастера план получится заведомо неверным (непонятно, где границы помещений, к каким стенам
@@ -1400,10 +1402,10 @@ x растёт вправо, y — вниз. Бери их из размерны
 
 Ответ — только JSON без пояснений, без markdown и без пробелов для красоты, строго такой формы:
 {"rooms":[{"name":"Гостиная","height_mm":2700,"pts":[[0,0],[4600,0],[4600,3200],[0,3200]],
-"openings":[{"type":"window","wall":0,"offset_mm":800,"width_mm":1400,"height_mm":1500}]}],
+"openings":[{"type":"window","at":[[800,0],[2200,0]],"height_mm":1500}]}],
 "warnings":["..."]}
 Поля без значения не пиши. type — одно из: "window", "door", "balcony"
-(для balcony width_mm/height_mm — окно, door_width_mm/door_height_mm — дверь).`;
+(для balcony at — весь блок, height_mm — высота окна, door_width_mm/door_height_mm — дверь).`;
 
 // Правила мастера к распознаванию (профиль, «Запомнить как правило»)
 const PLAN_HINTS_MAX = 3000;
@@ -1574,10 +1576,17 @@ function sanitizePlan(raw) {
     const mm = (o, k) => (o && o[k + "_mm"] != null ? Number(o[k + "_mm"]) / 1000 : o && o[k + "_m"]);
     const openings = (Array.isArray(r && r.openings) ? r.openings : []).slice(0, 60).map((o) => {
       const w = o && (o.wall != null ? o.wall : o.wall_index);
+      // Концы проёма координатами (мм) — стену и отступ сайт находит сам
+      const at = Array.isArray(o && o.at) && o.at.length === 2
+        ? o.at.map((p) => (Array.isArray(p) ? [Math.round(Number(p[0])), Math.round(Number(p[1]))] : null))
+        : null;
+      const atOk = at && at.every((p) => p && p.every((v) => Number.isFinite(v) && Math.abs(v) <= 500000));
+      const atLen = atOk ? Math.hypot(at[1][0] - at[0][0], at[1][1] - at[0][1]) / 1000 : null;
       return {
+        ...(atOk ? { at } : {}),
         type: ["window", "door", "balcony"].includes(o && o.type) ? o.type : "window",
         wall_index: Number.isInteger(w) && w >= 0 && w < sides ? w : null,
-        width_m: num(mm(o, "width"), 0.1, 20), height_m: num(mm(o, "height"), 0.1, 10),
+        width_m: num(mm(o, "width") != null ? mm(o, "width") : atLen, 0.1, 20), height_m: num(mm(o, "height"), 0.1, 10),
         door_width_m: num(mm(o, "door_width"), 0.1, 5), door_height_m: num(mm(o, "door_height"), 0.1, 5),
         offset_m: num(mm(o, "offset"), 0, 100),
       };
