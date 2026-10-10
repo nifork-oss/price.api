@@ -372,12 +372,26 @@ const obj = (cloudData.objects || []).find(o => o.id === objectId);
 const room = findObjectRoom(objectId, roomId);
 if (!obj || !room) return;
 if (!confirm(`Удалить помещение «${roomName(room)}» из объекта? Уже сохранённые счета не изменятся.`)) return;
-obj.rooms = obj.rooms.filter(r => r.id !== roomId);
-selectedRoomIds.delete(roomId);
-// убираем помещение из работ текущего счёта
+await removeObjectRooms(obj, [roomId]);
+}
+
+// Все помещения объекта разом (удобно, когда план распознаётся заново)
+async function deleteAllRooms(objectId) {
+const obj = (cloudData.objects || []).find(o => o.id === objectId);
+const rooms = objectRooms(obj);
+if (!obj || !rooms.length) return;
+if (!confirm(`Удалить все помещения объекта (${rooms.length} шт.) вместе с замерами и планом квартиры? Отменить нельзя. Уже сохранённые счета не изменятся.`)) return;
+await removeObjectRooms(obj, rooms.map(r => r.id));
+}
+
+async function removeObjectRooms(obj, roomIds) {
+const ids = new Set(roomIds);
+obj.rooms = (obj.rooms || []).filter(r => !ids.has(r.id));
+ids.forEach(id => selectedRoomIds.delete(id));
+// убираем помещения из работ текущего счёта
 invoiceCart.forEach(item => {
-if (Array.isArray(item.rooms) && item.rooms.some(r => r.roomId === roomId)) {
-item.rooms = item.rooms.filter(r => r.roomId !== roomId);
+if (Array.isArray(item.rooms) && item.rooms.some(r => ids.has(r.roomId))) {
+item.rooms = item.rooms.filter(r => !ids.has(r.roomId));
 if (!item.rooms.length) item._remove = true;
 }
 });
@@ -385,7 +399,7 @@ invoiceCart = invoiceCart.filter(i => !i._remove);
 syncCartWithRooms();
 await saveCloudData();
 renderInvoice();
-if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === obj.id) renderObjectDetail();
 }
 
 /* ---------- выбор работы для отмеченных помещений ---------- */
@@ -631,5 +645,6 @@ ${list}
 ${canEdit ? `<button type="button" class="measure-open-btn" onclick="addRoom('${obj.id}')">+ Помещение</button>` : ''}
 ${typeof objectHasFlat === 'function' && objectHasFlat(obj) ? `<button type="button" class="btn btn-primary plan-btn" onclick="openFlatPlan('${obj.id}')">План квартиры</button>` : ''}
 ${rooms.length ? `<button type="button" class="btn btn-primary plan-btn" onclick="openPlanActions('${obj.id}')">Обмерный план (PDF)</button>` : ''}
-${canEdit ? `<button type="button" class="measure-open-btn ai-btn" onclick="startPlanRecognition('${obj.id}')">Распознать план по фото или PDF (платно)</button>` : ''}`;
+${canEdit ? `<button type="button" class="measure-open-btn ai-btn" onclick="startPlanRecognition('${obj.id}')">Распознать план по фото или PDF (платно)</button>` : ''}
+${canEdit && rooms.length > 1 ? `<button type="button" class="btn btn-danger plan-btn" onclick="deleteAllRooms('${obj.id}')">Удалить все помещения</button>` : ''}`;
 }
