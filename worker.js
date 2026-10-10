@@ -1398,6 +1398,15 @@ function planHintsText(hints) {
     + "они важнее общих указаний выше (кроме формы ответа):\n<rules>\n" + text + "\n</rules>";
 }
 
+// Уточнение к готовому плану: присылать только изменения — ответ короче и дешевле,
+// а помещения, которых уточнение не касается, остаются как были
+const PLAN_PATCH = `Твой последний ответ выше — текущий план. Поправь в нём только то, чего касается уточнение мастера.
+Ответ — JSON такой формы: {"partial":true,"rooms":[...],"removed":["..."],"warnings":["..."]}
+- в rooms — только изменённые и новые помещения, каждое целиком (все стены и проёмы), с тем же name, что в плане;
+- в removed — названия помещений, которые нужно убрать (переименование — новое в rooms, старое в removed);
+- помещения без изменений не повторяй.
+Если уточнение меняет почти весь план — верни весь план целиком без "partial". Если без ответа мастера не обойтись — {"questions":["..."]}.`;
+
 /* ---------- кеш: повтор начала запроса в течение 5 минут — в 10 раз дешевле ---------- */
 
 const CACHE = { type: "ephemeral" };
@@ -1436,7 +1445,10 @@ function planPayload(env, image, mediaType, turns, hints) {
   (turns || []).forEach((t) => {
     const last = messages[messages.length - 1];
     if (t.answer) messages.push({ role: "assistant", content: t.answer });
-    const text = "Мастер пишет: " + t.note + "\n\nУчти это и верни заново весь план целиком в том же формате JSON (или вопросы, если без них никак).";
+    // План уже есть — правим только то, что касается уточнения, остальное не трогаем
+    let hasPlan = false;
+    try { hasPlan = (JSON.parse(t.answer || "{}").rooms || []).length > 0; } catch (e) { /* не JSON */ }
+    const text = "Мастер пишет: " + t.note + "\n\n" + (hasPlan ? PLAN_PATCH : "Учти это и верни весь план целиком в том же формате JSON (или вопросы, если без них никак).");
     if (t.answer) messages.push({ role: "user", content: text });
     else if (last.role === "user") last.content = [].concat(last.content, [{ type: "text", text }]);
   });
@@ -1519,8 +1531,11 @@ function sanitizePlan(raw) {
     return { name: String((r && r.name) || "Помещение " + (i + 1)).slice(0, 80), height_m: num(r && r.height_m, 1, 20), walls, openings };
   }).filter((r) => r.walls.length >= 3);
   const warnings = (Array.isArray(raw && raw.warnings) ? raw.warnings : []).map((w) => String(w).slice(0, 300)).slice(0, 20);
-  const questions = rooms.length ? [] : (Array.isArray(raw && raw.questions) ? raw.questions : []).map((q) => String(q).slice(0, 300)).filter(Boolean).slice(0, 10);
-  return { rooms, warnings, ...(questions.length ? { questions } : {}) };
+  // Правка по уточнению: только изменённые/новые помещения и названия удалённых
+  const partial = !!(raw && raw.partial === true);
+  const removed = partial && Array.isArray(raw.removed) ? raw.removed.map((x) => String(x).slice(0, 80)).filter(Boolean).slice(0, 40) : [];
+  const questions = rooms.length || removed.length ? [] : (Array.isArray(raw && raw.questions) ? raw.questions : []).map((q) => String(q).slice(0, 300)).filter(Boolean).slice(0, 10);
+  return { rooms, warnings, ...(partial ? { partial: true, removed } : {}), ...(questions.length ? { questions } : {}) };
 }
 
 /* ============== помощник в калькуляторе ============== */

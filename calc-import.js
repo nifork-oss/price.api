@@ -426,6 +426,15 @@ if (res.status === 501) run.error = 'Распознавание пока не п
 else if (res.status === 402) { run.error = (data && data.error) || 'Нет доступа к распознаванию'; paidDenied('plan', data); }
 else if (!res.ok || !data) run.error = (data && data.error) || 'Не удалось распознать план';
 }
+// Правка по уточнению — подставляем в прежний план, остальное не трогаем
+if (!run.error && data && data.partial) {
+const base = target.runs.slice(0, target.runs.indexOf(run)).reverse().find(r => r.result);
+if (base) {
+const merged = aiMergePlan(base.result, data);
+data = { ...data, rooms: merged.rooms, warnings: merged.warnings };
+run.patch = merged.patch;
+}
+}
 if (!run.error && data.questions && data.questions.length && !(data.rooms && data.rooms.length)) {
 run.questions = data.questions;
 } else if (!run.error && (!data.rooms || !data.rooms.length)) run.error = 'Помещения не распознаны' + (data.warnings && data.warnings.length ? ': ' + data.warnings.join(' ') : '.') + ' Напишите внизу, что на плане (например, «это квартира из 3 комнат, размеры в мм»), или попробуйте более чёткое фото.';
@@ -445,6 +454,26 @@ run.done = true;
 target.abort = null;
 saveAiChat(target);
 if (aiTarget === target) renderAiPanel();
+}
+
+// Прежний план + правка нейросети: заменить помещения с тем же названием,
+// добавить новые, убрать перечисленные в removed; порядок — как был
+function aiMergePlan(base, patch) {
+const removed = new Set(patch.removed || []);
+const byName = new Map((patch.rooms || []).map(r => [r.name, r]));
+const changed = [], added = [];
+const rooms = [];
+base.rooms.forEach(r => {
+if (byName.has(r.name)) { rooms.push(byName.get(r.name)); changed.push(r.name); byName.delete(r.name); }
+else if (!removed.has(r.name)) rooms.push(r);
+});
+byName.forEach(r => { rooms.push(r); added.push(r.name); });
+const gone = base.rooms.map(r => r.name).filter(n => removed.has(n) && !changed.includes(n));
+return {
+rooms,
+warnings: patch.warnings && patch.warnings.length ? patch.warnings : (base.warnings || []),
+patch: { changed, added, removed: gone },
+};
 }
 
 // Переписка для нейросети: на каждую реплику мастера — что она ответила перед этим
@@ -561,7 +590,12 @@ const live = !run.done;
 const rooms = run.result ? run.result.rooms.map(r => r.name) : aiFoundRooms(run.text);
 html += `<div class="as-msg as-bot ai-run${run.error ? ' as-error' : ''}">`;
 if (run.thinking) html += `<details class="as-think"${live ? ' open' : ''}><summary>${live ? 'Размышляю…' : 'Ход рассуждений'}</summary><div>${escapeHtml(run.thinking)}</div></details>`;
-if (rooms.length) html += `<div class="as-text"><b>${run.result ? 'Распознал' : 'Нашёл'} помещений: ${rooms.length}</b>\n${rooms.map(escapeHtml).join(', ')}</div>`;
+if (run.patch) {
+const p = run.patch;
+const parts = [p.changed.length ? 'поправил: ' + p.changed.join(', ') : '', p.added.length ? 'добавил: ' + p.added.join(', ') : '', p.removed.length ? 'убрал: ' + p.removed.join(', ') : ''].filter(Boolean);
+const head = parts.length ? parts.join('; ') : 'без изменений';
+html += `<div class="as-text"><b>${escapeHtml(head[0].toUpperCase() + head.slice(1))}</b>\nОстальное как было. Помещений в плане: ${rooms.length}</div>`;
+} else if (rooms.length) html += `<div class="as-text"><b>${run.result ? 'Распознал' : 'Нашёл'} помещений: ${rooms.length}</b>\n${rooms.map(escapeHtml).join(', ')}</div>`;
 if (run.questions) html += `<div class="as-text"><b>Чтобы не ошибиться, уточните:</b>\n${run.questions.map((q, qi) => (run.questions.length > 1 ? (qi + 1) + '. ' : '') + escapeHtml(q)).join('\n')}</div>`;
 if (run.error) html += `<div class="as-text">${escapeHtml(run.error)}</div>`;
 else if (live) html += `<div class="as-status">${escapeHtml(run.status)}</div>`;
