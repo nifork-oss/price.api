@@ -23,21 +23,97 @@ document.head.appendChild(sc);
 return pdfJsLoading;
 }
 
-// Картинка или первая страница PDF → JPEG не больше maxSide точек по длинной стороне
-async function fileToJpeg(file, maxSide = 1800) {
-let source, w, h;
-if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
+function isPdfFile(file) {
+return file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+}
+
+// pdf.js забирает переданный буфер себе — даём ему копию
+async function openPdf(file) {
 const pdfjs = await loadPdfJs();
-const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-const page = await pdf.getPage(1);
+return pdfjs.getDocument({ data: (await file.arrayBuffer()).slice(0) }).promise;
+}
+
+async function renderPdfPage(pdf, pageNum, maxSide) {
+const page = await pdf.getPage(pageNum);
 const vp0 = page.getViewport({ scale: 1 });
-const scale = maxSide / Math.max(vp0.width, vp0.height);
-const vp = page.getViewport({ scale });
+const vp = page.getViewport({ scale: maxSide / Math.max(vp0.width, vp0.height) });
 const c = document.createElement('canvas');
 c.width = Math.round(vp.width); c.height = Math.round(vp.height);
 const ctx = c.getContext('2d');
 ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
 await page.render({ canvasContext: ctx, viewport: vp }).promise;
+return c;
+}
+
+// Многостраничный PDF (дизайн-проект) — мастер выбирает нужную страницу по миниатюрам.
+// Ответ — { page, total }; одна страница — сразу она; «Отмена» — null.
+async function pickPdfPage(file) {
+const pdf = await openPdf(file);
+const total = pdf.numPages;
+if (total <= 1) return { page: 1, total };
+return new Promise(resolve => {
+const box = document.createElement('div');
+box.className = 'pdf-pick';
+box.innerHTML = `<div class="pdf-pick-head"><b>Какая страница нужна? Всего ${pdf.numPages}</b>
+<button type="button" class="mp-head-btn" data-cancel>Отмена</button></div>
+<div class="pdf-pick-grid">${Array.from({ length: pdf.numPages }, (_, i) =>
+`<button type="button" class="pdf-pick-page" data-page="${i + 1}"><span class="pdf-pick-thumb"></span><small>${i + 1}</small></button>`).join('')}</div>`;
+let done = false;
+const finish = (v) => { if (done) return; done = true; box.remove(); resolve(v); };
+box.addEventListener('click', e => {
+if (e.target.closest('[data-cancel]')) return finish(null);
+const b = e.target.closest('[data-page]');
+if (b) finish({ page: Number(b.dataset.page), total });
+});
+document.body.appendChild(box);
+// Миниатюры по очереди, пока окно открыто
+(async () => {
+for (const b of box.querySelectorAll('[data-page]')) {
+if (done) return;
+try { b.firstElementChild.appendChild(await renderPdfPage(pdf, Number(b.dataset.page), 220)); } catch (e) { /* без миниатюры */ }
+}
+})();
+});
+}
+
+// Одна страница PDF отдельным файлом (base64) — чтобы нейросеть видела и текст
+// с размерами, и не платить за остальные страницы. Не вышло — null.
+const PDFLIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+let pdfLibLoading = null;
+function loadPdfLib() {
+if (window.PDFLib) return Promise.resolve(window.PDFLib);
+if (!pdfLibLoading) pdfLibLoading = new Promise((resolve, reject) => {
+const sc = document.createElement('script');
+sc.src = PDFLIB_URL;
+sc.onload = () => resolve(window.PDFLib);
+sc.onerror = () => { pdfLibLoading = null; reject(new Error('не загрузилась pdf-lib')); };
+document.head.appendChild(sc);
+});
+return pdfLibLoading;
+}
+
+async function pdfPageBase64(file, pageNum) {
+try {
+const { PDFDocument } = await loadPdfLib();
+const src = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
+const out = await PDFDocument.create();
+const [pg] = await out.copyPages(src, [pageNum - 1]);
+out.addPage(pg);
+const bytes = await out.save();
+let bin = '';
+for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+return { base64: btoa(bin), size: bytes.length };
+} catch (e) {
+console.warn('Страница PDF отдельным файлом не получилась:', e);
+return null;
+}
+}
+
+// Картинка или страница PDF (по умолчанию первая) → JPEG не больше maxSide точек по длинной стороне
+async function fileToJpeg(file, maxSide = 1800, pageNum = 1) {
+let source, w, h;
+if (isPdfFile(file)) {
+const c = await renderPdfPage(await openPdf(file), pageNum, maxSide);
 return { dataUrl: c.toDataURL('image/jpeg', 0.85), w: c.width, h: c.height };
 }
 const url = URL.createObjectURL(file);
@@ -93,17 +169,19 @@ try { localStorage.removeItem(ulImgKey(id)); localStorage.removeItem(ulViewKey(i
 delete ulCache[id];
 }
 
-function pickUnderlayFile() {
-document.getElementById('ulFile').click();
+function pickUnderlayFile(kind) {
+document.getElementById(kind === 'pdf' ? 'ulFilePdf' : 'ulFile').click();
 }
 
 async function handleUnderlayFile(input) {
 const file = input.files && input.files[0];
 input.value = '';
 if (!file) return;
-showAddToast('Готовлю подложку…');
 try {
-const img = await fileToJpeg(file, 1600);
+const pick = isPdfFile(file) ? await pickPdfPage(file) : { page: 1 };
+if (!pick) return;
+showAddToast('Готовлю подложку…');
+const img = await fileToJpeg(file, 1600, pick.page);
 const id = measure.id;
 try { localStorage.setItem(ulImgKey(id), img.dataUrl); }
 catch (e) { alert('Не хватает места на телефоне для подложки. Удалите подложки у других комнат.'); return; }
@@ -128,7 +206,7 @@ alert('Не удалось открыть файл: ' + (err && err.message ? er
 function underlayAction(act) {
 const id = measure.id;
 const u = getUnderlay(id);
-if (act === 'add') { pickUnderlayFile(); return; }
+if (act === 'add' || act === 'addPdf') { pickUnderlayFile(act === 'addPdf' ? 'pdf' : 'photo'); return; }
 if (!u) return;
 if (act === 'adjust') { rlUnderlayAdjust = !rlUnderlayAdjust; rlLastFit = null; if (rlUnderlayAdjust) u.hidden = false; saveUnderlayView(id, u); renderMeasure(); return; }
 if (act === 'done') { rlUnderlayAdjust = false; rlLastFit = null; renderMeasure(); return; }
@@ -146,7 +224,10 @@ renderRulerSketch();
 
 function underlayBarHtml() {
 const u = measure && getUnderlay(measure.id);
-if (!u) return `<button type="button" class="rl-ul-add" onclick="underlayAction('add')">Подложка: фото плана</button>`;
+if (!u) return `<div class="rl-ul-row">
+<button type="button" class="rl-ul-add" onclick="underlayAction('add')">Подложка: фото плана</button>
+<button type="button" class="rl-ul-add" onclick="underlayAction('addPdf')">Подложка: PDF</button>
+</div>`;
 if (!rlUnderlayAdjust) {
 return `<div class="rl-ul-row">
 <button type="button" class="rl-tool" onclick="underlayAction('adjust')">Подложка: подстроить</button>
@@ -159,7 +240,8 @@ return `<div class="rl-ul-panel">
 <button type="button" class="rl-tool" onclick="underlayAction('rotate')">↻ Повернуть</button>
 <button type="button" class="rl-tool" onclick="underlayAction('lighter')">Светлее</button>
 <button type="button" class="rl-tool" onclick="underlayAction('darker')">Темнее</button>
-<button type="button" class="rl-tool" onclick="underlayAction('add')">Заменить</button>
+<button type="button" class="rl-tool" onclick="underlayAction('add')">Заменить фото</button>
+<button type="button" class="rl-tool" onclick="underlayAction('addPdf')">Заменить на PDF</button>
 <button type="button" class="rl-tool rl-tool-del" onclick="underlayAction('remove')">Убрать</button>
 <button type="button" class="rl-tool rl-tool-close" onclick="underlayAction('done')">Готово</button>
 </div>
@@ -179,13 +261,13 @@ return [[-u.w / 2, -h / 2], [u.w / 2, -h / 2], [u.w / 2, h / 2], [-u.w / 2, h / 
 // «добавь балкон»), и нейросеть переделает план с учётом поправки.
 let aiTarget = null;   // { objectId, image, preview, runs: [{ note, thinking, text, status, error, done, result }], abort, measures }
 
-// Есть прошлые распознавания этого объекта — сначала их список, иначе сразу выбор фото
+// Начало: выбор «Фото» или «PDF-файл» (на Android общий выбор файла часто
+// показывает только галерею) и прошлые распознавания этого объекта
 function startPlanRecognition(objectId) {
 const obj = objectId ? (cloudData.objects || []).find(o => o.id === objectId) : calcObject();
 if (!obj) { alert('Сначала выберите объект.'); return; }
-if (aiChatsList('plan', obj.id).length) { showAiHistory(obj.id); return; }
-aiTarget = { objectId: obj.id, runs: [] };
-document.getElementById('aiFile').click();
+if (!paidCheck('plan')) return;
+showAiHistory(obj.id);
 }
 
 function showAiHistory(objectId) {
@@ -196,10 +278,10 @@ document.body.classList.add('measure-open');
 renderAiPanel();
 }
 
-function aiPickNewPhoto() {
+function aiPickNewPhoto(kind) {
 if (!aiTarget) return;
 aiTarget = { objectId: aiTarget.objectId, runs: [] };
-document.getElementById('aiFile').click();
+document.getElementById(kind === 'pdf' ? 'aiFilePdf' : 'aiFile').click();
 }
 
 // Сохраняем после каждого законченного захода — вместе с картинкой, чтобы
@@ -233,7 +315,6 @@ renderAiPanel();
 function deleteAiChat(id) {
 if (!confirm('Удалить это распознавание из истории?')) return;
 aiChatDelete(id);
-if (aiTarget && !aiChatsList('plan', aiTarget.objectId).length) { closeAiReview(); return; }
 renderAiPanel();
 }
 
@@ -263,6 +344,12 @@ async function handleAiFile(input) {
 const file = input.files && input.files[0];
 input.value = '';
 if (!file || !aiTarget) return;
+const isPdf = isPdfFile(file);
+let pick = { page: 1, total: 1 };
+if (isPdf) {
+try { pick = await pickPdfPage(file); } catch (err) { alert('Не удалось открыть PDF: ' + (err && err.message ? err.message : err)); return; }
+if (!pick) return;
+}
 if (!confirm('Распознать план с помощью нейросети?\n\nЭто платная функция: картинка будет отправлена в сторонний сервис, каждое распознавание стоит денег по тарифу ключа API. Результат — черновик, его нужно проверить.')) return;
 const target = aiTarget;
 target.runs = [{ thinking: '', text: '', status: 'Готовлю картинку…' }];
@@ -272,19 +359,29 @@ document.getElementById('aiPanel').classList.add('open');
 document.body.classList.add('measure-open');
 renderAiPanel();
 try {
-const img = await fileToJpeg(file, 1568);
+const img = await fileToJpeg(file, 1568, pick.page);
 if (aiTarget !== target) return;
 target.preview = img.dataUrl;
 target.image = img.dataUrl.split(',')[1];
 target.mediaType = 'image/jpeg';
-const size = file.size < 1048576 ? Math.max(1, Math.round(file.size / 1024)) + ' КБ' : (file.size / 1048576).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' МБ';
-const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
-target.sentAs = isPdf ? `картинкой первой страницы: PDF ${size}, больше 10 МБ` : 'картинкой';
-// PDF до 10 МБ отправляем как есть — в нём есть текст с размерами
-if (isPdf && file.size <= 10 * 1024 * 1024) {
+const fmtSize = (n) => n < 1048576 ? Math.max(1, Math.round(n / 1024)) + ' КБ' : (n / 1048576).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' МБ';
+const MAX_PDF = 10 * 1024 * 1024;
+const pageLabel = pick.total > 1 ? `страница ${pick.page} из ${pick.total}` : '';
+target.sentAs = isPdf ? `картинкой${pageLabel ? ' — ' + pageLabel : ''} (PDF ${fmtSize(file.size)})` : 'картинкой';
+// PDF отправляем документом — в нём есть текст с размерами. Из многостраничного —
+// только выбранную страницу отдельным файлом (дешевле, и нейросеть не путается)
+if (isPdf && pick.total === 1 && file.size <= MAX_PDF) {
 target.image = await fileToBase64(file);
 target.mediaType = 'application/pdf';
-target.sentAs = `PDF-документом целиком (${size})`;
+target.sentAs = `PDF-документом (${fmtSize(file.size)})`;
+} else if (isPdf) {
+const one = await pdfPageBase64(file, pick.page);
+if (aiTarget !== target) return;
+if (one && one.size <= MAX_PDF) {
+target.image = one.base64;
+target.mediaType = 'application/pdf';
+target.sentAs = `PDF-документом — ${pageLabel || 'одна страница'} (${fmtSize(one.size)})`;
+}
 }
 target.runs = [];
 runAiRecognition('');
@@ -308,7 +405,7 @@ const res = await fetch(`${WORKER_URL}/recognize-plan`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
 body: JSON.stringify({ image: target.image, mediaType: target.mediaType, stream: true,
-turns: aiTurns(target.runs) }),
+turns: aiTurns(target.runs), hints: aiPlanHints() }),
 signal: target.abort.signal
 });
 let data = null;
@@ -326,6 +423,7 @@ if (!data && !run.error) run.error = 'Ответ оборвался. Попро�
 } else {
 data = await res.json().catch(() => null);
 if (res.status === 501) run.error = 'Распознавание пока не подключено. Чтобы включить: получите ключ API на console.anthropic.com и добавьте его в Cloudflare → ваш воркер → Settings → Variables and Secrets как секрет ANTHROPIC_API_KEY. Пока можно пользоваться подложкой — это бесплатно.';
+else if (res.status === 402) { run.error = (data && data.error) || 'Нет доступа к распознаванию'; paidDenied('plan', data); }
 else if (!res.ok || !data) run.error = (data && data.error) || 'Не удалось распознать план';
 }
 if (!run.error && data.questions && data.questions.length && !(data.rooms && data.rooms.length)) {
@@ -358,6 +456,31 @@ const answer = prev && (prev.result || prev.questions) ? JSON.stringify(prev.res
 turns.push({ note: r.note, answer });
 });
 return turns;
+}
+
+// Правила мастера из профиля — уходят нейросети с каждым распознаванием
+function aiPlanHints() {
+return String((cloudData.self && cloudData.self.planHints) || '');
+}
+
+function aiPlanHintsCount() {
+return aiPlanHints().split('\n').filter(l => l.trim()).length;
+}
+
+// Уточнение мастера → правило на будущее (можно переписать общими словами)
+async function rememberAiRule(ri) {
+const run = aiTarget && aiTarget.runs[ri];
+if (!run || !run.note) return;
+const rule = prompt('Правило для следующих распознаваний. Можно переписать общими словами, например «короба у стояков — отдельными стенами»:', run.note);
+if (rule == null || !rule.trim()) return;
+const line = rule.trim().replace(/\s*\n\s*/g, ' ');
+const text = (aiPlanHints().trim() ? aiPlanHints().trim() + '\n' : '') + line;
+if (text.length > 3000) { alert('Правил слишком много (до 3000 знаков). Сократите их в Профиле.'); return; }
+if (!(await savePlanHints(text))) return;
+run.remembered = true;
+saveAiChat(aiTarget);
+renderAiPanel();
+showAddToast('Правило запомнено — оно в Профиле');
 }
 
 function aiBusy() {
@@ -401,9 +524,13 @@ histBtn.style.display = !aiTarget.history && aiChatsList('plan', aiTarget.object
 histBtn.disabled = aiBusy();
 if (aiTarget.history) {
 body.innerHTML = `<div class="mp-body-inner ai-chat">
-<button type="button" class="measure-open-btn ai-btn" onclick="aiPickNewPhoto()">Распознать новое фото</button>
-<div class="ai-hist-title">Прошлые распознавания</div>
-${aiChatsListHtml(aiChatsList('plan', aiTarget.objectId), 'openAiChat', 'deleteAiChat')}
+<div class="ai-start">
+<button type="button" class="measure-open-btn ai-btn" onclick="aiPickNewPhoto('photo')">Фото или скриншот</button>
+<button type="button" class="measure-open-btn ai-btn" onclick="aiPickNewPhoto('pdf')">PDF-файл</button>
+</div>
+<div class="ai-hint">Из многостраничного PDF (дизайн-проекта) можно выбрать нужную страницу.</div>
+${aiChatsList('plan', aiTarget.objectId).length ? `<div class="ai-hist-title">Прошлые распознавания</div>
+${aiChatsListHtml(aiChatsList('plan', aiTarget.objectId), 'openAiChat', 'deleteAiChat')}` : ''}
 </div>`;
 document.getElementById('aiApply').style.display = 'none';
 document.getElementById('aiNoteForm').style.display = 'none';
@@ -420,8 +547,15 @@ const showReview = !busy && last && last.result;
 let html = '<div class="mp-body-inner ai-chat">';
 if (aiTarget.preview) html += `<img class="ai-preview" src="${aiTarget.preview}" alt="План">`;
 if (aiTarget.sentAs) html += `<div class="ai-sent">Отправлено ${escapeHtml(aiTarget.sentAs)}</div>`;
+const rules = aiPlanHintsCount();
+if (rules) html += `<div class="ai-sent">Учитываю ваши правила: ${rules} (изменить — в Профиле)</div>`;
 aiTarget.runs.forEach((run, ri) => {
-if (run.note) html += `<div class="as-msg as-user ai-note"><div class="as-text">${escapeHtml(run.note)}</div></div>`;
+if (run.note) {
+html += `<div class="as-msg as-user ai-note"><div class="as-text">${escapeHtml(run.note)}</div></div>`;
+if (run.done && !run.error) html += run.remembered
+? '<div class="ai-rule ai-rule-done">Запомнено как правило</div>'
+: `<button type="button" class="ai-rule" onclick="rememberAiRule(${ri})">Запомнить как правило</button>`;
+}
 const live = !run.done;
 const rooms = run.result ? run.result.rooms.map(r => r.name) : aiFoundRooms(run.text);
 html += `<div class="as-msg as-bot ai-run${run.error ? ' as-error' : ''}">`;

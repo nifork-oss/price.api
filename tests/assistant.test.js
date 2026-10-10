@@ -6,6 +6,20 @@ const vm = require('vm');
 const { loadCalc } = require('./load.js');
 
 const SECRET = 'test-secret';
+
+// Хранилище в памяти вместо Durable Object: пользователи с доступом к платным функциям
+function fakeStorage(users) {
+  const m = new Map(Object.entries({ meta: { test: true }, services: [], users, history: [], objects: [], pirogHistory: [], revs: {} }));
+  return {
+    map: m,
+    async get(k) { return Array.isArray(k) ? new Map(k.map(x => [x, m.get(x)])) : m.get(k); },
+    async put(k, v) { if (typeof k === 'string') m.set(k, v); else Object.entries(k).forEach(([a, b]) => m.set(a, b)); },
+    async list({ prefix }) { return new Map([...m].filter(([k]) => k.startsWith(prefix))); },
+    async delete(keys) { [].concat(keys).forEach(k => m.delete(k)); },
+  };
+}
+const OPEN = Date.now() + 3600e3;
+const ivanWithAccess = () => [{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', aiBalance: 100000 }];
 async function token(payload) {
   const b64 = buf => Buffer.from(buf).toString('base64url');
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -28,7 +42,7 @@ async function callAssistant(body, { role = 'master', env = {}, reply, status = 
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role })) },
       body: JSON.stringify(body),
     });
-    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', ...env });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: fakeStorage(ivanWithAccess()), ...env });
     return { status: res.status, data: await res.json(), sent };
   } finally {
     globalThis.fetch = realFetch;
@@ -172,7 +186,7 @@ async function callStream(responses, env = {}) {
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) },
       body: JSON.stringify({ messages: [{ role: 'user', content: 'покрась' }], context: {}, stream: true }),
     });
-    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', ...env });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: fakeStorage(ivanWithAccess()), ...env });
     const text = await res.text();
     return { status: res.status, type: res.headers.get('content-type'), text, sent };
   } finally {
@@ -242,7 +256,7 @@ test('поток: ошибка сервиса посреди ответа и о�
 });
 
 // Распознавание плана: поток, уточнение мастера, понятная ошибка
-async function callPlan(body, responses) {
+async function callPlan(body, responses, env = {}) {
   const worker = (await import('../worker.js')).default;
   const sent = [];
   const realFetch = globalThis.fetch;
@@ -257,7 +271,7 @@ async function callPlan(body, responses) {
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) },
       body: JSON.stringify({ image: 'AAAA', mediaType: 'image/png', ...body }),
     });
-    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k' });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: fakeStorage(ivanWithAccess()), ...env });
     return { status: res.status, text: await res.text(), sent };
   } finally {
     globalThis.fetch = realFetch;
@@ -333,7 +347,94 @@ test('план: своя модель из ANTHROPIC_PLAN_MODEL', async () => {
   globalThis.fetch = async (url, opts) => { sent.push(JSON.parse(opts.body)); return new Response(JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }), { headers: { 'content-type': 'application/json' } }); };
   try {
     const req = new Request('https://x/recognize-plan', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login: 'ivan', role: 'master' })) }, body: JSON.stringify({ image: 'AAAA' }) });
-    await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', ANTHROPIC_MODEL: 'claude-sonnet-5', ANTHROPIC_PLAN_MODEL: ' claude-opus-4-8 ' });
+    await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: fakeStorage(ivanWithAccess()), ANTHROPIC_MODEL: 'claude-sonnet-5', ANTHROPIC_PLAN_MODEL: ' claude-opus-4-8 ' });
     assert.strictEqual(sent[0].model, 'claude-opus-4-8');
   } finally { globalThis.fetch = realFetch; }
+});
+
+test('план: правила мастера уходят нейросети, без правил — ничего лишнего', async () => {
+  const ok = [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }];
+  const withHints = await callPlan({ hints: 'Размеры всегда в мм\nКороба — отдельными стенами' }, ok);
+  const text = withHints.sent[0].messages[0].content[1].text;
+  assert.match(text, /<rules>\nРазмеры всегда в мм\nКороба — отдельными стенами\n<\/rules>/);
+  const plain = await callPlan({}, ok);
+  assert.ok(!plain.sent[0].messages[0].content[1].text.includes('<rules>'));
+  const long = await callPlan({ hints: 'х'.repeat(5000) }, ok);
+  assert.ok(long.sent[0].messages[0].content[1].text.length < withHints.sent[0].messages[0].content[1].text.length + 3100);
+});
+
+// Платные функции: доступ по времени, лимит токенов, запрос доступа, админ включает
+async function call(path, { method = 'POST', body, login = 'ivan', role = 'master', storage, reply }) {
+  const worker = (await import('../worker.js')).default;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify(reply || { content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1200, output_tokens: 300 } }), { status: 200 });
+  try {
+    const req = new Request('https://x' + path, {
+      method, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (await token({ login, role })) },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const res = await worker.fetch(req, { SESSION_SECRET: SECRET, ANTHROPIC_API_KEY: 'k', STORAGE: storage });
+    return { status: res.status, data: await res.json() };
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+const ask = { messages: [{ role: 'user', content: 'привет' }] };
+const user = (st, login) => st.map.get('users').find(u => u.login === login);
+
+test('баланс: без денег — 402, админу — можно', async () => {
+  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master' }, { login: 'petr', role: 'master', aiBalance: -5 }]);
+  const a = await call('/assistant', { body: ask, storage: st });
+  assert.strictEqual(a.status, 402);
+  assert.ok(a.data.noAccess);
+  assert.strictEqual((await call('/recognize-plan', { body: { image: 'AAAA' }, storage: st })).status, 402);
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st, login: 'petr' })).status, 402);
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st, login: 'admin', role: 'admin' })).status, 200);
+  // У админа расход считается, баланс не трогается
+  const adm = user(st, 'admin');
+  assert.strictEqual(adm.aiUse.assistant.req, 1);
+  assert.strictEqual(adm.aiBalance, undefined);
+});
+
+test('баланс: каждый запрос списывает стоимость токенов по ценам из настроек', async () => {
+  // 1200 токенов на вход × 500 ₽/млн = 0,60 ₽; 300 на выход × 2500 ₽/млн = 0,75 ₽ → 1,35 ₽
+  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', aiBalance: 200 }]);
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
+  const u = user(st, 'ivan');
+  assert.strictEqual(u.aiBalance, 200 - 135);
+  assert.deepStrictEqual(u.aiUse.assistant, { req: 1, in: 1200, out: 300, kop: 135 });
+  assert.strictEqual(u.aiUse.month, new Date().toISOString().slice(0, 7));
+  // Хватило ещё на один (баланс уходит в минус), дальше — нет
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
+  assert.strictEqual(u.aiBalance, 200 - 270);
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 402);
+  // Свои цены админа (с наценкой)
+  user(st, 'admin').aiSettings = { prices: { in: 1000, out: 5000 } };
+  u.aiBalance = 1000;
+  await call('/assistant', { body: ask, storage: st });
+  assert.strictEqual(u.aiBalance, 1000 - 270);
+});
+
+test('баланс: мастер просит пополнить, админ видит и пополняет', async () => {
+  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master' }]);
+  const r = await call('/ai-access-request', { body: {}, storage: st });
+  assert.strictEqual(r.status, 200);
+  assert.ok(r.data.ai.requestedAt > 0);
+  assert.strictEqual((await call('/ai-access', { method: 'GET', storage: st })).status, 403);
+  const admin = { storage: st, login: 'admin', role: 'admin' };
+  const list = await call('/ai-access', { method: 'GET', ...admin });
+  assert.strictEqual(list.data.users.length, 1);
+  assert.ok(list.data.users[0].ai.requestedAt > 0);
+  assert.deepStrictEqual(list.data.settings.prices, { in: 500, out: 2500 });
+  const put = await call('/ai-access', { method: 'PUT', body: { login: 'ivan', add: 500 }, ...admin });
+  assert.strictEqual(put.data.users[0].ai.balance, 500);
+  assert.strictEqual(put.data.users[0].ai.requestedAt, 0);
+  assert.strictEqual(put.data.users[0].ai.pays[0].amount, 500);
+  const fix = await call('/ai-access', { method: 'PUT', body: { login: 'ivan', add: -120.5 }, ...admin });
+  assert.strictEqual(fix.data.users[0].ai.balance, 379.5);
+  assert.strictEqual((await call('/ai-access', { method: 'PUT', body: { login: 'ivan', add: 'abc' }, ...admin })).status, 400);
+  const set = await call('/ai-access', { method: 'PUT', body: { settings: { offer: 'Перевод на карту', prices: { in: 700, out: 3000 } } }, ...admin });
+  assert.deepStrictEqual(set.data.settings, { offer: 'Перевод на карту', prices: { in: 700, out: 3000 } });
+  // С деньгами на балансе — можно
+  assert.strictEqual((await call('/assistant', { body: ask, storage: st })).status, 200);
 });

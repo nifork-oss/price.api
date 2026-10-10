@@ -11,6 +11,7 @@ let assistantChatId = null;  // под каким id чат лежит в ист
 function assistantConsentKey() { return 'assistantConsent:' + (currentUser || ''); }
 
 function openAssistant() {
+if (!paidCheck('assistant')) return;
 let ok = false;
 try { ok = localStorage.getItem(assistantConsentKey()) === '1'; } catch (e) { /* пусто */ }
 if (!ok) {
@@ -122,6 +123,9 @@ await assistantReadStream(res.body, reply);
 const data = await res.json().catch(() => null);
 if (res.status === 501) {
 assistantFail(reply, 'Помощник пока не подключён. Чтобы включить: получите ключ API на console.anthropic.com и добавьте его в Cloudflare → ваш воркер → Settings → Variables and Secrets как секрет ANTHROPIC_API_KEY.');
+} else if (res.status === 402) {
+assistantFail(reply, (data && data.error) || 'Нет доступа к помощнику.');
+paidDenied('assistant', data);
 } else if (!res.ok || !data) {
 assistantFail(reply, (data && data.error) || 'Помощник не ответил. Попробуйте ещё раз.');
 } else {

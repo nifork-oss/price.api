@@ -630,5 +630,5 @@ return `<h2 style="margin-top:18px;">Помещения${rooms.length ? ` (${roo
 ${list}
 ${canEdit ? `<button type="button" class="measure-open-btn" onclick="addRoom('${obj.id}')">+ Помещение</button>` : ''}
 ${rooms.length ? `<button type="button" class="btn btn-primary plan-btn" onclick="openPlanActions('${obj.id}')">Обмерный план (PDF)</button>` : ''}
-${canEdit ? `<button type="button" class="measure-open-btn ai-btn" onclick="startPlanRecognition('${obj.id}')">Распознать план по фото (платно)</button>` : ''}`;
+${canEdit ? `<button type="button" class="measure-open-btn ai-btn" onclick="startPlanRecognition('${obj.id}')">Распознать план по фото или PDF (платно)</button>` : ''}`;
 }

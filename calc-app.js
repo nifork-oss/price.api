@@ -99,6 +99,7 @@ cloudData = result.data;
 cloudRev = typeof result.rev === 'number' ? result.rev : null;
 if (!Array.isArray(cloudData.objects)) cloudData.objects = [];
 cloudData.self = result.self || { login: currentUser, email: '', companyName: '' };
+paidPendingBadge();
 if (result.role) {
 currentUserRole = result.role;
 localStorage.setItem('currentUserRole', currentUserRole);
@@ -319,6 +320,7 @@ document.getElementById('companyModePromo').style.display =
 (!isCurrentClient() && !isCompanyMode() && !currentUserHasTriedCompanyMode) ? 'block' : 'none';
 document.getElementById('tabUsersBtn').style.display = (isCurrentAdmin() && !isCompanyMode()) ? 'block' : 'none';
 document.getElementById('tabStatsBtn').style.display = (isCurrentAdmin() && !isCompanyMode()) ? 'block' : 'none';
+paidPendingBadge();
 document.getElementById('editPriceListLink').style.display = isCompanyMode() ? 'inline-flex' : 'none';
 updateModeSwitch();
 document.getElementById('tabCalcBtn').style.display = isCurrentClient() ? 'none' : 'block';
@@ -464,19 +466,22 @@ document.getElementById('historyTab').style.display = tab === 'history' ? 'block
 document.getElementById('profileTab').style.display = tab === 'profile' ? 'block' : 'none';
 document.getElementById('usersTab').style.display = tab === 'users' ? 'block' : 'none';
 document.getElementById('statsTab').style.display = tab === 'stats' ? 'block' : 'none';
+document.getElementById('paidTab').style.display = tab === 'paid' ? 'block' : 'none';
+document.getElementById('tabPaidBtn').classList.toggle('active', tab === 'paid');
 document.getElementById('tabCalcBtn').classList.toggle('active', tab === 'calc');
 document.getElementById('tabObjectsBtn').classList.toggle('active', tab === 'objects');
 document.getElementById('tabHistoryBtn').classList.toggle('active', tab === 'history');
 document.getElementById('tabProfileBtn').classList.toggle('active', tab === 'profile');
 document.getElementById('tabUsersBtn').classList.toggle('active', tab === 'users');
 document.getElementById('tabStatsBtn').classList.toggle('active', tab === 'stats');
-if (prevScrollTab && prevScrollTab.id !== ({ calc: 'tabCalcBtn', objects: 'tabObjectsBtn', history: 'tabHistoryBtn', profile: 'tabProfileBtn', users: 'tabUsersBtn', stats: 'tabStatsBtn' })[tab]) {
+if (prevScrollTab && prevScrollTab.id !== ({ calc: 'tabCalcBtn', objects: 'tabObjectsBtn', history: 'tabHistoryBtn', profile: 'tabProfileBtn', users: 'tabUsersBtn', stats: 'tabStatsBtn', paid: 'tabPaidBtn' })[tab]) {
 window.scrollTo(0, 0);
 }
 if (tab === 'history') renderHistory();
 if (tab === 'profile') renderProfile();
 if (tab === 'users') renderUsersList();
 if (tab === 'stats') renderStats();
+if (tab === 'paid') renderPaidAdmin();
 if (tab === 'objects') {
 closeObjectDetail();
 const newObjectCard = document.getElementById('newObjectCard');
@@ -1921,7 +1926,9 @@ document.getElementById('profLogin').value = self.login || currentUser;
 document.getElementById('profEmail').value = self.email || '';
 document.getElementById('profCompanyName').value = self.companyName || '';
 document.getElementById('profInvoiceNote').value = self.invoiceNote || '';
+document.getElementById('profPlanHints').value = self.planHints || '';
 document.getElementById('profPass').value = '';
+document.getElementById('profPaidBox').innerHTML = paidProfileHtml();
 // файл прайса: у «своей компании» — её прайс, у админа в обычном режиме — общий
 const canPriceFile = isCompanyMode() || isCurrentAdmin();
 document.getElementById('priceBackupBox').style.display = canPriceFile ? 'block' : 'none';
@@ -1941,6 +1948,7 @@ const newL = document.getElementById('profLogin').value.trim();
 const newEmail = document.getElementById('profEmail').value.trim();
 const newCompanyName = document.getElementById('profCompanyName').value.trim();
 const newInvoiceNote = document.getElementById('profInvoiceNote').value.trim();
+const newPlanHints = document.getElementById('profPlanHints').value.trim();
 const newP = document.getElementById('profPass').value.trim();
 if (!newL) {
 alert('Заполните логин!');
@@ -1950,14 +1958,24 @@ try {
 const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { login: newL, email: newEmail, companyName: newCompanyName, invoiceNote: newInvoiceNote, password: newP || undefined } })
+body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { login: newL, email: newEmail, companyName: newCompanyName, invoiceNote: newInvoiceNote, planHints: newPlanHints, password: newP || undefined } })
 });
 const result = await res.json();
 if (!res.ok) {
 alert(result.error || 'Не удалось сохранить профиль');
 return;
 }
-cloudData.self = result.self;
+applySelfResult(result);
+document.getElementById('profPass').value = '';
+alert('Данные профиля обновлены!');
+} catch (e) {
+alert('Ошибка сети — не удалось сохранить профиль');
+}
+}
+
+// Ответ сервера на сохранение своего профиля: новые данные, версия и токен
+function applySelfResult(result) {
+cloudData.self = { ...(cloudData.self || {}), ...result.self };
 if (typeof result.rev === 'number') cloudRev = result.rev;
 if (result.token) authToken = result.token;
 currentUser = result.self.login;
@@ -1965,10 +1983,23 @@ localStorage.setItem('authToken', authToken);
 localStorage.setItem('currentUser', currentUser);
 if (isCurrentAdmin()) localStorage.setItem('isAdminAuthorized', 'true');
 document.getElementById('userBadge').textContent = currentUser + (isCompanyMode() ? ' · своя компания' : '');
-document.getElementById('profPass').value = '';
-alert('Данные профиля обновлены!');
+}
+
+// Только правила распознавания плана — из окна распознавания («Запомнить как правило»)
+async function savePlanHints(text) {
+try {
+const res = await fetch(`${WORKER_URL}/appdata`, {
+method: "PUT",
+headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
+body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { planHints: text } })
+});
+const result = await res.json().catch(() => null);
+if (!res.ok || !result || !result.self) { alert((result && result.error) || 'Не удалось сохранить правило'); return false; }
+applySelfResult(result);
+return true;
 } catch (e) {
-alert('Ошибка сети — не удалось сохранить профиль');
+alert('Ошибка сети — правило не сохранилось');
+return false;
 }
 }
 
