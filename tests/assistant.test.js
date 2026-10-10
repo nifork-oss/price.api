@@ -78,7 +78,11 @@ test('сервер: передаёт данные калькулятора и р
   assert.strictEqual(data.items[1].qty, 2);
   assert.strictEqual(data.model, 'claude-sonnet-5-5'); // сервис модель не назвал — какую просили
   assert.strictEqual(sent[0].url, 'https://api.anthropic.com/v1/messages');
-  assert.ok(sent[0].body.system.includes('"Покраска"'));
+  assert.ok(sent[0].body.system[1].text.includes('"Покраска"'));
+  // Метки кеша: инструкция, данные калькулятора, последнее сообщение
+  assert.deepStrictEqual(sent[0].body.system.map(b => !!b.cache_control), [true, true]);
+  const lastMsg = sent[0].body.messages[sent[0].body.messages.length - 1];
+  assert.deepStrictEqual(lastMsg.content, [{ type: 'text', text: 'и ещё', cache_control: { type: 'ephemeral' } }]);
   assert.strictEqual(sent[0].body.tools[0].name, 'propose_items');
   assert.strictEqual(sent[0].body.messages.length, 3);
 });
@@ -238,6 +242,15 @@ test('поток: посредник не принял размышления (4
   assert.match(text, /"t":"done"/);
 });
 
+test('поток: посредник не принял и метки кеша (400, 400) — третий раз без них', async () => {
+  const bad = { status: 400, type: 'application/json', body: JSON.stringify({ error: { message: 'unknown field cache_control' } }) };
+  const { text, sent } = await callStream([bad, bad, { body: STREAM }]);
+  assert.strictEqual(sent.length, 3);
+  assert.ok(sent[1].system[0].cache_control);
+  assert.ok(!JSON.stringify(sent[2]).includes('cache_control'));
+  assert.match(text, /"t":"done"/);
+});
+
 test('поток: ошибка сервиса посреди ответа и ответ без потока', async () => {
   const broken = sse([
     { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
@@ -303,7 +316,9 @@ test('план: поток с размышлениями, уточнение у�
   assert.strictEqual(msgs[1].content, '{"questions":["единицы?"]}');
   assert.match(msgs[2].content, /в мм/);
   assert.strictEqual(msgs[3].content, '{"rooms":[]}');
-  assert.match(msgs[4].content, /высота 2,7/);
+  assert.match(msgs[4].content[0].text, /высота 2,7/);
+  assert.ok(msgs[4].content[0].cache_control);
+  assert.ok(msgs[0].content[1].cache_control); // картинка и инструкция — из кеша при уточнениях
   const first = await callPlan({ turns: [{ note: 'это одна комната' }] }, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }]);
   assert.strictEqual(first.sent[0].messages.length, 1);
   assert.match(first.sent[0].messages[0].content[2].text, /одна комната/);
@@ -418,6 +433,23 @@ test('баланс: каждый запрос списывает стоимос�
   u.aiBalance = 1000;
   await call('/assistant', { body: ask, storage: st });
   assert.strictEqual(u.aiBalance, 1000 - 270);
+});
+
+test('кеш: повтор из кеша — 10% цены отправки, запись — 125%; длинный чат — окно блоками', async () => {
+  // 1000 обычных + 2000 запись в кеш + 10000 из кеша; 100 на выход:
+  // (1000 + 2000×1,25 + 10000×0,1) × 500 / 1e6 = 2,25 ₽; 100 × 2500 / 1e6 = 0,25 ₽
+  const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', aiBalance: 1000 }]);
+  const reply = { content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10000, output_tokens: 100 } };
+  const r = await call('/assistant', { body: ask, storage: st, reply });
+  assert.deepStrictEqual(r.data.cost, { sent: 2.25, reply: 0.25, total: 2.5, balance: 7.5 });
+  assert.strictEqual(user(st, 'ivan').aiUse.assistant.in, 13000);
+  // Окно переписки: до 20 реплик — всё; дальше начало сдвигается по 10
+  const chat = (n) => ({ messages: Array.from({ length: n }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'м' + i })) });
+  const firstSent = async (n) => { const { sent } = await callAssistant(chat(n)); return sent[0].body.messages[0].content; };
+  assert.strictEqual(await firstSent(19), 'м0');
+  assert.strictEqual(await firstSent(23), 'м10');
+  assert.strictEqual(await firstSent(29), 'м10');
+  assert.strictEqual(await firstSent(31), 'м20');
 });
 
 test('баланс: мастер просит пополнить, админ видит и пополняет', async () => {

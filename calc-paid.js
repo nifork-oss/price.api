@@ -152,7 +152,7 @@ box.innerHTML = `
 <label>что отправлено нейросети <input type="number" id="paidPriceIn" min="0" step="10" value="${settings.prices.in}"></label>
 <label>ответ нейросети <input type="number" id="paidPriceOut" min="0" step="10" value="${settings.prices.out}"></label>
 </div>
-<small class="paid-muted">Ваша цена у ProxyAPI для Sonnet 5.5: 500 и 2500 ₽ (ввод и вывод). Поставите выше — разница остаётся вам. Мастера видят только рубли: под каждым ответом — сколько стоило отправленное и ответ.</small>
+<small class="paid-muted">Ваша цена у ProxyAPI для Sonnet 5.5: 500 и 2500 ₽ (ввод и вывод). Поставите выше — разница остаётся вам. Повтор уже отправленного в течение 5 минут (инструкция, прайс, переписка, картинка плана) идёт из кеша и стоит 10% цены отправки, первая запись в кеш — 125%, как у ProxyAPI. Мастера видят только рубли: под каждым ответом — сколько стоило отправленное и ответ.</small>
 <button type="button" class="btn btn-success btn-sm" onclick="paidSaveSettings()">Сохранить</button>
 </div>
 ${paidAdmin.self ? `<div class="paid-box"><b>Ваш расход в этом месяце (без списаний)</b><small class="paid-muted">${paidMonthHtml(paidAdmin.self.month)}</small></div>` : ''}

@@ -1168,6 +1168,7 @@ const handler = {
 // Деньги храним в копейках.
 const AI_FEATURES = ["plan", "assistant"];
 const AI_DEFAULT_PRICES = { in: 500, out: 2500 }; // ₽ за 1 млн токенов (ProxyAPI, Sonnet 5.5)
+const AI_CACHE_READ = 0.1, AI_CACHE_WRITE = 1.25;   // доля цены отправки: чтение из кеша, запись в кеш
 
 function siteAdmin(record) {
   return record.users.find((u) => u.login === "admin") || record.users.find((u) => u.role === "admin") || null;
@@ -1239,14 +1240,16 @@ async function aiUsageAdd(env, auth, feature, usage) {
   const u = record.users.find((x) => x.login === auth.login);
   if (!u) return { ok: false };
   const tin = n(usage && usage.in), tout = n(usage && usage.out);
+  const tw = n(usage && usage.cacheWrite), tr = n(usage && usage.cacheRead);
   const { prices } = aiSettings(record);
-  // Отдельно — за отправленное (вопрос, картинка, прайс) и за ответ нейросети
-  const kopIn = Math.round(tin * prices.in / 1e4);
+  // Отдельно — за отправленное (вопрос, картинка, прайс) и за ответ нейросети.
+  // Отправленное, повторённое из кеша, — 10% цены, запись в кеш — 125% (как у ProxyAPI)
+  const kopIn = Math.round((tin + tr * AI_CACHE_READ + tw * AI_CACHE_WRITE) * prices.in / 1e4);
   const kopOut = Math.round(tout * prices.out / 1e4);
   const kop = kopIn + kopOut;
   const use = u.aiUse && u.aiUse.month === aiMonth() ? { ...u.aiUse } : { month: aiMonth() };
   const cur = aiUse(u, feature);
-  use[feature] = { req: cur.req + 1, in: cur.in + tin, out: cur.out + tout, kop: cur.kop + kop };
+  use[feature] = { req: cur.req + 1, in: cur.in + tin + tw + tr, out: cur.out + tout, kop: cur.kop + kop };
   u.aiUse = use;
   u.aiSpent = (u.aiSpent || 0) + kop;
   if (auth.role !== "admin") u.aiBalance = (u.aiBalance || 0) - kop;
@@ -1254,11 +1257,13 @@ async function aiUsageAdd(env, auth, feature, usage) {
   return { ok: true, kop, cost: { sent: kopIn / 100, reply: kopOut / 100, total: kop / 100, balance: auth.role === "admin" ? null : u.aiBalance / 100 } };
 }
 
-// Токены из ответа сервиса: вход (вместе с кешем) и выход
+// Токены из ответа сервиса: вход отдельно — обычный, запись в кеш и чтение из кеша
 function usageOf(u) {
-  if (!u || typeof u !== "object") return { in: 0, out: 0 };
+  if (!u || typeof u !== "object") return { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
   return {
-    in: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+    in: u.input_tokens || 0,
+    cacheWrite: u.cache_creation_input_tokens || 0,
+    cacheRead: u.cache_read_input_tokens || 0,
     out: u.output_tokens || 0,
   };
 }
@@ -1393,6 +1398,27 @@ function planHintsText(hints) {
     + "они важнее общих указаний выше (кроме формы ответа):\n<rules>\n" + text + "\n</rules>";
 }
 
+/* ---------- кеш: повтор начала запроса в течение 5 минут — в 10 раз дешевле ---------- */
+
+const CACHE = { type: "ephemeral" };
+
+// Метка кеша на последний блок сообщения (строку превращаем в блок)
+function cacheLast(msg) {
+  const blocks = typeof msg.content === "string" ? [{ type: "text", text: msg.content }] : msg.content.slice();
+  blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: CACHE };
+  return { ...msg, content: blocks };
+}
+
+// Без меток — если посредник их не принимает
+function stripCache(payload) {
+  const strip = (b) => { if (!b || typeof b !== "object") return b; const { cache_control, ...rest } = b; return rest; };
+  return {
+    ...payload,
+    ...(Array.isArray(payload.system) ? { system: payload.system.map(strip) } : {}),
+    messages: payload.messages.map((m) => (Array.isArray(m.content) ? { ...m, content: m.content.map(strip) } : m)),
+  };
+}
+
 // turns — переписка в окне распознавания: что нейросеть ответила (план или
 // вопросы, JSON) и что мастер на это написал, по порядку; hints — правила мастера
 function planPayload(env, image, mediaType, turns, hints) {
@@ -1403,7 +1429,8 @@ function planPayload(env, image, mediaType, turns, hints) {
       mediaType === "application/pdf"
         ? { type: "document", source: { type: "base64", media_type: mediaType, data: image } }
         : { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
-      { type: "text", text: PLAN_PROMPT + planHintsText(hints) },
+      // До этого места запрос одинаковый при каждом уточнении — кешируется
+      { type: "text", text: PLAN_PROMPT + planHintsText(hints), cache_control: CACHE },
     ],
   }];
   (turns || []).forEach((t) => {
@@ -1413,6 +1440,7 @@ function planPayload(env, image, mediaType, turns, hints) {
     if (t.answer) messages.push({ role: "user", content: text });
     else if (last.role === "user") last.content = [].concat(last.content, [{ type: "text", text }]);
   });
+  if (messages.length > 1) messages[messages.length - 1] = cacheLast(messages[messages.length - 1]);
   // Для плана можно задать свою модель (ANTHROPIC_PLAN_MODEL), помощник останется на основной
   return { model: envValue(env, "ANTHROPIC_PLAN_MODEL") || anthropicModel(env), max_tokens: 8000, messages };
 }
@@ -1545,7 +1573,10 @@ const ASSISTANT_TOOL = {
 // Только чередующиеся реплики user/assistant с текстом разумной длины
 function sanitizeChat(raw) {
   if (!Array.isArray(raw) || !raw.length) return null;
-  const list = raw.slice(-20).map((m) => ({
+  // Последние 20 реплик, но окно сдвигаем блоками по 10 — между сдвигами
+  // начало переписки не меняется и берётся из кеша
+  const start = raw.length > 20 ? Math.ceil((raw.length - 20) / 10) * 10 : 0;
+  const list = raw.slice(start).map((m) => ({
     role: m && m.role === "assistant" ? "assistant" : "user",
     content: String((m && m.content) || "").trim(),
   }));
@@ -1578,11 +1609,11 @@ async function askAssistant(env, messages, context, onUsage) {
 // Ход рассуждений (thinking) — если посредник его не принимает (400),
 // повторяем запрос без него. Нажали «Стоп» — обрываем запрос к нейросети.
 async function streamAnthropic(env, payload, finish, errorPrefix, onUsage) {
-  const request = (thinking) => fetch(anthropicUrl(env), {
+  const request = (thinking, cache = true) => fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
     body: JSON.stringify({
-      ...payload,
+      ...(cache ? payload : stripCache(payload)),
       max_tokens: payload.max_tokens + (thinking ? 6000 : 0),
       stream: true,
       ...(thinking ? { thinking: { type: "adaptive", display: "summarized" } } : {}),
@@ -1592,6 +1623,10 @@ async function streamAnthropic(env, payload, finish, errorPrefix, onUsage) {
   if (res.status === 400) {
     await res.body?.cancel();
     res = await request(false);
+  }
+  if (res.status === 400) {
+    await res.body?.cancel();
+    res = await request(false, false);
   }
   // Ошибка или посредник ответил целиком, без потока — обычный ответ JSON
   if (!res.ok || !res.body || !/event-stream/i.test(res.headers.get("content-type") || "")) {
@@ -1667,9 +1702,14 @@ function assistantPayload(env, messages, context) {
   return {
     model: anthropicModel(env),
     max_tokens: 2000,
-    system: ASSISTANT_PROMPT + "\n\n<calc>\n" + context + "\n</calc>",
+    // Инструкция, данные калькулятора и переписка — с метками кеша: следующее
+    // сообщение повторяет всё это и платит за повтор 10%
+    system: [
+      { type: "text", text: ASSISTANT_PROMPT, cache_control: CACHE },
+      { type: "text", text: "<calc>\n" + context + "\n</calc>", cache_control: CACHE },
+    ],
     tools: [ASSISTANT_TOOL],
-    messages,
+    messages: messages.map((m, i) => (i === messages.length - 1 ? cacheLast(m) : m)),
   };
 }
 
