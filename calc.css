@@ -948,3 +948,5 @@ body.assistant-open .add-toast { z-index: 99; }
 .ai-hist-open small { color: var(--s-ink3); font-size: 12px; }
 .ai-hist-del { border: 0; border-left: 1px solid var(--s-line); background: none; color: var(--s-ink3); width: 44px; font-size: 14px; cursor: pointer; }
 .as-model { margin-top: 4px; color: var(--s-ink3); font-size: 11px; }
+.ai-rule { align-self: flex-end; margin-top: -4px; border: 0; background: none; color: var(--s-ink2); font-size: 12px; text-decoration: underline; cursor: pointer; padding: 2px 4px; }
+.ai-rule-done { text-decoration: none; color: var(--s-ok); cursor: default; }

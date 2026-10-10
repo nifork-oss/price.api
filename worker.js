@@ -673,8 +673,10 @@ const handler = {
         if (!image || image.length > 14 * 1024 * 1024) return json({ error: "Картинка не передана или слишком большая" }, 400);
         try {
           const turns = planTurns(body.turns);
-          if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns), parsePlanReply, "Не удалось распознать план: ");
-          const result = await recognizePlan(env, image, mediaType, turns);
+          // Правила мастера из профиля (страница берёт их из своих данных)
+          const hints = typeof body.hints === "string" ? body.hints : "";
+          if (body.stream) return await streamAnthropic(env, planPayload(env, image, mediaType, turns, hints), parsePlanReply, "Не удалось распознать план: ");
+          const result = await recognizePlan(env, image, mediaType, turns, hints);
           return json(result);
         } catch (e) {
           return json({ error: "Не удалось распознать план: " + (e && e.message ? e.message : e) }, 502);
@@ -778,8 +780,8 @@ const handler = {
         // работала и в режиме "своя компания", где полный список
         // пользователей не приходит вовсе (приватность).
         const self = selfUser
-          ? { login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "" }
-          : { login: auth.login, email: "", companyName: "", publicPriceEnabled: false, pieNote: "", invoiceNote: "" };
+          ? { login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "" }
+          : { login: auth.login, email: "", companyName: "", publicPriceEnabled: false, pieNote: "", invoiceNote: "", planHints: "" };
         // Режим "своя компания" — полностью личное пространство: свой
         // прайс-лист, свои объекты и своя история, невидимые админу
         // (кроме сводной статистики через /stats). Общий прайс, общие
@@ -846,6 +848,7 @@ const handler = {
           if (typeof incoming.self.publicPriceEnabled === "boolean") selfUser.publicPriceEnabled = incoming.self.publicPriceEnabled;
           if (typeof incoming.self.pieNote === "string") selfUser.pieNote = incoming.self.pieNote.trim().slice(0, 1000);
           if (typeof incoming.self.invoiceNote === "string") selfUser.invoiceNote = incoming.self.invoiceNote.trim().slice(0, 1000);
+          if (typeof incoming.self.planHints === "string") selfUser.planHints = incoming.self.planHints.trim().slice(0, PLAN_HINTS_MAX);
           if (incoming.self.password) selfUser.pass = await hashPassword(incoming.self.password);
           // Логин сменился — личное пространство "своей компании" переносим
           // на новый логин-ключ, иначе данные "потеряются" из вида.
@@ -872,7 +875,7 @@ const handler = {
           await writeBin(env, record);
           const newToken = await signToken({ login: newLogin, role: auth.role, mode: auth.mode, exp: Date.now() + TOKEN_LIFETIME_MS }, env);
           return json({
-            self: { login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "" },
+            self: { login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "" },
             token: newToken,
             rev: newRev,
           });
@@ -1169,9 +1172,19 @@ const PLAN_PROMPT = `Это обмерный план квартиры или д
 "warnings":["..."]}
 type — одно из: "window", "door", "balcony" (для balcony width_m/height_m — окно, door_width_m/door_height_m — дверь).`;
 
+// Правила мастера к распознаванию (профиль, «Запомнить как правило»)
+const PLAN_HINTS_MAX = 3000;
+
+function planHintsText(hints) {
+  const text = String(hints || "").trim().slice(0, PLAN_HINTS_MAX);
+  if (!text) return "";
+  return "\n\nПравила этого мастера — как он чертит планы и что ему важно. Учитывай их обязательно, "
+    + "они важнее общих указаний выше (кроме формы ответа):\n<rules>\n" + text + "\n</rules>";
+}
+
 // turns — переписка в окне распознавания: что нейросеть ответила (план или
-// вопросы, JSON) и что мастер на это написал, по порядку
-function planPayload(env, image, mediaType, turns) {
+// вопросы, JSON) и что мастер на это написал, по порядку; hints — правила мастера
+function planPayload(env, image, mediaType, turns, hints) {
   const messages = [{
     role: "user",
     content: [
@@ -1179,7 +1192,7 @@ function planPayload(env, image, mediaType, turns) {
       mediaType === "application/pdf"
         ? { type: "document", source: { type: "base64", media_type: mediaType, data: image } }
         : { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
-      { type: "text", text: PLAN_PROMPT },
+      { type: "text", text: PLAN_PROMPT + planHintsText(hints) },
     ],
   }];
   (turns || []).forEach((t) => {
@@ -1207,8 +1220,8 @@ function planTurns(raw) {
   }).filter((t) => t.note);
 }
 
-async function recognizePlan(env, image, mediaType, turns) {
-  const payload = planPayload(env, image, mediaType, turns);
+async function recognizePlan(env, image, mediaType, turns, hints) {
+  const payload = planPayload(env, image, mediaType, turns, hints);
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),

@@ -308,7 +308,7 @@ const res = await fetch(`${WORKER_URL}/recognize-plan`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
 body: JSON.stringify({ image: target.image, mediaType: target.mediaType, stream: true,
-turns: aiTurns(target.runs) }),
+turns: aiTurns(target.runs), hints: aiPlanHints() }),
 signal: target.abort.signal
 });
 let data = null;
@@ -358,6 +358,31 @@ const answer = prev && (prev.result || prev.questions) ? JSON.stringify(prev.res
 turns.push({ note: r.note, answer });
 });
 return turns;
+}
+
+// Правила мастера из профиля — уходят нейросети с каждым распознаванием
+function aiPlanHints() {
+return String((cloudData.self && cloudData.self.planHints) || '');
+}
+
+function aiPlanHintsCount() {
+return aiPlanHints().split('\n').filter(l => l.trim()).length;
+}
+
+// Уточнение мастера → правило на будущее (можно переписать общими словами)
+async function rememberAiRule(ri) {
+const run = aiTarget && aiTarget.runs[ri];
+if (!run || !run.note) return;
+const rule = prompt('Правило для следующих распознаваний. Можно переписать общими словами, например «короба у стояков — отдельными стенами»:', run.note);
+if (rule == null || !rule.trim()) return;
+const line = rule.trim().replace(/\s*\n\s*/g, ' ');
+const text = (aiPlanHints().trim() ? aiPlanHints().trim() + '\n' : '') + line;
+if (text.length > 3000) { alert('Правил слишком много (до 3000 знаков). Сократите их в Профиле.'); return; }
+if (!(await savePlanHints(text))) return;
+run.remembered = true;
+saveAiChat(aiTarget);
+renderAiPanel();
+showAddToast('Правило запомнено — оно в Профиле');
 }
 
 function aiBusy() {
@@ -420,8 +445,15 @@ const showReview = !busy && last && last.result;
 let html = '<div class="mp-body-inner ai-chat">';
 if (aiTarget.preview) html += `<img class="ai-preview" src="${aiTarget.preview}" alt="План">`;
 if (aiTarget.sentAs) html += `<div class="ai-sent">Отправлено ${escapeHtml(aiTarget.sentAs)}</div>`;
+const rules = aiPlanHintsCount();
+if (rules) html += `<div class="ai-sent">Учитываю ваши правила: ${rules} (изменить — в Профиле)</div>`;
 aiTarget.runs.forEach((run, ri) => {
-if (run.note) html += `<div class="as-msg as-user ai-note"><div class="as-text">${escapeHtml(run.note)}</div></div>`;
+if (run.note) {
+html += `<div class="as-msg as-user ai-note"><div class="as-text">${escapeHtml(run.note)}</div></div>`;
+if (run.done && !run.error) html += run.remembered
+? '<div class="ai-rule ai-rule-done">Запомнено как правило</div>'
+: `<button type="button" class="ai-rule" onclick="rememberAiRule(${ri})">Запомнить как правило</button>`;
+}
 const live = !run.done;
 const rooms = run.result ? run.result.rooms.map(r => r.name) : aiFoundRooms(run.text);
 html += `<div class="as-msg as-bot ai-run${run.error ? ' as-error' : ''}">`;

@@ -337,3 +337,14 @@ test('план: своя модель из ANTHROPIC_PLAN_MODEL', async () => {
     assert.strictEqual(sent[0].model, 'claude-opus-4-8');
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('план: правила мастера уходят нейросети, без правил — ничего лишнего', async () => {
+  const ok = [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: PLAN_JSON }] }) }];
+  const withHints = await callPlan({ hints: 'Размеры всегда в мм\nКороба — отдельными стенами' }, ok);
+  const text = withHints.sent[0].messages[0].content[1].text;
+  assert.match(text, /<rules>\nРазмеры всегда в мм\nКороба — отдельными стенами\n<\/rules>/);
+  const plain = await callPlan({}, ok);
+  assert.ok(!plain.sent[0].messages[0].content[1].text.includes('<rules>'));
+  const long = await callPlan({ hints: 'х'.repeat(5000) }, ok);
+  assert.ok(long.sent[0].messages[0].content[1].text.length < withHints.sent[0].messages[0].content[1].text.length + 3100);
+});

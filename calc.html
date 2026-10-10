@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261010-8. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261010-9. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=ec3fea02">
+<link rel="stylesheet" href="calc.css?v=0af7a70b">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -461,6 +461,10 @@
 <textarea id="profInvoiceNote" rows="3" style="width:100%; box-sizing:border-box; border:1px solid #cfd5dd; border-radius:8px; padding:8px; font-size:13px;" placeholder="Например: работы за погонный метр приравниваются к квадратному..."></textarea>
 </div>
 <div class="form-group">
+<label>Правила для распознавания плана (каждое с новой строки — нейросеть учитывает их в каждом распознавании)</label>
+<textarea id="profPlanHints" rows="4" maxlength="3000" style="width:100%; box-sizing:border-box; border:1px solid #cfd5dd; border-radius:8px; padding:8px; font-size:13px;" placeholder="Например:&#10;Размеры на моих планах всегда в мм&#10;Короба у стояков — отдельными стенами&#10;Высоту потолка бери из штампа"></textarea>
+</div>
+<div class="form-group">
 <label>Пароль</label>
 <input type="text" id="profPass" placeholder="Новый пароль" autocomplete="new-password">
 <div style="font-size:11px; color:#8d97a5; margin-top:4px;">Оставьте пустым, если не меняете пароль.</div>
@@ -595,7 +599,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=4549d979"></script>
+<script src="calc-app.js?v=24706186"></script>
 
 <script src="calc-measure.js?v=2c8fe45d"></script>
 
@@ -626,7 +630,7 @@
 
 <script src="calc-plan.js?v=52b816b0"></script>
 
-<script src="calc-import.js?v=9e5012e7"></script>
+<script src="calc-import.js?v=3fad9ddd"></script>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
 <div class="update-banner-text">Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>

@@ -1921,6 +1921,7 @@ document.getElementById('profLogin').value = self.login || currentUser;
 document.getElementById('profEmail').value = self.email || '';
 document.getElementById('profCompanyName').value = self.companyName || '';
 document.getElementById('profInvoiceNote').value = self.invoiceNote || '';
+document.getElementById('profPlanHints').value = self.planHints || '';
 document.getElementById('profPass').value = '';
 // файл прайса: у «своей компании» — её прайс, у админа в обычном режиме — общий
 const canPriceFile = isCompanyMode() || isCurrentAdmin();
@@ -1941,6 +1942,7 @@ const newL = document.getElementById('profLogin').value.trim();
 const newEmail = document.getElementById('profEmail').value.trim();
 const newCompanyName = document.getElementById('profCompanyName').value.trim();
 const newInvoiceNote = document.getElementById('profInvoiceNote').value.trim();
+const newPlanHints = document.getElementById('profPlanHints').value.trim();
 const newP = document.getElementById('profPass').value.trim();
 if (!newL) {
 alert('Заполните логин!');
@@ -1950,13 +1952,23 @@ try {
 const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { login: newL, email: newEmail, companyName: newCompanyName, invoiceNote: newInvoiceNote, password: newP || undefined } })
+body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { login: newL, email: newEmail, companyName: newCompanyName, invoiceNote: newInvoiceNote, planHints: newPlanHints, password: newP || undefined } })
 });
 const result = await res.json();
 if (!res.ok) {
 alert(result.error || 'Не удалось сохранить профиль');
 return;
 }
+applySelfResult(result);
+document.getElementById('profPass').value = '';
+alert('Данные профиля обновлены!');
+} catch (e) {
+alert('Ошибка сети — не удалось сохранить профиль');
+}
+}
+
+// Ответ сервера на сохранение своего профиля: новые данные, версия и токен
+function applySelfResult(result) {
 cloudData.self = result.self;
 if (typeof result.rev === 'number') cloudRev = result.rev;
 if (result.token) authToken = result.token;
@@ -1965,10 +1977,23 @@ localStorage.setItem('authToken', authToken);
 localStorage.setItem('currentUser', currentUser);
 if (isCurrentAdmin()) localStorage.setItem('isAdminAuthorized', 'true');
 document.getElementById('userBadge').textContent = currentUser + (isCompanyMode() ? ' · своя компания' : '');
-document.getElementById('profPass').value = '';
-alert('Данные профиля обновлены!');
+}
+
+// Только правила распознавания плана — из окна распознавания («Запомнить как правило»)
+async function savePlanHints(text) {
+try {
+const res = await fetch(`${WORKER_URL}/appdata`, {
+method: "PUT",
+headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
+body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { planHints: text } })
+});
+const result = await res.json().catch(() => null);
+if (!res.ok || !result || !result.self) { alert((result && result.error) || 'Не удалось сохранить правило'); return false; }
+applySelfResult(result);
+return true;
 } catch (e) {
-alert('Ошибка сети — не удалось сохранить профиль');
+alert('Ошибка сети — правило не сохранилось');
+return false;
 }
 }
 
