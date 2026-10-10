@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261010-20. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261010-21. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=6628b0a6">
+<link rel="stylesheet" href="calc.css?v=5d35ff95">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -196,6 +196,15 @@
 <input type="file" id="aiAttachFile" accept="image/*" style="display:none" onchange="handleAiAttach(this)">
 <input type="file" id="aiAttachPdf" accept="application/pdf,.pdf" style="display:none" onchange="handleAiAttach(this)">
 <input type="file" id="ulFilePdf" accept="application/pdf,.pdf" style="display:none" onchange="handleUnderlayFile(this)">
+<div class="measure-panel" id="flatPanel" role="dialog" aria-modal="true" aria-label="План квартиры">
+<div class="mp-head"><div class="mp-head-inner">
+<div class="mp-head-row">
+<div class="mp-title">План квартиры</div>
+<button type="button" class="mp-head-btn mp-close" onclick="closeFlatPlan()" aria-label="Закрыть">✕</button>
+</div>
+</div></div>
+<div class="mp-body" id="flatBody"></div>
+</div>
 <div class="measure-panel" id="aiPanel" role="dialog" aria-modal="true" aria-label="Распознанный план">
 <div class="mp-head"><div class="mp-head-inner">
 <div class="mp-head-row">
@@ -617,9 +626,9 @@
 
 <script src="calc-app.js?v=ed64f7f2"></script>
 
-<script src="calc-measure.js?v=2c8fe45d"></script>
+<script src="calc-measure.js?v=6b7bc20d"></script>
 
-<script src="calc-rooms.js?v=6545cdf2"></script>
+<script src="calc-rooms.js?v=aaf600d9"></script>
 <script src="calc-wpview.js?v=ec762275"></script>
 
 <script src="calc-ruler.js?v=39bf04eb"></script>
@@ -647,7 +656,8 @@
 
 <script src="calc-plan.js?v=52b816b0"></script>
 
-<script src="calc-import.js?v=0ed7e157"></script>
+<script src="calc-flat.js?v=c71683a1"></script>
+<script src="calc-import.js?v=c241a1bc"></script>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
 <div class="update-banner-text">Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>
