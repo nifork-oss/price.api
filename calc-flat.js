@@ -1568,18 +1568,20 @@ d = Math.min(d, Math.hypot(x - ax - t * dx, y - ay - t * dy));
 }
 return d;
 };
-const ok = new Uint8Array(W * H);
+const ok = new Uint8Array(W * H), out = new Uint8Array(W * H), far = new Uint8Array(W * H);
 for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
 const i = y * W + x;
 if (wall[i]) continue;
 const px = x + x0 + 0.5, py = y + y0 + 0.5;
-if (inside(px, py) || segD(px, py) <= margin) ok[i] = 1;
+if (inside(px, py)) { ok[i] = 1; continue; }
+const d = segD(px, py);
+if (d <= margin) { ok[i] = 1; out[i] = 1; if (d >= margin - 2) far[i] = 1; }
 }
 it.openings.forEach(o => {
 const sg = flatOpeningSeg(it, o);
 if (!sg) return;
 const step = 0.5 / ppm;
-for (let t = 0; t <= sg.w; t += step) for (let d = 0.01; d <= 0.45; d += step) {
+for (let t = -0.1; t <= sg.w + 0.1; t += step) for (let d = 0.01; d <= 0.45; d += step) {   // с запасом 10 см: проём на чертеже бывает шире
 // наружу — налево от стены (комната — справа)
 const [px, py] = toPx([sg.x + sg.ux * t + sg.uy * d, sg.y + sg.uy * t - sg.ux * d]);
 const x = Math.floor(px) - x0, y = Math.floor(py) - y0;
@@ -1605,6 +1607,25 @@ if (a < 0 || b < 0 || a >= W || b >= H) return;
 const j = b * W + a;
 if (ok[j] && !reg[j]) { reg[j] = 1; stack.push(j); }
 });
+}
+// за контуром оставляем только закрытые стенами куски (ниши): дошёл до края 40 см — это
+// утечка через проём в соседнюю комнату или на улицу, такой кусок не берём
+const seen = new Uint8Array(W * H);
+for (let s0 = 0; s0 < W * H; s0++) {
+if (!reg[s0] || !out[s0] || seen[s0]) continue;
+const comp = [s0], st = [s0];
+let leak = false;
+seen[s0] = 1;
+while (st.length) {
+const i = st.pop(), x = i % W, y = (i - x) / W;
+if (far[i]) leak = true;
+[[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].forEach(([a, b]) => {
+if (a < 0 || b < 0 || a >= W || b >= H) return;
+const j = b * W + a;
+if (reg[j] && out[j] && !seen[j]) { seen[j] = 1; st.push(j); comp.push(j); }
+});
+}
+if (leak) comp.forEach(i => { reg[i] = 0; });
 }
 // касания уголками — закрываем, чтобы край был одной линией
 const on = (x, y) => x >= 0 && y >= 0 && x < W && y < H && reg[y * W + x] === 1;
