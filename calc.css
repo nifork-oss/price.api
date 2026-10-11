@@ -1043,3 +1043,11 @@ body.assistant-open .add-toast { z-index: 99; }
 .flat-h-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; font-size: 14px; }
 .flat-h-row input { width: 90px; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 8px; font: inherit; text-align: right; }
 .flat-h-all .measure-open-btn { margin-bottom: 0; }
+.flat-viewbox { position: relative; }
+.flat-bar { position: absolute; z-index: 2; background: rgba(20, 24, 31, 0.08); border-radius: 12px; touch-action: none; }
+.flat-bar-x { left: 6px; right: 34px; bottom: 4px; height: 22px; }
+.flat-bar-y { top: 6px; bottom: 34px; right: 4px; width: 22px; }
+.flat-bar > div { position: absolute; background: rgba(20, 24, 31, 0.45); border-radius: 12px; }
+.flat-bar-x > div { top: 3px; bottom: 3px; }
+.flat-bar-y > div { left: 3px; right: 3px; }
+.flat-bar.on > div { background: #e8a900; }
