@@ -152,6 +152,7 @@ const ul = opt.underlay;
 if (ul) {
 const uh = ul.w * ul.ar, tr = `rotate(${ul.rot || 0} ${ul.x + ul.w / 2} ${ul.y + uh / 2})`;
 under = `<image id="flatUlImg" href="${ul.href}" x="${ul.x}" y="${ul.y}" width="${ul.w}" height="${uh}" preserveAspectRatio="none" opacity="${ul.op || 0.45}" transform="${tr}" pointer-events="none"/>`
++ (ul.walls ? `<image href="${ul.walls}" x="${ul.x}" y="${ul.y}" width="${ul.w}" height="${uh}" preserveAspectRatio="none" transform="${tr}" pointer-events="none"/>` : '')
 + (ul.adjust ? `<rect id="flatUlFrame" x="${ul.x}" y="${ul.y}" width="${ul.w}" height="${uh}" fill="none" stroke="#e8a900" stroke-width="${fs * 0.12}" stroke-dasharray="${fs * 0.5} ${fs * 0.3}" transform="${tr}" pointer-events="none"/>` : '');
 }
 const body = items.map(r => {
@@ -674,7 +675,7 @@ function flatUlId() { return 'flat_' + flatObjectId; }
 function flatUlOpt() {
 const u = typeof getUnderlay === 'function' ? getUnderlay(flatUlId()) : null;
 if (!u || (u.hidden && !flatUlAdjust)) return null;
-return { ...u, href: underlayHref(flatUlId(), u.src), adjust: !!flatUlAdjust };
+return { ...u, href: underlayHref(flatUlId(), u.src), adjust: !!flatUlAdjust, walls: flatWallsView && flatWallsView.src === u.src ? flatWallsView.url : null };
 }
 
 function flatUlBarHtml() {
@@ -1645,6 +1646,10 @@ x[i] = dr * dr + dg * dg + db * db < 4900 ? 1 : 0;      // цвет ближе 7
 const rc = Math.max(1, Math.round(sm.r * ppm));
 keepLong(dil(ero(ero(dil(x, rc), rc), k), k), 0.4 * ppm, m, base);
 });
+// щели между стенами до ~10 см (перегородка нарисована чуть не до стены, стык линий) — закрываем,
+// иначе заливка пола проходит в щель и перегородка оказывается «островом» внутри комнаты
+const rcl = Math.max(1, Math.round(0.05 * ppm));
+m = ero(dil(m, rcl), rcl);
 g.walls = m;
 return m;
 }
@@ -1657,6 +1662,25 @@ try { const v = JSON.parse(localStorage.getItem(flatWallSamplesKey()) || '[]'); 
 function flatWallSamplesSet(list) {
 try { localStorage.setItem(flatWallSamplesKey(), JSON.stringify(list)); } catch (e) { /* пусто */ }
 if (flatUlGray) delete flatUlGray.walls;                       // пересчитать стены
+if (flatWallsView) { flatWallsView = null; setTimeout(flatWallsToggle, 0); }
+}
+
+// «Что сайт считает стенами»: стены чертежа — полупрозрачной заливкой поверх подложки (вкл/выкл)
+let flatWallsView = null;   // { src, url }
+async function flatWallsToggle() {
+if (flatWallsView) { flatWallsView = null; renderFlatPlan(); return; }
+const mp = await flatUlMapping();
+if (!mp) return;
+const walls = flatUlWalls(mp), W = mp.gray.w, H = mp.gray.h;
+const c = document.createElement('canvas');
+c.width = W; c.height = H;
+const ctx = c.getContext('2d');
+const img = ctx.createImageData(W, H);
+for (let i = 0, j = 0; i < W * H; i++, j += 4) if (walls[i]) { img.data[j] = 0; img.data[j + 1] = 150; img.data[j + 2] = 255; img.data[j + 3] = 140; }
+ctx.putImageData(img, 0, 0);
+flatWallsView = { src: mp.u.src, url: c.toDataURL('image/png') };
+renderFlatPlan();
+showAddToast('Синим — что сайт считает стенами. Чего нет синим — того «Обвести» не увидит: покажите такую стену («Показать стену»)');
 }
 
 // Меню «Подгонка» в правке и «Ещё» на плане — чтобы не было стены из кнопок
@@ -1670,6 +1694,7 @@ openSheet('Подгонка', [
 ...(sel ? [{ icon: '✏️', label: 'Обвести эту комнату по чертежу (ниши, выступы)', onClick: () => flatTraceUnderlay() }] : []),
 null,
 { icon: '👆', label: 'Показать стену на чертеже', onClick: () => flatWallPickStart() },
+{ icon: '👁️', label: flatWallsView ? 'Скрыть найденные стены' : 'Что сайт считает стенами', onClick: () => flatWallsToggle() },
 ...(n ? [{ icon: '🧹', label: `Забыть образцы стен (${n})`, onClick: () => flatWallSamplesClear() }] : []),
 ] : []),
 ]);
