@@ -429,7 +429,7 @@ ${getUnderlay(flatUlId()) ? '<button type="button" class="mp-head-btn" onclick="
 <button type="button" class="mp-head-btn" onclick="flatEditCancel()">Отмена</button>
 <button type="button" class="mp-btn mp-btn-primary" onclick="flatEditSave()">Сохранить</button>
 </div>
-<div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — точная длина стены или колонна на ней, на кружок — колонна в углу. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}${getUnderlay(flatUlId()) ? ' «Прилепить к подложке» — края ' + (ed.sel ? 'этой комнаты' : 'всех комнат') + ' встанут на стены чертежа.' : ''}</div>`
+<div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — точная длина стены, колонна или ниша на ней, на кружок — колонна в углу. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}${getUnderlay(flatUlId()) ? ' «Прилепить к подложке» — края ' + (ed.sel ? 'этой комнаты' : 'всех комнат') + ' встанут на стены чертежа.' : ''}</div>`
 : `<div class="ai-hint">Нажмите на помещение — откроется его замер. После правки план обновится.${rest ? ` Помещений без места на плане: ${rest} (добавлены вручную).` : ''}</div>
 ${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button><button type="button" class="measure-open-btn" onclick="flatScaleStart()">Масштаб по стене</button><button type="button" class="measure-open-btn" onclick="flatOpsStart()">Двери и проёмы</button><button type="button" class="measure-open-btn" onclick="flatHStart()">Высоты стен, окон и дверей</button>'}`;
 const oldWrap = document.getElementById('flatWrap');
@@ -1644,6 +1644,7 @@ function flatWallMenu(i) {
 openSheet(`Стена ${i + 1}`, [
 { icon: '📏', label: 'Точная длина', onClick: () => flatAskWall(i) },
 { icon: '▭', label: 'Обойти колонну (выступ на стене)', onClick: () => flatColumnWall(i) },
+{ icon: '⊔', label: 'Ниша в стене (углубление)', onClick: () => flatColumnWall(i, true) },
 ]);
 }
 
@@ -1664,7 +1665,7 @@ return [v[0], v[1] || v[0]];
 
 // Черновик комнаты с новыми углами: проёмы и высоты стен — на новые номера стен.
 // map(j, o) → { wall, start } для проёма o на старой стене j; newH(j) — номер стены для высоты
-function flatInsertCorners(id, pts, idx, wallOf, heights) {
+function flatInsertCorners(id, pts, idx, wallOf, heights, what = 'Колонна обойдена') {
 const room = flatRooms().find(r => r.id === id);
 const it = flatItems().find(r => r.id === id);
 if (!room || !it) return;
@@ -1683,20 +1684,21 @@ flatPushUndo();
 flatEdit.draft[id] = pts.map(p => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]);
 flatEdit.extra[id] = { openings, wh: heights(ex.wh), map: ex.map.map(k => (k >= 0 ? idx(k) : k)) };   // map — старый номер стены замера → новый
 renderFlatPlan();
-showAddToast('Колонна обойдена. Подгоните её стены по чертежу (тяните квадратики или «Прилепить к подложке») и «Сохранить»');
+showAddToast(`${what}. Подгоните её стены по чертежу (тяните квадратики или «Прилепить к подложке») и «Сохранить»`);
 }
 
-// Колонна посреди стены i: прямоугольный выступ внутрь комнаты (ширина × глубина)
-function flatColumnWall(i) {
+// Колонна посреди стены i: прямоугольный выступ внутрь комнаты (ширина × глубина);
+// niche — наоборот, углубление в стену наружу
+function flatColumnWall(i, niche) {
 const id = flatEdit && flatEdit.sel;
 const pts = id && flatPts(id);
 if (!pts) return;
 const n = pts.length, a = pts[i], b = pts[(i + 1) % n];
 const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-const sz = flatAskSize('Колонна: ширина вдоль стены и насколько выступает, мм (например «400 300»)', '400 300');
+const sz = flatAskSize(niche ? 'Ниша: ширина вдоль стены и глубина, мм (например «600 200»)' : 'Колонна: ширина вдоль стены и насколько выступает, мм (например «400 300»)', niche ? '600 200' : '400 300');
 if (!sz || !(L > 0)) return;
-const [W, D] = sz;
-if (W >= L - 0.02) { alert('Колонна шире стены.'); return; }
+const W = sz[0], D = niche ? -sz[1] : sz[1];
+if (W >= L - 0.02) { alert(niche ? 'Ниша шире стены.' : 'Колонна шире стены.'); return; }
 const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L, nx = -uy, ny = ux;   // внутрь комнаты — направо от стены
 const s0 = (L - W) / 2;
 const P1 = [a[0] + ux * s0, a[1] + uy * s0], P2 = [P1[0] + nx * D, P1[1] + ny * D];
@@ -1705,7 +1707,8 @@ const out = pts.slice(0, i + 1).concat([P1, P2, P3, P4], pts.slice(i + 1));
 flatInsertCorners(id, out, j => (j > i ? j + 4 : j),
 (j, st, w) => (j < i ? { wall: j, start: st } : j > i ? { wall: j + 4, start: st }
 : st + w / 2 <= s0 + W / 2 ? { wall: i, start: Math.min(st, s0 - w) } : { wall: i + 4, start: Math.max(0, st - s0 - W) }),
-wh => { const h = wh.slice(); h.length = n; const v = h[i] || ''; h.splice(i + 1, 0, v, v, v, v); return h.map(x => x || ''); });
+wh => { const h = wh.slice(); h.length = n; const v = h[i] || ''; h.splice(i + 1, 0, v, v, v, v); return h.map(x => x || ''); },
+niche ? 'Ниша добавлена' : 'Колонна обойдена');
 }
 
 // Колонна в углу i (между стенами i−1 и i): вырез X вдоль стены до угла и Y вдоль стены после
