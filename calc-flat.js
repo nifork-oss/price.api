@@ -427,15 +427,17 @@ const scroll = oldWrap ? [oldWrap.scrollLeft, oldWrap.scrollTop] : null;
 body.innerHTML = `<div class="mp-body-inner">
 ${top}
 <div class="flat-zoom"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><span>Площадь: <b>${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²</b></span><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button></div>
-<div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
+<div class="flat-viewbox"><div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatHMode ? { pickWalls: 'flatHWall', pickOps: true, onTap: 'flatHRoom', heights: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatOpsMode ? { pickWalls: 'flatOpsWall', pickOps: 'flatOpsRemove', underlay: flatUlOpt(), view: flatViewOf(items) }
 : { onTap: flatMergeFrom ? 'flatMergeTap' : 'flatOpenRoom', sel: flatMergeFrom || undefined, underlay: flatUlOpt(), view: flatViewOf(items) })}</div></div>
+<div class="flat-bar flat-bar-x" id="flatBarX"><div></div></div><div class="flat-bar flat-bar-y" id="flatBarY"><div></div></div></div>
 ${ed || flatScaleMode || flatOpsMode || flatHMode || flatMergeFrom ? '' : flatUlBarHtml()}
 </div>`;
 flatSizeInner();
 const wrap = document.getElementById('flatWrap');
 if (scroll && wrap) { wrap.scrollLeft = scroll[0]; wrap.scrollTop = scroll[1]; }
+flatBindBars();
 if (ed) flatBindEdit();
 else if (flatUlAdjust) flatBindUnderlay();
 else if (flatOpsMode) flatBindOps();
@@ -476,6 +478,53 @@ const W = wrap.clientWidth - 12, H = wrap.clientHeight - 12;
 const base = Math.max(100, Math.min(W, H * vb.width / vb.height));
 inner.style.width = Math.round(base * flatZoom) + 'px';
 inner.style.margin = '0 auto';
+flatBarsUpdate();
+}
+
+// Полосы прокрутки снизу и справа: тянуть план целиком, когда он приближен
+// (пальцем по плану в правке двигаются комнаты, а не план)
+function flatBarsUpdate() {
+const wrap = document.getElementById('flatWrap');
+if (!wrap) return;
+[['flatBarX', wrap.scrollWidth, wrap.clientWidth, wrap.scrollLeft, 'width', 'left', 'offsetWidth'],
+['flatBarY', wrap.scrollHeight, wrap.clientHeight, wrap.scrollTop, 'height', 'top', 'offsetHeight']].forEach(([id, sw, cw, sp, size, pos, off]) => {
+const bar = document.getElementById(id);
+if (!bar) return;
+const on = sw > cw + 2;
+bar.style.display = on ? '' : 'none';
+if (!on) return;
+const track = bar[off], th = Math.max(40, track * cw / sw);
+const thumb = bar.firstElementChild;
+thumb.style[size] = th + 'px';
+thumb.style[pos] = ((track - th) * sp / (sw - cw)) + 'px';
+});
+}
+
+function flatBindBars() {
+const wrap = document.getElementById('flatWrap');
+if (!wrap) return;
+wrap.addEventListener('scroll', flatBarsUpdate, { passive: true });
+[['flatBarX', 'scrollLeft', 'scrollWidth', 'clientWidth', 'clientX', 'offsetWidth', 'left'],
+['flatBarY', 'scrollTop', 'scrollHeight', 'clientHeight', 'clientY', 'offsetHeight', 'top']].forEach(([id, sp, sw, cw, cx, off, side]) => {
+const bar = document.getElementById(id);
+if (!bar) return;
+bar.addEventListener('pointerdown', (e) => {
+e.preventDefault(); e.stopPropagation();
+const thumb = bar.firstElementChild;
+const k = () => (wrap[sw] - wrap[cw]) / Math.max(1, bar[off] - thumb[off]);   // пикселей плана на пиксель полосы
+// нажали мимо ползунка — он встаёт под палец
+if (e.target !== thumb) wrap[sp] = (e[cx] - bar.getBoundingClientRect()[side] - thumb[off] / 2) * k();
+const p0 = e[cx], s0 = wrap[sp];
+try { bar.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ }
+bar.classList.add('on');
+const move = (ev) => { wrap[sp] = s0 + (ev[cx] - p0) * k(); };
+const up = () => { bar.classList.remove('on'); bar.removeEventListener('pointermove', move); bar.removeEventListener('pointerup', up); bar.removeEventListener('pointercancel', up); };
+bar.addEventListener('pointermove', move);
+bar.addEventListener('pointerup', up);
+bar.addEventListener('pointercancel', up);
+});
+});
+flatBarsUpdate();
 }
 
 // Масштаб с сохранением точки под (cx, cy) — координаты внутри окна
