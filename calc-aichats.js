@@ -98,6 +98,16 @@ if (d.toDateString() === today.toDateString()) return 'сегодня ' + time;
 return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {}) }) + ' ' + time;
 }
 
+// Время сообщения в чате: сегодня — «11:56», раньше — с датой; у ответа — сколько он шёл
+function aiMsgTimeHtml(at, from) {
+if (!at) return '';
+const d = new Date(at);
+const time = d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : aiChatDate(at);
+const sec = from && at > from ? Math.round((at - from) / 1000) : 0;
+const took = sec ? ` · ${sec < 60 ? sec + ' с' : Math.floor(sec / 60) + ' мин' + (sec % 60 ? ' ' + (sec % 60) + ' с' : '')}` : '';
+return `<div class="as-time">${time}${took}</div>`;
+}
+
 // Список чатов: onOpen / onDelete — имена глобальных функций, получают id
 function aiChatsListHtml(list, onOpen, onDelete) {
 return '<div class="ai-hist">' + list.map(m => `

@@ -402,7 +402,7 @@ renderAiPanel();
 async function runAiRecognition(note, attach) {
 const target = aiTarget;
 if (!target || !target.image || aiBusy()) return;
-const run = { note, thinking: '', text: '', status: 'Отправляю в нейросеть…', ...(attach ? { attach } : {}) };
+const run = { note, thinking: '', text: '', status: 'Отправляю в нейросеть…', at: Date.now(), ...(attach ? { attach } : {}) };
 target.runs.push(run);
 target.abort = new AbortController();
 renderAiPanel();
@@ -467,6 +467,7 @@ run.error = 'Ошибка: ' + (err && err.message ? err.message : err);
 }
 }
 run.done = true;
+run.doneAt = Date.now();
 target.abort = null;
 saveAiChat(target);
 if (aiTarget === target) renderAiPanel();
@@ -792,7 +793,7 @@ const rules = aiPlanHintsCount();
 if (rules) html += `<div class="ai-sent">Учитываю ваши правила: ${rules} (изменить — в Профиле)</div>`;
 aiTarget.runs.forEach((run, ri) => {
 if (run.note) {
-html += `<div class="as-msg as-user ai-note">${run.attach ? `<img class="ai-attach-thumb" src="${run.attach.preview}" alt="Чертёж"><div class="ai-attach-name">📎 ${escapeHtml(run.attach.name || 'чертёж')}</div>` : ''}<div class="as-text">${escapeHtml(run.note)}</div></div>`;
+html += `<div class="as-msg as-user ai-note">${run.attach ? `<img class="ai-attach-thumb" src="${run.attach.preview}" alt="Чертёж"><div class="ai-attach-name">📎 ${escapeHtml(run.attach.name || 'чертёж')}</div>` : ''}<div class="as-text">${escapeHtml(run.note)}</div>${aiMsgTimeHtml(run.at)}</div>`;
 if (run.done && !run.error) html += run.remembered
 ? '<div class="ai-rule ai-rule-done">Запомнено как правило</div>'
 : `<button type="button" class="ai-rule" onclick="rememberAiRule(${ri})">Запомнить как правило</button>`;
@@ -817,6 +818,7 @@ else if (live) html += `<div class="as-status">${escapeHtml(run.status)}</div>`;
 else if (run.result && ri < aiTarget.runs.length - 1) html += '<div class="as-status">заменено следующим вариантом</div>';
 if (run.cost && !live) html += paidCostHtml(run.cost);
 if (run.model && !live) html += `<div class="as-model">${escapeHtml(run.model)}</div>`;
+if (!live) html += aiMsgTimeHtml(run.doneAt, run.at);
 html += '</div>';
 });
 if (showReview) html += aiReviewHtml(last.plan || last.result);

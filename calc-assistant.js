@@ -101,8 +101,9 @@ async function sendAssistant() {
 const input = document.getElementById('assistantInput');
 const text = input.value.trim();
 if (!text || assistantBusy) return;
-assistantChat.push({ role: 'user', content: text });
-const reply = { role: 'assistant', content: '', thinking: '', streaming: true };
+const sentAt = Date.now();
+assistantChat.push({ role: 'user', content: text, at: sentAt });
+const reply = { role: 'assistant', content: '', thinking: '', streaming: true, from: sentAt };
 input.value = '';
 assistantBusy = true;
 assistantAbort = new AbortController();
@@ -145,6 +146,7 @@ assistantFail(reply, 'Нет связи с сервером: ' + (err && err.mes
 }
 }
 if (!stopped && reply.streaming) assistantFail(reply, reply.content ? reply.content + '\n\n(ответ оборвался)' : 'Помощник не ответил. Попробуйте ещё раз.');
+reply.at = Date.now();
 assistantBusy = false;
 assistantAbort = null;
 if (!stopped) saveAssistantChat();
@@ -280,6 +282,7 @@ if (m.thinking) html += `<details class="as-think"${m.streaming && !m.content ? 
 if (m.content) html += `<div class="as-text">${m.role === 'user' ? escapeHtml(m.content) : assistantTextHtml(m.content)}</div>`;
 if (m.cost && !m.streaming) html += paidCostHtml(m.cost);
 if (m.model && !m.streaming) html += `<div class="as-model">${escapeHtml(m.model)}</div>`;
+if (!m.streaming) html += aiMsgTimeHtml(m.at, m.role === 'user' ? 0 : m.from);
 if (m.streaming) html += `<div class="as-status">${m.picking ? 'Подбираю позиции…' : m.content ? 'Пишу…' : m.thinking ? '' : 'Думаю…'}</div>`;
 if (m.items && m.items.length) {
 html += '<div class="as-items">' + m.items.map((it, ii) => `
