@@ -54,11 +54,11 @@ return k === 'h' ? [at[prev], at[i]] : [at[i], at[prev]];
 
 // Подогнать стороны помещения по стенам на картинке: у каждой стороны ищем рядом
 // линию, где с внутренней стороны светло (пол), а снаружи темно (стена или её контур)
-function pgSnapRoom(px, kinds, gray, openings) {
+function pgSnapRoom(px, kinds, gray, openings, rMax) {
 const n = px.length;
 const at = px.map((p, i) => { const q = px[(i + 1) % n]; return kinds[i] === 'h' ? (p[1] + q[1]) / 2 : (p[0] + q[0]) / 2; });
 const cw = pgArea2(px) > 0 ? 1 : -1;                         // по часовой на картинке (y вниз) — площадь > 0
-const R = Math.max(8, Math.round(Math.max(gray.w, gray.h) * 0.02));
+const R = rMax || Math.max(8, Math.round(Math.max(gray.w, gray.h) * 0.02));   // насколько далеко искать стену, точек
 const G = (x, y) => {
 x = Math.round(x); y = Math.round(y);
 return x < 0 || y < 0 || x >= gray.w || y >= gray.h ? 255 : gray.g[y * gray.w + x];

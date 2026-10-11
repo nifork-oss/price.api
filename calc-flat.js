@@ -424,10 +424,11 @@ const top = flatHMode
 ? `<div class="flat-tools">
 <button type="button" class="mp-head-btn" onclick="flatUndo()" ${ed.undo.length ? '' : 'disabled'}>↶ Шаг назад</button>
 <button type="button" class="mp-head-btn" onclick="flatFit()">Подогнать</button>
+${getUnderlay(flatUlId()) ? '<button type="button" class="mp-head-btn" onclick="flatSnapUnderlay()">Прилепить к подложке</button>' : ''}
 <button type="button" class="mp-head-btn" onclick="flatEditCancel()">Отмена</button>
 <button type="button" class="mp-btn mp-btn-primary" onclick="flatEditSave()">Сохранить</button>
 </div>
-<div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — введёте точную длину стены. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}</div>`
+<div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — введёте точную длину стены. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}${getUnderlay(flatUlId()) ? ' «Прилепить к подложке» — края ' + (ed.sel ? 'этой комнаты' : 'всех комнат') + ' встанут на стены чертежа.' : ''}</div>`
 : `<div class="ai-hint">Нажмите на помещение — откроется его замер. После правки план обновится.${rest ? ` Помещений без места на плане: ${rest} (добавлены вручную).` : ''}</div>
 ${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button><button type="button" class="measure-open-btn" onclick="flatScaleStart()">Масштаб по стене</button><button type="button" class="measure-open-btn" onclick="flatOpsStart()">Двери и проёмы</button><button type="button" class="measure-open-btn" onclick="flatHStart()">Высоты стен, окон и дверей</button>'}`;
 const oldWrap = document.getElementById('flatWrap');
@@ -1432,6 +1433,53 @@ flatEdit.draft[r.id] = r.pts.map(([x, y]) => [Math.round((x + sh[i][0]) * 1000) 
 renderFlatPlan();
 const max = Math.max(...sh.map(v => Math.hypot(v[0], v[1])));
 showAddToast(`Подогнано помещений: ${moved.length} (сдвиг до ${Math.round(max * 100)} см). Проверьте и нажмите «Сохранить»`);
+}
+
+// Края комнат — к стенам чертежа на подложке: у каждой стены рядом (до 30 см) ищем линию,
+// где внутри светло (пол), а снаружи — серая или чёрная стена (как после распознавания).
+// Выделена комната — только она, иначе все. Только черновик: проверить и «Сохранить»
+let flatUlGray = null;   // { src, gray } — яркости картинки подложки, чтобы не читать заново
+
+async function flatSnapUnderlay() {
+if (!flatEdit) return;
+const u = getUnderlay(flatUlId());
+if (!u || typeof pgSnapRoom !== 'function') return;
+if (!flatUlGray || flatUlGray.src !== u.src) {
+try { flatUlGray = { src: u.src, gray: await pgLoadGray(u.src) }; }
+catch (e) { alert('Не удалось прочитать подложку.'); return; }
+}
+const gray = flatUlGray.gray;
+// метры плана ↔ точки картинки: подложка — прямоугольник x, y, w × w·ar, повёрнутый вокруг центра
+const uh = u.w * u.ar, cx = u.x + u.w / 2, cy = u.y + uh / 2;
+const a = (u.rot || 0) * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+const toPx = ([x, y]) => {
+const dx = x - cx, dy = y - cy;
+const rx = cx + dx * cs + dy * sn, ry = cy - dx * sn + dy * cs;
+return [(rx - u.x) / u.w * gray.w, (ry - u.y) / uh * gray.h];
+};
+const toM = ([px, py]) => {
+const rx = u.x + px / gray.w * u.w - cx, ry = u.y + py / gray.h * uh - cy;
+return [cx + rx * cs - ry * sn, cy + rx * sn + ry * cs];
+};
+const R = Math.max(4, Math.round(0.3 * gray.w / u.w));
+const items = flatItems().filter(r => r.closed && (!flatEdit.sel || r.id === flatEdit.sel));
+const out = {};
+let sides = 0, skipped = 0;
+items.forEach(r => {
+const px = r.pts.map(toPx);
+const kinds = pgAxes(px);
+if (!kinds) { skipped++; return; }
+const openings = r.openings.map(o => { const sg = flatOpeningSeg(r, o); return sg ? { px: [toPx([sg.x, sg.y]), toPx([sg.x + sg.ux * sg.w, sg.y + sg.uy * sg.w])] } : null; }).filter(Boolean);
+const res = pgSnapRoom(px, kinds, gray, openings, R);
+const pts = res.px.map(p => toM(p).map(v => Math.round(v * 1000) / 1000));
+const moved = r.pts.reduce((k, p, i) => k + (Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]) >= 0.003 ? 1 : 0), 0);
+if (moved) { out[r.id] = pts; sides += moved; }
+});
+if (!Object.keys(out).length) { showAddToast(skipped ? 'Не прилепилось: у комнат косые стены' : 'Края уже на стенах чертежа — менять нечего'); return; }
+flatPushUndo();
+Object.assign(flatEdit.draft, out);
+renderFlatPlan();
+showAddToast(`Прилеплено к чертежу помещений: ${Object.keys(out).length}. Проверьте (лишнее — «Шаг назад») и нажмите «Сохранить»`);
 }
 
 function flatPushUndo() {
