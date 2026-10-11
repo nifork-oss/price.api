@@ -402,7 +402,7 @@ renderAiPanel();
 async function runAiRecognition(note, attach) {
 const target = aiTarget;
 if (!target || !target.image || aiBusy()) return;
-const run = { note, thinking: '', text: '', status: 'Отправляю в нейросеть…', ...(attach ? { attach } : {}) };
+const run = { note, thinking: '', text: '', status: 'Отправляю в нейросеть…', at: Date.now(), ...(attach ? { attach } : {}) };
 target.runs.push(run);
 target.abort = new AbortController();
 renderAiPanel();
@@ -467,6 +467,7 @@ run.error = 'Ошибка: ' + (err && err.message ? err.message : err);
 }
 }
 run.done = true;
+run.doneAt = Date.now();
 target.abort = null;
 saveAiChat(target);
 if (aiTarget === target) renderAiPanel();
@@ -644,14 +645,15 @@ try {
 const tc = await page.getTextContent();
 tc.items.forEach(it => {
 const str = String(it.str || '').trim();
-if (!str) return;
+// только надписи с числами (размеры, высоты): слова и так видны на картинке, а токены стоят денег
+if (!str || !/\d/.test(str)) return;
 // середина надписи (у повёрнутых размеров — тоже по её направлению)
 const [a, b, , , e, f] = it.transform;
 const k = Math.hypot(a, b) || 1, half = (it.width || 0) / 2;
 const [px, py] = vp1.convertToViewportPoint(e + a / k * half, f + b / k * half);
 const nx = px / vp1.width, ny = py / vp1.height;
 if (nx >= c.x && nx <= c.x + c.w && ny >= c.y && ny <= c.y + c.h) {
-words.push(`${str} @${Math.round((nx - c.x) * vp1.width * scale)},${Math.round((ny - c.y) * vp1.height * scale)}`);
+words.push(`${str}@${Math.round((nx - c.x) * vp1.width * scale)},${Math.round((ny - c.y) * vp1.height * scale)}`);
 }
 });
 } catch (e) { /* без текста */ }
@@ -791,7 +793,7 @@ const rules = aiPlanHintsCount();
 if (rules) html += `<div class="ai-sent">Учитываю ваши правила: ${rules} (изменить — в Профиле)</div>`;
 aiTarget.runs.forEach((run, ri) => {
 if (run.note) {
-html += `<div class="as-msg as-user ai-note">${run.attach ? `<img class="ai-attach-thumb" src="${run.attach.preview}" alt="Чертёж"><div class="ai-attach-name">📎 ${escapeHtml(run.attach.name || 'чертёж')}</div>` : ''}<div class="as-text">${escapeHtml(run.note)}</div></div>`;
+html += `<div class="as-msg as-user ai-note">${run.attach ? `<img class="ai-attach-thumb" src="${run.attach.preview}" alt="Чертёж"><div class="ai-attach-name">📎 ${escapeHtml(run.attach.name || 'чертёж')}</div>` : ''}<div class="as-text">${escapeHtml(run.note)}</div>${aiMsgTimeHtml(run.at)}</div>`;
 if (run.done && !run.error) html += run.remembered
 ? '<div class="ai-rule ai-rule-done">Запомнено как правило</div>'
 : `<button type="button" class="ai-rule" onclick="rememberAiRule(${ri})">Запомнить как правило</button>`;
@@ -816,6 +818,7 @@ else if (live) html += `<div class="as-status">${escapeHtml(run.status)}</div>`;
 else if (run.result && ri < aiTarget.runs.length - 1) html += '<div class="as-status">заменено следующим вариантом</div>';
 if (run.cost && !live) html += paidCostHtml(run.cost);
 if (run.model && !live) html += `<div class="as-model">${escapeHtml(run.model)}</div>`;
+if (!live) html += aiMsgTimeHtml(run.doneAt, run.at);
 html += '</div>';
 });
 if (showReview) html += aiReviewHtml(last.plan || last.result);
