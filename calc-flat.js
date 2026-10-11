@@ -125,7 +125,7 @@ return [cx / (3 * a), cy / (3 * a)];
 // Комната для рисунка: углы на плане квартиры, замкнута ли, проёмы
 function flatItem(id, name, measure, plan) {
 const { pts, g } = flatRoomPoints(measure, plan);
-return { id, name, pts, closed: g.closed, openings: measure.openings || [] };
+return { id, name, pts, closed: g.closed, openings: measure.openings || [], h: measure.height || '', wh: measure.wallHeights || [] };
 }
 
 // Весь план: items — [{ id, name, pts, closed, openings }] (flatItem);
@@ -190,6 +190,7 @@ ${opt.pickOps ? r.openings.map((o, oi) => { const sg = flatOpeningSeg(r, o); ret
 <title>${escapeHtml(name)} — ${areaTxt}</title>
 ${showName ? `<text x="${lx}" y="${ly - rf * 0.15}" font-size="${rf}" text-anchor="middle" font-family="Arial, sans-serif" fill="#14181f" font-weight="700" pointer-events="none">${escapeHtml(name)}</text>` : ''}
 <text x="${lx}" y="${showName ? ly + rf * 1.05 : ly + rf * 0.3}" font-size="${rf * 0.85}" text-anchor="middle" font-family="Arial, sans-serif" fill="#5a6470" pointer-events="none">${areaTxt}</text>
+${opt.heights ? flatHeightLabels(r, lx, (showName ? ly + rf * 1.05 : ly + rf * 0.3) + Math.max(rf, fs * 0.7) * 1.05, Math.max(rf * 0.85, fs * 0.7), fs) : ''}
 </g>`;
 }).join('');
 // Ручки выделенной комнаты: углы — кружки, середины стен — квадратики с длиной
@@ -352,6 +353,7 @@ let flatEdit = null;      // { sel, draft, undo, view }
 let flatScaleMode = false; // выбираем стену, чтобы задать масштаб всего плана
 let flatOpsMode = false;   // ставим и убираем двери и проёмы нажатием на стену
 let flatMergeFrom = null;  // id комнаты, к которой присоединяем соседнюю
+let flatHMode = false;     // высоты стен, окон и дверей: всем сразу или по одной нажатием
 
 function objectHasFlat(obj) {
 return objectRooms(obj).some(r => r.plan && r.measure);
@@ -367,7 +369,7 @@ return objectRooms(flatObj()).filter(r => r.plan && r.measure);
 
 function openFlatPlan(objectId) {
 flatObjectId = objectId;
-flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null;
+flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatHMode = false;
 flatUlAdjust = null;
 flatZoom = 1;
 flatEdit = null;
@@ -399,7 +401,9 @@ const items = flatItems();
 const rest = objectRooms(flatObj()).length - items.length;
 const total = items.reduce((a, r) => a + flatPolyArea(r.pts), 0);
 const ed = flatEdit;
-const top = flatOpsMode
+const top = flatHMode
+? flatHTopHtml()
+: flatOpsMode
 ? `<div class="flat-tools"><button type="button" class="mp-btn mp-btn-primary" onclick="flatOpsMode = false; renderFlatPlan()">Готово</button></div>
 <div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>, а нажатием — сделать из двери проход без двери (и обратно) или убрать. Дверь между комнатами — сразу у обеих.</div>`
 : flatMergeFrom
@@ -417,16 +421,17 @@ const top = flatOpsMode
 </div>
 <div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — введёте точную длину стены. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}</div>`
 : `<div class="ai-hint">Нажмите на помещение — откроется его замер. После правки план обновится.${rest ? ` Помещений без места на плане: ${rest} (добавлены вручную).` : ''}</div>
-${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button><button type="button" class="measure-open-btn" onclick="flatScaleStart()">Масштаб по стене</button><button type="button" class="measure-open-btn" onclick="flatOpsStart()">Двери и проёмы</button>'}`;
+${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button><button type="button" class="measure-open-btn" onclick="flatScaleStart()">Масштаб по стене</button><button type="button" class="measure-open-btn" onclick="flatOpsStart()">Двери и проёмы</button><button type="button" class="measure-open-btn" onclick="flatHStart()">Высоты стен, окон и дверей</button>'}`;
 const oldWrap = document.getElementById('flatWrap');
 const scroll = oldWrap ? [oldWrap.scrollLeft, oldWrap.scrollTop] : null;
 body.innerHTML = `<div class="mp-body-inner">
 ${top}
 <div class="flat-zoom"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><span>Площадь: <b>${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²</b></span><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button></div>
 <div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
+: flatHMode ? { pickWalls: 'flatHWall', pickOps: true, onTap: 'flatHRoom', heights: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatOpsMode ? { pickWalls: 'flatOpsWall', pickOps: 'flatOpsRemove', underlay: flatUlOpt(), view: flatViewOf(items) }
 : { onTap: flatMergeFrom ? 'flatMergeTap' : 'flatOpenRoom', sel: flatMergeFrom || undefined, underlay: flatUlOpt(), view: flatViewOf(items) })}</div></div>
-${ed || flatScaleMode || flatOpsMode || flatMergeFrom ? '' : flatUlBarHtml()}
+${ed || flatScaleMode || flatOpsMode || flatHMode || flatMergeFrom ? '' : flatUlBarHtml()}
 </div>`;
 flatSizeInner();
 const wrap = document.getElementById('flatWrap');
@@ -434,6 +439,7 @@ if (scroll && wrap) { wrap.scrollLeft = scroll[0]; wrap.scrollTop = scroll[1]; }
 if (ed) flatBindEdit();
 else if (flatUlAdjust) flatBindUnderlay();
 else if (flatOpsMode) flatBindOps();
+else if (flatHMode) flatBindHeights();
 if (!flatUlAdjust) flatBindPanZoom();
 }
 
@@ -752,6 +758,7 @@ renderFlatPlan();
 
 function flatOpsStart() {
 flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatMergeFrom = null;
+flatHMode = false;
 flatOpsMode = true;
 renderFlatPlan();
 }
@@ -946,6 +953,168 @@ await saveCloudData();
 renderFlatPlan();
 }
 
+/* ---------- высоты: стены (потолок), окна, двери — всем сразу или по одной ---------- */
+
+function flatHStart() {
+flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null;
+flatHMode = true;
+renderFlatPlan();
+}
+
+// «2,7», «2700» (мм) → «2,7»; пусто → ''; ошибка → null
+function flatHParse(raw) {
+const t = String(raw == null ? '' : raw).replace(/\s/g, '');
+if (!t) return '';
+let v = mNum(t);
+if (!(v > 0)) return null;
+if (v > 20) v /= 1000;                                     // ввели в миллиметрах
+return v > 0.1 && v < 20 ? FLAT_FMT(Math.round(v * 1000) / 1000) : null;
+}
+
+// Что чаще всего стоит сейчас — подсказка в поле «для всех»
+function flatHCommon(list) {
+const c = {};
+list.filter(v => mNum(v) > 0).forEach(v => { const k = FLAT_FMT(mNum(v)); c[k] = (c[k] || 0) + 1; });
+return Object.keys(c).sort((a, b) => c[b] - c[a])[0] || '';
+}
+
+function flatHOps(type) {
+return flatRooms().flatMap(r => (r.measure.openings || []).filter(o => o.type === type));
+}
+
+function flatHTopHtml() {
+const rooms = flatRooms();
+const f = (id, label, val) => `<label class="flat-h-row"><span>${label}</span><input id="${id}" type="text" inputmode="decimal" value="${escapeHtml(val)}" placeholder="—"></label>`;
+const balc = flatHOps('balcony');
+return `<div class="flat-tools"><button type="button" class="mp-btn mp-btn-primary" onclick="flatHMode = false; renderFlatPlan()">Готово</button></div>
+<div class="flat-h-all">
+<div class="flat-h-title">Сразу для всей квартиры, м</div>
+${f('flatHWalls', 'Стены (до потолка)', flatHCommon(rooms.map(r => r.measure.height)))}
+${f('flatHWin', 'Окна', flatHCommon(flatHOps('window').concat(balc).map(o => o.h)))}
+${f('flatHDoor', 'Двери и проходы', flatHCommon(flatHOps('door').map(o => o.h)))}
+${balc.length ? f('flatHBalc', 'Дверь балконного блока', flatHCommon(balc.map(o => o.dh))) : ''}
+<button type="button" class="measure-open-btn" onclick="flatHApplyAll()">Выставить всем</button>
+</div>
+<div class="ai-hint"><b>По отдельности</b> — нажмите на плане: на <b>комнату</b> — высота её стен, на <b>стену</b> (жёлтая) — только этой стены, на <b>окно или дверь</b> — их высота. Пустое поле «для всех» не меняет ничего. Красный «?» — высота не задана.</div>`;
+}
+
+async function flatHApplyAll() {
+const val = id => { const el = document.getElementById(id); return el ? flatHParse(el.value) : ''; };
+const v = { walls: val('flatHWalls'), win: val('flatHWin'), door: val('flatHDoor'), balc: val('flatHBalc') };
+if (Object.values(v).some(x => x === null)) { alert('Высота — число в метрах (2,7) или в миллиметрах (2700).'); return; }
+if (!Object.values(v).some(Boolean)) { alert('Заполните хотя бы одно поле.'); return; }
+let n = 0;
+flatRooms().forEach(r => {
+const m = r.measure;
+if (v.walls) { m.height = v.walls; if (Array.isArray(m.wallHeights)) m.wallHeights = m.wallHeights.map(() => ''); n++; }
+(m.openings || []).forEach(o => {
+if (v.win && (o.type === 'window' || o.type === 'balcony')) { o.h = v.win; n++; }
+if (v.door && o.type === 'door') { o.h = v.door; n++; }
+if (v.balc && o.type === 'balcony') { o.dh = v.balc; n++; }
+});
+});
+await saveCloudData();
+renderFlatPlan();
+if (typeof renderInvoice === 'function') renderInvoice();
+showAddToast(n ? 'Высоты выставлены всем.' : 'Менять нечего.');
+}
+
+function flatHAsk(title, cur) {
+const raw = prompt(`${title}, м`, cur || '');
+if (raw == null) return undefined;
+const v = flatHParse(raw);
+if (v === null) { alert('Высота — число в метрах (2,7) или в миллиметрах (2700).'); return undefined; }
+return v;
+}
+
+async function flatHSave() {
+await saveCloudData();
+renderFlatPlan();
+if (typeof renderInvoice === 'function') renderInvoice();
+}
+
+async function flatHRoom(roomId) {
+const room = flatRooms().find(r => r.id === roomId);
+if (!room) return;
+const m = room.measure;
+const own = (m.wallHeights || []).some(v => mNum(v) > 0);
+const v = flatHAsk(`Высота стен — «${roomName(room)}»${own ? ' (отдельные высоты стен сбросятся)' : ''}`, m.height);
+if (v === undefined) return;
+m.height = v;
+if (Array.isArray(m.wallHeights)) m.wallHeights = m.wallHeights.map(() => '');
+await flatHSave();
+}
+
+async function flatHWall(roomId, i, ev) {
+if (ev) ev.stopPropagation();                              // не открывать заодно всю комнату
+const room = flatRooms().find(r => r.id === roomId);
+if (!room) return;
+const m = room.measure;
+const v = flatHAsk(`Высота стены ${i + 1} — «${roomName(room)}» (пусто — как у комнаты${m.height ? ', ' + m.height : ''})`, (m.wallHeights || [])[i] || '');
+if (v === undefined) return;
+if (!Array.isArray(m.wallHeights)) m.wallHeights = [];
+while (m.wallHeights.length < m.walls.length) m.wallHeights.push('');
+m.wallHeights[i] = v && v !== FLAT_FMT(mNum(m.height)) ? v : '';
+await flatHSave();
+}
+
+// Окно или дверь: у двери — и её вторая половина у соседней комнаты
+async function flatHOp(roomId, oi) {
+const room = flatRooms().find(r => r.id === roomId);
+const o = room && (room.measure.openings || [])[oi];
+if (!o) return;
+const list = [o].concat(o.type === 'window' ? [] : flatOpPartners(roomId, oi).map(p => p.room.measure.openings[p.oi]).filter(x => x.type === o.type));
+if (o.type === 'balcony') {
+const h = flatHAsk('Балконный блок: высота окна', o.h);
+if (h === undefined) return;
+const dh = flatHAsk('Балконный блок: высота двери', o.dh);
+if (dh === undefined) return;
+list.forEach(x => { x.h = h; x.dh = dh; });
+} else {
+const h = flatHAsk(o.type === 'window' ? 'Высота окна' : o.pass ? 'Высота прохода' : 'Высота двери', o.h);
+if (h === undefined) return;
+list.forEach(x => { x.h = h; });
+}
+await flatHSave();
+}
+
+// Нажатие на окно или дверь — раньше, чем на комнату под ним
+function flatBindHeights() {
+const svg = document.querySelector('#flatWrap svg');
+if (!svg) return;
+svg.addEventListener('click', (e) => {
+const t = e.target;
+if (!t.dataset || t.dataset.op == null) return;
+e.stopPropagation();
+flatHOp(t.dataset.opRoom, Number(t.dataset.op));
+}, true);
+}
+
+// Подписи высот на плане: под площадью — стены комнаты, у проёмов и отдельных стен — их высота
+function flatHeightLabels(r, lx, y, size, fs) {
+const q = v => (mNum(v) > 0 ? FLAT_FMT(mNum(v)) : '?');
+const col = v => (v === '?' ? '#c2361f' : '#1f5fa8');
+const hv = q(r.h);
+let out = `<text x="${lx}" y="${y}" font-size="${size}" text-anchor="middle" font-family="Arial, sans-serif" fill="${col(hv)}" font-weight="700" pointer-events="none">↕ ${hv}${hv === '?' ? '' : ' м'}</text>`;
+const n = r.pts.length, t = fs * 0.62;
+const at = (x, y2, txt, c) => `<text x="${x}" y="${y2 + t * 0.35}" font-size="${t}" text-anchor="middle" font-family="Arial, sans-serif" fill="${c}" font-weight="700" pointer-events="none">${txt}</text>`;
+r.pts.forEach((a, i) => {
+const own = mNum(r.wh[i]);
+if (!(own > 0) || (!r.closed && i === n - 1)) return;
+const b = r.pts[(i + 1) % n], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+if (!len) return;
+const nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len;
+out += at((a[0] + b[0]) / 2 + nx * fs * 1.1 + (b[0] - a[0]) / len * fs * 1.5, (a[1] + b[1]) / 2 + ny * fs * 1.1 + (b[1] - a[1]) / len * fs * 1.5, '↕' + FLAT_FMT(own), '#7a4fb0');
+});
+r.openings.forEach(o => {
+const sg = flatOpeningSeg(r, o);
+if (!sg) return;
+const txt = o.type === 'balcony' ? `${q(o.h)}/${q(o.dh)}` : q(o.h);
+out += at(sg.x + sg.ux * sg.w / 2 - sg.uy * fs * 0.95, sg.y + sg.uy * sg.w / 2 + sg.ux * fs * 0.95, txt, txt.includes('?') ? '#c2361f' : o.type === 'door' ? '#7a4f22' : o.type === 'balcony' ? '#2a7a48' : '#2a6db0');
+});
+return out;
+}
+
 function flatMergeTap(roomId) {
 const a = flatMergeFrom;
 if (!a || roomId === a) return;
@@ -1060,7 +1229,7 @@ showAddToast(`Объединено: «${ia.name}»`);
 // соотношении: стены, проёмы, места помещений и подложка. Дальше правится по одной стене
 
 function flatScaleStart() {
-flatEdit = null; flatUlAdjust = null; flatOpsMode = false; flatMergeFrom = null;
+flatEdit = null; flatUlAdjust = null; flatOpsMode = false; flatMergeFrom = null; flatHMode = false;
 flatScaleMode = true;
 renderFlatPlan();
 }
@@ -1100,7 +1269,7 @@ showAddToast('Масштаб плана изменён — проверьте р
 }
 
 function flatEditStart() {
-flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null;
+flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatHMode = false;
 flatUlAdjust = null;
 const items = flatItems();
 const all = items.flatMap(r => r.pts);
