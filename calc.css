@@ -1038,3 +1038,8 @@ body.assistant-open .add-toast { z-index: 99; }
 .flat-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
 .flat-tools .mp-btn-primary { margin-left: auto; }
 .flat-tools button:disabled { opacity: 0.45; }
+.flat-h-all { border: 1px solid var(--s-line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.flat-h-title { font-weight: 700; margin-bottom: 8px; }
+.flat-h-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; font-size: 14px; }
+.flat-h-row input { width: 90px; padding: 8px 10px; border: 1px solid #cfd5dd; border-radius: 8px; font: inherit; text-align: right; }
+.flat-h-all .measure-open-btn { margin-bottom: 0; }
