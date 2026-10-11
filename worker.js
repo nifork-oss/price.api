@@ -741,12 +741,15 @@ const handler = {
           // Правила мастера из профиля (страница берёт их из своих данных)
           const hints = typeof body.hints === "string" ? body.hints : "";
           // Выделенная часть PDF уходит картинкой — её подписи и размеры текстом отдельно
-          const pageText = typeof body.pageText === "string" ? body.pageText.slice(0, 8000) : "";
+          const pageText = typeof body.pageText === "string" ? body.pageText.slice(0, 12000) : "";
           const onUsage = (u) => aiReport(env, request, auth, "plan", u);
           // Уровень размышлений из настроек админа (страница берёт его из своих данных)
           const effort = body.effort;
-          if (body.stream) return await streamAnthropic(env, withEffort(planPayload(env, image, mediaType, turns, hints, pageText), effort), parsePlanReply, "Не удалось распознать план: ", onUsage);
-          const result = await recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText, effort);
+          // Размер картинки — страница новая: помещения в точках картинки (см. planPromptPx)
+          const iw = Math.round(Number(body.imgW)), ih = Math.round(Number(body.imgH));
+          const size = iw > 0 && ih > 0 && iw <= 10000 && ih <= 10000 ? { w: iw, h: ih } : null;
+          if (body.stream) return await streamAnthropic(env, withEffort(planPayload(env, image, mediaType, turns, hints, pageText, size), effort), parsePlanReply, "Не удалось распознать план: ", onUsage);
+          const result = await recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText, effort, size);
           return json(result);
         } catch (e) {
           return json({ error: "Не удалось распознать план: " + (e && e.message ? e.message : e) }, 502);
@@ -1407,6 +1410,42 @@ x растёт вправо, y — вниз. Бери их из размерны
 Поля без значения не пиши. type — одно из: "window", "door", "balcony"
 (для balcony at — весь блок, height_mm — высота окна, door_width_mm/door_height_mm — дверь).`;
 
+// Новый вид: нейросеть отмечает помещения прямо на картинке (в её точках) и выписывает
+// подписанные размеры, а в миллиметры переводит сайт: подгоняет края по стенам на картинке,
+// масштаб — по размерам, размеры комнат — точно по подписям. Нейросети — только то, что она
+// делает хорошо (увидеть и прочитать), без пересчёта координат всей квартиры
+function planPromptPx(w, h) {
+  return `Это обмерный план квартиры или дома (чертёж, скриншот или фото). Картинка — ${w}×${h} точек.
+Найди все помещения и отметь их прямо на картинке — координатами в точках этой картинки: x — от левого края
+вправо, y — от верхнего края вниз, целые числа. В миллиметры ничего не пересчитывай — это сделает программа:
+она найдёт стены по картинке и подгонит размеры по подписям, которые ты выпишешь.
+
+Для каждого помещения:
+- name — название, как подписано; если не подписано — по смыслу (Кухня, Санузел, Комната 1…);
+- px — углы по внутренним граням его стен (где пол встречается со стеной), по часовой стрелке, начиная
+  с верхнего левого. Все изломы — выступы, короба, ниши, скошенные углы — отдельными точками;
+- dims — подписанные на чертеже размеры сторон этого помещения: {"edge":i,"mm":длина}, где edge i — сторона
+  от угла i к углу i+1 (последняя — к углу 0). Вдоль стороны цепочка размеров — сложи (960+1230+700+760 = 3650).
+  Бери размеры, относящиеся к этому помещению, а не к соседнему и не габаритные снаружи квартиры.
+  Нужны хотя бы ширина и длина, если они подписаны;
+- height_mm — высота потолка, если подписана;
+- openings — окна, двери, балконные блоки (окно с дверью в одном проёме), проходы без двери (как "door"):
+  px — два конца проёма на стене помещения, width_mm — ширина по подписи (если есть), height_mm — высота;
+  для balcony — door_width_mm и door_height_mm. Дверь между помещениями — у обоих; входная — у прихожей.
+
+Если размер не подписан — не выдумывай, просто не пиши его. Не выдумывай помещения, которых нет.
+Если без ответа мастера план получится заведомо неверным (непонятно, где границы помещений, есть ли
+на картинке план вообще) — не строй план, а задай короткие конкретные вопросы: {"questions":["..."]}.
+Мелкие сомнения — не повод спрашивать: построй план и опиши их в warnings. Отвечать словами вместо JSON нельзя.
+
+Ответ — только JSON без пояснений, без markdown и без пробелов для красоты, строго такой формы:
+{"rooms":[{"name":"Кухня","height_mm":2700,"px":[[120,80],[460,80],[460,330],[120,330]],
+"dims":[{"edge":0,"mm":3200},{"edge":1,"mm":2450}],
+"openings":[{"type":"window","px":[[200,80],[330,80]],"width_mm":1400,"height_mm":1500}]}],
+"warnings":["..."]}
+Поля без значения не пиши. type — одно из: "window", "door", "balcony".`;
+}
+
 // Правила мастера к распознаванию (профиль, «Запомнить как правило»)
 const PLAN_HINTS_MAX = 3000;
 
@@ -1421,7 +1460,7 @@ function planHintsText(hints) {
 // а помещения, которых уточнение не касается, остаются как были
 const PLAN_PATCH = `Твой последний ответ выше — текущий план. Поправь в нём только то, чего касается уточнение мастера.
 Ответ — JSON такой формы: {"partial":true,"rooms":[...],"removed":["..."],"warnings":["..."]}
-- в rooms — только изменённые и новые помещения, каждое целиком (все углы pts и проёмы, в той же системе координат), с тем же name, что в плане;
+- в rooms — только изменённые и новые помещения, каждое целиком (все углы, размеры и проёмы, в той же системе координат), с тем же name, что в плане;
 - в removed — названия помещений, которые нужно убрать (переименование — новое в rooms, старое в removed);
 - помещения без изменений не повторяй.
 Если уточнение меняет почти весь план — верни весь план целиком без "partial". Если без ответа мастера не обойтись — {"questions":["..."]}.`;
@@ -1449,7 +1488,8 @@ function stripCache(payload) {
 
 // turns — переписка в окне распознавания: что нейросеть ответила (план или
 // вопросы, JSON) и что мастер на это написал, по порядку; hints — правила мастера
-function planPayload(env, image, mediaType, turns, hints, pageText) {
+function planPayload(env, image, mediaType, turns, hints, pageText, size) {
+  const px = !!(size && mediaType !== "application/pdf");
   const messages = [{
     role: "user",
     content: [
@@ -1458,7 +1498,10 @@ function planPayload(env, image, mediaType, turns, hints, pageText) {
         ? { type: "document", source: { type: "base64", media_type: mediaType, data: image } }
         : { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
       // До этого места запрос одинаковый при каждом уточнении — кешируется
-      { type: "text", text: (pageText ? "На картинке — выделенная мастером часть страницы PDF. Текст этой части из PDF (подписи и размеры, точнее, чем на картинке):\n<pdf_text>\n" + pageText + "\n</pdf_text>\n\n" : "") + PLAN_PROMPT + planHintsText(hints), cache_control: CACHE },
+      { type: "text", text: (pageText
+        ? (px ? "Картинка — страница PDF (или её часть). Текст с неё из PDF — подписи и размеры, точнее, чем на картинке; после @ — где стоит надпись (x,y в точках картинки):\n<pdf_text>\n"
+          : "На картинке — выделенная мастером часть страницы PDF. Текст этой части из PDF (подписи и размеры, точнее, чем на картинке):\n<pdf_text>\n") + pageText + "\n</pdf_text>\n\n" : "")
+        + (px ? planPromptPx(size.w, size.h) : PLAN_PROMPT) + planHintsText(hints), cache_control: CACHE },
     ],
   }];
   (turns || []).forEach((t) => {
@@ -1467,7 +1510,8 @@ function planPayload(env, image, mediaType, turns, hints, pageText) {
     // План уже есть — правим только то, что касается уточнения, остальное не трогаем
     let hasPlan = false;
     try { hasPlan = (JSON.parse(t.answer || "{}").rooms || []).length > 0; } catch (e) { /* не JSON */ }
-    const text = (t.image ? "Мастер прикрепил дополнительный чертёж того же объекта (картинка выше)" + (t.pageText ? ". Текст с него:\n<pdf_text>\n" + t.pageText + "\n</pdf_text>" : "") + ". Сопоставь его с планом по размерам и подписям.\n\n" : "")
+    const text = (t.image ? "Мастер прикрепил дополнительный чертёж того же объекта (картинка выше)" + (t.pageText ? ". Текст с него:\n<pdf_text>\n" + t.pageText + "\n</pdf_text>" : "") + ". Сопоставь его с планом по размерам и подписям."
+      + (px ? " Координаты px по-прежнему — в точках первой (основной) картинки: найди на ней, где находится то, что на этом чертеже." : "") + "\n\n" : "")
       + "Мастер пишет: " + t.note + "\n\n" + (hasPlan ? PLAN_PATCH : "Учти это и верни весь план целиком в том же формате JSON (или вопросы, если без них никак).");
     const blocks = [...(t.image ? [{ type: "image", source: { type: "base64", media_type: t.mediaType, data: t.image } }] : []), { type: "text", text }];
     if (t.answer) messages.push({ role: "user", content: blocks });
@@ -1506,8 +1550,8 @@ function planTurns(raw) {
   }).filter((t) => t.note);
 }
 
-async function recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText, effort) {
-  const payload = withEffort(planPayload(env, image, mediaType, turns, hints, pageText), effort);
+async function recognizePlan(env, image, mediaType, turns, hints, onUsage, pageText, effort, size) {
+  const payload = withEffort(planPayload(env, image, mediaType, turns, hints, pageText, size), effort);
   const res = await fetch(anthropicUrl(env), {
     method: "POST",
     headers: anthropicHeaders(env),
@@ -1571,7 +1615,15 @@ function sanitizePlan(raw) {
     const pts = (Array.isArray(r && r.pts) ? r.pts : []).slice(0, 80)
       .map((p) => (Array.isArray(p) ? [Math.round(Number(p[0])), Math.round(Number(p[1]))] : null))
       .filter((p) => p && p.every((v) => Number.isFinite(v) && Math.abs(v) <= 500000));
-    const sides = pts.length >= 3 ? pts.length : walls.length;
+    // Новый вид: углы в точках картинки и подписанные размеры сторон (в мм переводит сайт)
+    const pxOf = (v) => (Array.isArray(v) ? v : []).slice(0, 80)
+      .map((p) => (Array.isArray(p) ? [Math.round(Number(p[0])), Math.round(Number(p[1]))] : null))
+      .filter((p) => p && p.every((c) => Number.isFinite(c) && c >= -1000 && c <= 20000));
+    const px = pxOf(r && r.px);
+    const dims = px.length >= 3 ? (Array.isArray(r && r.dims) ? r.dims : []).slice(0, 80)
+      .map((d) => ({ edge: Number(d && d.edge), mm: Math.round(Number(d && d.mm)) }))
+      .filter((d) => Number.isInteger(d.edge) && d.edge >= 0 && d.edge < px.length && d.mm >= 100 && d.mm <= 100000) : [];
+    const sides = px.length >= 3 ? px.length : pts.length >= 3 ? pts.length : walls.length;
     // Размеры проёма: в мм (новый вид) или в метрах (старый)
     const mm = (o, k) => (o && o[k + "_mm"] != null ? Number(o[k + "_mm"]) / 1000 : o && o[k + "_m"]);
     const openings = (Array.isArray(r && r.openings) ? r.openings : []).slice(0, 60).map((o) => {
@@ -1582,19 +1634,21 @@ function sanitizePlan(raw) {
         : null;
       const atOk = at && at.every((p) => p && p.every((v) => Number.isFinite(v) && Math.abs(v) <= 500000));
       const atLen = atOk ? Math.hypot(at[1][0] - at[0][0], at[1][1] - at[0][1]) / 1000 : null;
+      const opx = pxOf(o && o.px);
       return {
         ...(atOk ? { at } : {}),
+        ...(px.length >= 3 && opx.length === 2 ? { px: opx } : {}),
         type: ["window", "door", "balcony"].includes(o && o.type) ? o.type : "window",
         wall_index: Number.isInteger(w) && w >= 0 && w < sides ? w : null,
         width_m: num(mm(o, "width") != null ? mm(o, "width") : atLen, 0.1, 20), height_m: num(mm(o, "height"), 0.1, 10),
         door_width_m: num(mm(o, "door_width"), 0.1, 5), door_height_m: num(mm(o, "door_height"), 0.1, 5),
         offset_m: num(mm(o, "offset"), 0, 100),
       };
-    }).filter((o) => o.width_m);
+    }).filter((o) => o.width_m || o.px);
     const height = r && r.height_mm != null ? Number(r.height_mm) / 1000 : r && r.height_m;
     return { name: String((r && r.name) || "Помещение " + (i + 1)).slice(0, 80), height_m: num(height, 1, 20),
-      ...(pts.length >= 3 ? { pts } : { walls }), openings };
-  }).filter((r) => (r.pts && r.pts.length >= 3) || (r.walls && r.walls.length >= 3));
+      ...(px.length >= 3 ? { px, dims } : pts.length >= 3 ? { pts } : { walls }), openings };
+  }).filter((r) => (r.px && r.px.length >= 3) || (r.pts && r.pts.length >= 3) || (r.walls && r.walls.length >= 3));
   const warnings = (Array.isArray(raw && raw.warnings) ? raw.warnings : []).map((w) => String(w).slice(0, 300)).slice(0, 20);
   // Правка по уточнению: только изменённые/новые помещения и названия удалённых
   const partial = !!(raw && raw.partial === true);
