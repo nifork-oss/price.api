@@ -298,7 +298,8 @@ const n = last ? last.result.rooms.length : 0;
 const note = runs.map(r => r.note).filter(Boolean).pop();
 aiChatSave({ id: target.chatId, kind: 'plan', objectId: target.objectId,
 title: (n ? `${n} ${pluralRu(n, 'помещение', 'помещения', 'помещений')}: ${last.result.rooms.map(r => r.name).join(', ')}` : 'Без результата') + (note ? ` · «${note}»` : '') },
-{ runs, image: target.image, mediaType: target.mediaType, preview: target.preview, sentAs: target.sentAs });
+{ runs, image: target.image, mediaType: target.mediaType, preview: target.preview, sentAs: target.sentAs,
+imgW: target.imgW || 0, imgH: target.imgH || 0, pageText: target.pageText || '', detail: !!target.detail });
 }
 
 async function openAiChat(id) {
@@ -307,7 +308,8 @@ const objectId = aiTarget.objectId;
 const data = await aiChatGet(id);
 if (!aiTarget || aiTarget.objectId !== objectId) return;
 if (!data || !Array.isArray(data.runs)) { alert('Не удалось открыть распознавание.'); aiChatDelete(id); renderAiPanel(); return; }
-aiTarget = { objectId, chatId: id, runs: data.runs, image: data.image, mediaType: data.mediaType, preview: data.preview, sentAs: data.sentAs };
+aiTarget = { objectId, chatId: id, runs: data.runs, image: data.image, mediaType: data.mediaType, preview: data.preview, sentAs: data.sentAs,
+imgW: data.imgW || 0, imgH: data.imgH || 0, pageText: data.pageText || '', detail: !!data.detail };
 document.getElementById('aiNote').value = '';
 renderAiPanel();
 }
@@ -402,7 +404,7 @@ renderAiPanel();
 async function runAiRecognition(note, attach) {
 const target = aiTarget;
 if (!target || !target.image || aiBusy()) return;
-const run = { note, thinking: '', text: '', status: 'Отправляю в нейросеть…', at: Date.now(), ...(attach ? { attach } : {}) };
+const run = { note, thinking: '', text: '', status: 'Отправляю в нейросеть…', at: Date.now(), ...(target.detail ? { detail: true } : {}), ...(attach ? { attach } : {}) };
 target.runs.push(run);
 target.abort = new AbortController();
 renderAiPanel();
@@ -411,7 +413,7 @@ const res = await fetch(`${WORKER_URL}/recognize-plan`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
 body: JSON.stringify({ image: target.image, mediaType: target.mediaType, stream: true,
-turns: aiTurns(target.runs), hints: aiPlanHints(), effort: paidEffort('plan'), ...(target.pageText ? { pageText: target.pageText } : {}),
+turns: aiTurns(target.runs), hints: aiPlanHints(), effort: aiPlanEffort(target), ...(target.pageText ? { pageText: target.pageText } : {}),
 ...(target.imgW && target.mediaType !== 'application/pdf' ? { imgW: target.imgW, imgH: target.imgH } : {}) }),
 signal: target.abort.signal
 });
@@ -534,9 +536,21 @@ showAddToast('Правило запомнено — оно в Профиле');
 /* ---------- выделить часть плана (фото и PDF) ---------- */
 // Рамка в долях картинки: { x, y, w, h } от 0 до 1, начало — верхний левый угол
 
+// «Подробно» — нейросеть дольше думает (уровень high): точнее на сложных планах, но дороже.
+// Выбор помнится на этом телефоне; уточнения в чате — с тем же уровнем (иначе сбросится кеш)
+function aiDetailSaved() { try { return localStorage.getItem('aiPlanDetail') === '1'; } catch (e) { return false; } }
+function aiSetDetail(on) {
+if (aiTarget) aiTarget.detail = on;
+try { localStorage.setItem('aiPlanDetail', on ? '1' : '0'); } catch (e) { /* пусто */ }
+}
+function aiPlanEffort(target) {
+return target && target.detail ? 'high' : paidEffort('plan');
+}
+
 function aiOpenCrop(target) {
 if (!target || !target.file) return;
 target.cropStep = true;
+target.detail = aiDetailSaved();
 target.crop = target.crop || { x: 0.05, y: 0.05, w: 0.9, h: 0.9 };
 renderAiPanel();
 }
@@ -553,6 +567,7 @@ return `<div class="mp-body-inner ai-chat">
 <div class="ai-hint">Выделите рамкой только план — без штампа, таблиц и соседних листов. Так дешевле и точнее, а большой план можно распознавать по частям. Тяните за углы, двигайте рамку пальцем.</div>
 <div class="ai-crop-stage" id="aiCropStage"><img src="${t.preview}" alt="План" draggable="false">
 <div class="ai-crop-rect" id="aiCropRect"><span data-h="nw"></span><span data-h="ne"></span><span data-h="sw"></span><span data-h="se"></span></div></div>
+<label class="ai-update"><input type="checkbox" ${t.detail ? 'checked' : ''} onchange="aiSetDetail(this.checked)"> <span><b>Подробно</b> — нейросеть дольше думает: точнее на сложных планах (перепланировка, нет подписей), но примерно в 4 раза дороже и около минуты.</span></label>
 <div class="ai-start">
 <button type="button" class="measure-open-btn ai-btn" onclick="aiCropDone(false)">Распознать всё</button>
 <button type="button" class="mp-btn mp-btn-primary" onclick="aiCropDone(true)">Распознать выделенное</button>
@@ -817,7 +832,7 @@ if (!busy && ri === aiTarget.runs.length - 1) html += `<div class="ai-retry-row"
 else if (live) html += `<div class="as-status">${escapeHtml(run.status)}</div>`;
 else if (run.result && ri < aiTarget.runs.length - 1) html += '<div class="as-status">заменено следующим вариантом</div>';
 if (run.cost && !live) html += paidCostHtml(run.cost);
-if (run.model && !live) html += `<div class="as-model">${escapeHtml(run.model)}</div>`;
+if (run.model && !live) html += `<div class="as-model">${escapeHtml(run.model)}${run.detail ? ' · подробно' : ''}</div>`;
 if (!live) html += aiMsgTimeHtml(run.doneAt, run.at);
 html += '</div>';
 });
