@@ -24,7 +24,7 @@ for (let i = 0, j = 0; i < g.length; i++, j += 4) {
 g[i] = (d[j] * 299 + d[j + 1] * 587 + d[j + 2] * 114) / 1000;
 red[i] = d[j] > 120 && d[j] - Math.max(d[j + 1], d[j + 2]) > 50 ? 1 : 0;   // красное (новые перегородки на чертежах перепланировки)
 }
-return { w, h, g, red };
+return { w, h, g, red, rgba: d };                          // rgba — для образцов стен («Показать стену»)
 }
 
 function pgArea2(p) {

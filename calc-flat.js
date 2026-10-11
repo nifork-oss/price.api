@@ -429,15 +429,13 @@ ${getUnderlay(flatUlId()) ? '<button type="button" class="mp-head-btn" onclick="
 : ed
 ? `<div class="flat-tools">
 <button type="button" class="mp-head-btn" onclick="flatUndo()" ${ed.undo.length ? '' : 'disabled'}>↶ Шаг назад</button>
-<button type="button" class="mp-head-btn" onclick="flatFit()">Подогнать</button>
-${getUnderlay(flatUlId()) ? '<button type="button" class="mp-head-btn" onclick="flatSnapUnderlay()">Прилепить к подложке</button>' : ''}
-${getUnderlay(flatUlId()) && ed.sel ? '<button type="button" class="mp-head-btn" onclick="flatTraceUnderlay()">Обвести по чертежу</button>' : ''}
+${ed.pick ? '<button type="button" class="mp-head-btn on" onclick="flatWallPickStart()">Нажмите на стену… ✕</button>' : '<button type="button" class="mp-head-btn" onclick="flatEditMore()">Подгонка ▾</button>'}
 <button type="button" class="mp-head-btn" onclick="flatEditCancel()">Отмена</button>
 <button type="button" class="mp-btn mp-btn-primary" onclick="flatEditSave()">Сохранить</button>
 </div>
-<div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — точная длина стены, колонна или ниша на ней, на кружок — колонна в углу. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}${getUnderlay(flatUlId()) ? ' «Прилепить к подложке» — края ' + (ed.sel ? 'этой комнаты' : 'всех комнат') + ' встанут на стены чертежа.' + (ed.sel ? ' «Обвести по чертежу» — форма комнаты целиком по чертежу, с нишами и выступами.' : '') : ''}</div>`
+<div class="ai-hint">${ed.pick ? '<b>Нажмите на перегородку на чертеже</b> (на её линию или штриховку) — сайт запомнит, как стены нарисованы в этом проекте.' : ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — длина, сдвиг, колонна или ниша; на кружок — колонна в углу. «Подгонка» — по соседям и по чертежу.' : 'Нажмите на комнату, чтобы её править. «Подгонка» — по соседям и по чертежу.'}</div>`
 : `<div class="ai-hint">Нажмите на помещение — откроется его замер. После правки план обновится.${rest ? ` Помещений без места на плане: ${rest} (добавлены вручную).` : ''}</div>
-${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button><button type="button" class="measure-open-btn" onclick="flatScaleStart()">Масштаб по стене</button><button type="button" class="measure-open-btn" onclick="flatOpsStart()">Двери и проёмы</button><button type="button" class="measure-open-btn" onclick="flatHStart()">Высоты стен, окон и дверей</button>' + flatHistBtnHtml()}`;
+${isCurrentClient() || flatUlAdjust ? '' : '<div class="flat-main-btns"><button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatOpsStart()">Двери и проёмы</button><button type="button" class="measure-open-btn" onclick="flatMainMore()">Ещё ▾</button></div>' + flatHistBtnHtml()}`;
 const oldWrap = document.getElementById('flatWrap');
 const scroll = oldWrap ? [oldWrap.scrollLeft, oldWrap.scrollTop] : null;
 body.innerHTML = `<div class="mp-body-inner">
@@ -1577,38 +1575,11 @@ showAddToast(`Прилеплено к чертежу помещений: ${Objec
 // Толстое тёмное — стены и колонны (тонкие линии — размеры, текст, мебель — убираем), от центра
 // комнаты заливаем светлый пол — не дальше 40 см за нынешний контур и не через её двери и окна.
 // Края заливки — в прямые стены; ступеньки меньше 6 см — шум. Только черновик
-// Стены чертежа: тёмное толще ~5 см (тонкие линии — размеры, текст, рамы окон — убраны).
+// Стены чертежа: тёмное толще ~5 см (тонкие линии — размеры, текст, рамы окон — убраны),
+// красные перегородки и всё, что похоже на показанные образцы («Показать стену»).
 // Считаем на всю подложку один раз и храним рядом с яркостями
-function flatUlWalls(mp) {
-const g = flatUlGray;
-if (g.walls) return g.walls;
-const { gray, ppm } = mp, W = gray.w, H = gray.h;
-let m = new Uint8Array(W * H);
-for (let i = 0; i < W * H; i++) m[i] = gray.g[i] < 200 ? 1 : 0;
-const k = Math.max(1, Math.round(0.025 * ppm));
-const pass = (src, keep, horiz) => {
-const out = new Uint8Array(W * H);
-const L = horiz ? W : H, M = horiz ? H : W;
-for (let r = 0; r < M; r++) {
-let cnt = 0;
-const at = i => (horiz ? r * W + i : i * W + r);
-for (let i = 0; i < Math.min(L, k); i++) cnt += src[at(i)];
-for (let i = 0; i < L; i++) {
-if (i + k < L) cnt += src[at(i + k)];
-if (i - k - 1 >= 0) cnt -= src[at(i - k - 1)];
-const span = Math.min(L - 1, i + k) - Math.max(0, i - k) + 1;
-out[at(i)] = keep ? (cnt === span ? 1 : 0) : (cnt > 0 ? 1 : 0);
-}
-}
-return out;
-};
-m = pass(pass(pass(pass(m, 1, true), 1, false), 0, true), 0, false);
-// новые перегородки на чертежах перепланировки — красный контур (часто со штриховкой): сами линии
-// тонкие, поэтому красное отдельно — закрыть промежуток между линиями контура (до ~16 см) и убрать
-// одиночные тонкие красные линии
-if (gray.red) {
-const rc = Math.max(2, Math.round(0.08 * ppm)), rk0 = k;
-const passR = (src, keep, rr, horiz) => {
+function flatUlMorph(W, H) {
+const pass = (src, keep, rr, horiz) => {
 const out = new Uint8Array(W * H);
 const L = horiz ? W : H, M = horiz ? H : W;
 for (let q = 0; q < M; q++) {
@@ -1624,28 +1595,141 @@ out[at(i)] = keep ? (cnt === span ? 1 : 0) : (cnt > 0 ? 1 : 0);
 }
 return out;
 };
-const dil = (x, rr) => passR(passR(x, 0, rr, true), 0, rr, false), ero = (x, rr) => passR(passR(x, 1, rr, true), 1, rr, false);
-const rw = dil(ero(ero(dil(gray.red, rc), rc), rk0), rk0);
-// короткие красные пятна (надписи площадей, номера комнат) — не стены: берём куски длиной от 40 см
-const seen = new Uint8Array(W * H), minLen = 0.4 * ppm;
+const dil = (x, rr) => pass(pass(x, 0, rr, true), 0, rr, false), ero = (x, rr) => pass(pass(x, 1, rr, true), 1, rr, false);
+// куски маски длиной от minLen точек (короткие — надписи, номера комнат — не стены)
+const keepLong = (x, minLen, into) => {
+const seen = new Uint8Array(W * H);
 for (let s0 = 0; s0 < W * H; s0++) {
-if (!rw[s0] || seen[s0]) continue;
+if (!x[s0] || seen[s0]) continue;
 const comp = [s0], st = [s0];
 seen[s0] = 1;
 let xa = W, xb = 0, ya = H, yb = 0;
 while (st.length) {
-const i = st.pop(), x = i % W, y = (i - x) / W;
-if (x < xa) xa = x; if (x > xb) xb = x; if (y < ya) ya = y; if (y > yb) yb = y;
-if (x > 0 && rw[i - 1] && !seen[i - 1]) { seen[i - 1] = 1; st.push(i - 1); comp.push(i - 1); }
-if (x < W - 1 && rw[i + 1] && !seen[i + 1]) { seen[i + 1] = 1; st.push(i + 1); comp.push(i + 1); }
-if (y > 0 && rw[i - W] && !seen[i - W]) { seen[i - W] = 1; st.push(i - W); comp.push(i - W); }
-if (y < H - 1 && rw[i + W] && !seen[i + W]) { seen[i + W] = 1; st.push(i + W); comp.push(i + W); }
+const i = st.pop(), px = i % W, py = (i - px) / W;
+if (px < xa) xa = px; if (px > xb) xb = px; if (py < ya) ya = py; if (py > yb) yb = py;
+if (px > 0 && x[i - 1] && !seen[i - 1]) { seen[i - 1] = 1; st.push(i - 1); comp.push(i - 1); }
+if (px < W - 1 && x[i + 1] && !seen[i + 1]) { seen[i + 1] = 1; st.push(i + 1); comp.push(i + 1); }
+if (py > 0 && x[i - W] && !seen[i - W]) { seen[i - W] = 1; st.push(i - W); comp.push(i - W); }
+if (py < H - 1 && x[i + W] && !seen[i + W]) { seen[i + W] = 1; st.push(i + W); comp.push(i + W); }
 }
-if (Math.max(xb - xa, yb - ya) >= minLen) comp.forEach(i => { m[i] = 1; });
+if (Math.max(xb - xa, yb - ya) >= minLen) comp.forEach(i => { into[i] = 1; });
 }
+};
+return { dil, ero, keepLong };
 }
+
+function flatUlWalls(mp) {
+const g = flatUlGray;
+if (g.walls) return g.walls;
+const { gray, ppm } = mp, W = gray.w, H = gray.h;
+const { dil, ero, keepLong } = flatUlMorph(W, H);
+const k = Math.max(1, Math.round(0.025 * ppm));
+let m = new Uint8Array(W * H);
+for (let i = 0; i < W * H; i++) m[i] = gray.g[i] < 200 ? 1 : 0;
+m = dil(ero(m, k), k);
+// новые перегородки на чертежах перепланировки — красный контур (часто со штриховкой): закрыть
+// промежуток между линиями контура (до ~16 см), убрать одиночные тонкие линии и короткие пятна
+if (gray.red) keepLong(dil(ero(ero(dil(gray.red, Math.round(0.08 * ppm)), Math.round(0.08 * ppm)), k), k), 0.4 * ppm, m);
+// образцы, показанные на этом чертеже: такой же цвет — стена (контур, штриховка, заливка)
+flatWallSamples().forEach(sm => {
+if (!gray.rgba) return;
+const d = gray.rgba, [cr, cg, cb] = sm.c;
+const x = new Uint8Array(W * H);
+for (let i = 0, j = 0; i < W * H; i++, j += 4) {
+const dr = d[j] - cr, dg = d[j + 1] - cg, db = d[j + 2] - cb;
+x[i] = dr * dr + dg * dg + db * db < 4900 ? 1 : 0;      // цвет ближе 70
+}
+const rc = Math.max(1, Math.round(sm.r * ppm));
+keepLong(dil(ero(ero(dil(x, rc), rc), k), k), 0.4 * ppm, m);
+});
 g.walls = m;
 return m;
+}
+
+// Образцы стен этого чертежа (цвет и половина толщины, м) — в этом браузере, по подложке
+function flatWallSamplesKey() { return 'flatWallSamples_' + flatUlId(); }
+function flatWallSamples() {
+try { const v = JSON.parse(localStorage.getItem(flatWallSamplesKey()) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+function flatWallSamplesSet(list) {
+try { localStorage.setItem(flatWallSamplesKey(), JSON.stringify(list)); } catch (e) { /* пусто */ }
+if (flatUlGray) delete flatUlGray.walls;                       // пересчитать стены
+}
+
+// Меню «Подгонка» в правке и «Ещё» на плане — чтобы не было стены из кнопок
+function flatEditMore() {
+if (!flatEdit) return;
+const ul = !!getUnderlay(flatUlId()), n = flatWallSamples().length, sel = flatEdit.sel;
+openSheet('Подгонка', [
+{ icon: '🧲', label: 'Подогнать стены и двери (по соседям)', onClick: () => flatFit() },
+...(ul ? [
+{ icon: '📐', label: sel ? 'Прилепить эту комнату к чертежу' : 'Прилепить все комнаты к чертежу', onClick: () => flatSnapUnderlay() },
+...(sel ? [{ icon: '✏️', label: 'Обвести эту комнату по чертежу (ниши, выступы)', onClick: () => flatTraceUnderlay() }] : []),
+null,
+{ icon: '👆', label: 'Показать стену на чертеже', onClick: () => flatWallPickStart() },
+...(n ? [{ icon: '🧹', label: `Забыть образцы стен (${n})`, onClick: () => flatWallSamplesClear() }] : []),
+] : []),
+]);
+}
+
+function flatMainMore() {
+openSheet('План квартиры', [
+{ icon: '🧲', label: 'Подогнать стены и двери', onClick: () => { flatEditStart(); flatFit(); } },
+{ icon: '📏', label: 'Масштаб по стене', onClick: () => flatScaleStart() },
+{ icon: '↕️', label: 'Высоты стен, окон и дверей', onClick: () => flatHStart() },
+]);
+}
+
+// «Показать стену»: следующее нажатие на чертеже — образец стены
+function flatWallPickStart() {
+if (!flatEdit) return;
+flatEdit.pick = !flatEdit.pick;
+renderFlatPlan();
+}
+
+async function flatWallPickAt(pt) {
+flatEdit.pick = false;
+const mp = await flatUlMapping();
+if (!mp || !mp.gray.rgba) { renderFlatPlan(); return; }
+const { gray, toPx, ppm } = mp, d = gray.rgba, W = gray.w, H = gray.h;
+const [cx, cy] = toPx(pt).map(Math.round);
+const R = Math.max(3, Math.round(0.15 * ppm));
+// цвет: самый частый «не фон» рядом с пальцем (ближе — весомее)
+const bins = new Map();
+for (let y = Math.max(0, cy - R); y <= Math.min(H - 1, cy + R); y++) for (let x = Math.max(0, cx - R); x <= Math.min(W - 1, cx + R); x++) {
+const j = (y * W + x) * 4, r = d[j], g2 = d[j + 1], b = d[j + 2];
+const lum = (r * 299 + g2 * 587 + b * 114) / 1000, sat = Math.max(r, g2, b) - Math.min(r, g2, b);
+if (lum > 225 && sat < 40) continue;                         // фон
+const key = (r >> 5) * 64 + (g2 >> 5) * 8 + (b >> 5), w = 1 / (1 + Math.hypot(x - cx, y - cy));
+const v = bins.get(key) || { w: 0, r: 0, g: 0, b: 0 };
+v.w += w; v.r += r * w; v.g += g2 * w; v.b += b * w;
+bins.set(key, v);
+}
+if (!bins.size) { renderFlatPlan(); alert('Здесь на чертеже пусто. Приблизьте и нажмите точно на линию или штриховку перегородки.'); return; }
+const top = [...bins.values()].sort((a, b) => b.w - a.w)[0];
+const c = [top.r / top.w, top.g / top.w, top.b / top.w].map(Math.round);
+// толщина: по горизонтали и вертикали через палец — сколько подряд «того же цвета» (разрывы до 3 см — штриховка)
+const same = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= H) return false; const j = (y * W + x) * 4; const dr = d[j] - c[0], dg = d[j + 1] - c[1], db = d[j + 2] - c[2]; return dr * dr + dg * dg + db * db < 4900; };
+const gap = Math.max(2, Math.round(0.03 * ppm));
+const run = (dx, dy) => {
+let lo = 0, hi = 0;
+for (let s = 1, miss = 0; s < R * 3 && miss <= gap; s++) { if (same(cx - dx * s, cy - dy * s)) { lo = s; miss = 0; } else miss++; }
+for (let s = 1, miss = 0; s < R * 3 && miss <= gap; s++) { if (same(cx + dx * s, cy + dy * s)) { hi = s; miss = 0; } else miss++; }
+return lo + hi + 1;
+};
+const T = Math.min(run(1, 0), run(0, 1)) / ppm;                // м: поперёк стены — меньшая
+const r = Math.max(0.02, Math.min(0.12, T / 2 + 0.02));
+const list = flatWallSamples().filter(sm => Math.hypot(sm.c[0] - c[0], sm.c[1] - c[1], sm.c[2] - c[2]) > 25);
+list.push({ c, r });
+flatWallSamplesSet(list);
+renderFlatPlan();
+showAddToast(`Запомнил: такие линии на этом чертеже — стены (образцов: ${list.length}, толщина ≈ ${Math.round(T * 100)} см). Теперь «Обвести по чертежу» или в проёмах «По подложке»`);
+}
+
+function flatWallSamplesClear() {
+flatWallSamplesSet([]);
+renderFlatPlan();
+showAddToast('Образцы стен забыты');
 }
 
 // «По подложке» в дверях и проёмах: вдоль каждой стены с проёмами смотрим чуть снаружи комнаты —
@@ -2080,7 +2164,10 @@ function flatBindEdit() {
 const wrap = document.getElementById('flatWrap');
 const svg = wrap && wrap.querySelector('svg');
 if (!svg) return;
+// «Показать стену»: нажатие на чертёж — образец стены (после перерисовки при приближении — тоже)
+if (flatEdit && flatEdit.pick) svg.addEventListener('click', (ev) => { ev.stopPropagation(); const pt = flatEventPoint(ev); if (pt) flatWallPickAt(pt); }, true);
 svg.onpointerdown = (e) => {
+if (flatEdit && flatEdit.pick) return;                    // ждём нажатия на стену чертежа — без правки
 const t = e.target;
 const roomId = t.dataset.room;
 const ed = flatEdit;
