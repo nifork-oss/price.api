@@ -1051,3 +1051,7 @@ body.assistant-open .add-toast { z-index: 99; }
 .flat-bar-x > div { top: 3px; bottom: 3px; }
 .flat-bar-y > div { left: 3px; right: 3px; }
 .flat-bar.on > div { background: #e8a900; }
+.mp-head-btn.on { background: #ffe7a3; border-color: #e8a900; }
+.flat-main-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.flat-main-btns .measure-open-btn { margin: 0; }
+.flat-main-btns .measure-open-btn:last-child { grid-column: 1 / -1; }

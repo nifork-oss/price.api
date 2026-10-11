@@ -19,9 +19,12 @@ c.width = w; c.height = h;
 const ctx = c.getContext('2d', { willReadFrequently: true });
 ctx.drawImage(img, 0, 0);
 const d = ctx.getImageData(0, 0, w, h).data;
-const g = new Uint8Array(w * h);
-for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = (d[j] * 299 + d[j + 1] * 587 + d[j + 2] * 114) / 1000;
-return { w, h, g };
+const g = new Uint8Array(w * h), red = new Uint8Array(w * h);
+for (let i = 0, j = 0; i < g.length; i++, j += 4) {
+g[i] = (d[j] * 299 + d[j + 1] * 587 + d[j + 2] * 114) / 1000;
+red[i] = d[j] > 120 && d[j] - Math.max(d[j + 1], d[j + 2]) > 50 ? 1 : 0;   // красное (новые перегородки на чертежах перепланировки)
+}
+return { w, h, g, red, rgba: d };                          // rgba — для образцов стен («Показать стену»)
 }
 
 function pgArea2(p) {
