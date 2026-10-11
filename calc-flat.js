@@ -835,7 +835,7 @@ const list = flatHistList();
 list.push({ label, at: Date.now(), rooms });
 flatHistSave(list);
 }
-function flatHistMark(label) { flatHistPush(label, flatHistSnap()); }
+function flatHistMark(label) { try { flatHistPush(label, flatHistSnap()); } catch (e) { /* без снимка — сохранение всё равно идёт */ } }
 function flatHistDrop() { const list = flatHistList(); list.pop(); flatHistSave(list); }
 
 function flatHistBtnHtml() {
@@ -889,7 +889,9 @@ function flatOpsStart() {
 flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatMergeFrom = null;
 flatHMode = false;
 flatOpsMode = true;
-flatOpsDraft = { orig: flatOpsSnap(), undo: [], full: flatHistSnap() };
+let full = null;
+try { full = flatHistSnap(); } catch (e) { full = null; }
+flatOpsDraft = { orig: flatOpsSnap(), undo: [], full };
 renderFlatPlan();
 }
 
