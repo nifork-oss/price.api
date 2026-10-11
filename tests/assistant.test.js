@@ -708,7 +708,24 @@ test('план в точках картинки → мм: масштаб по п
   const mid = (o) => (o.at[0][0] + o.at[1][0]) / 2;
   assert.ok(Math.abs(mid(out.rooms[0].openings[0]) - mid(out.rooms[1].openings[0])) <= 2);
   assert.strictEqual(out.rooms[0].openings[0].width_m, 0.9);
-  // нет ни одного размера — масштаб не из чего взять
-  const none = JSON.parse(JSON.stringify(await vm.runInContext(`planFromPixels({ rooms: [{ name: 'A', px: [[0,0],[10,0],[10,10],[0,10]], dims: [], openings: [] }] }, '')`, c.ctx || c)));
-  assert.ok(/масштаб/.test(none.error));
+  // нет ни одного размера — масштаб примерный по двери (850 мм), с подсказкой
+  const none = JSON.parse(JSON.stringify(await vm.runInContext(`planFromPixels({ rooms: [{ name: 'A', px: [[0,0],[300,0],[300,400],[0,400]], dims: [], openings: [{ type: 'door', px: [[100,400],[185,400]] }] }] }, '')`, c.ctx || c)));
+  assert.strictEqual(none.roughScale, true);
+  assert.ok(Math.abs(none.scale - 10) < 0.01);
+  assert.ok(none.warnings.some(w => /Масштаб по стене/.test(w)));
+});
+
+test('план квартиры: масштаб по стене — весь план и проёмы пересчитываются', () => {
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-flat.js']);
+  const out = JSON.parse(JSON.stringify(vm.runInContext(`(() => {
+    const a = flatPtsToMeasure({ name: 'A', pts: [[0,0],[3000,0],[3000,4000],[0,4000]], openings: [{ type: 'door', at: [[1000,4000],[1800,4000]] }] }, 'o');
+    const b = flatPtsToMeasure({ name: 'B', pts: [[3200,0],[5200,0],[5200,2000],[3200,2000]], openings: [] }, 'o');
+    const rooms = [{ id: 'a', measure: a.measure, plan: a.plan }, { id: 'b', measure: b.measure, plan: b.plan }];
+    flatRooms = () => rooms; getUnderlay = () => null; saveCloudData = async () => true; renderFlatPlan = () => {}; showAddToast = () => {};
+    flatScaleAll(1.1);
+    return rooms.map(r => ({ walls: r.measure.walls, plan: r.plan, ops: r.measure.openings.map(o => [o.w, o.off]) }));
+  })()`, c.ctx || c)));
+  assert.deepStrictEqual(out[0].walls, ['3,3', '4,4', '3,3', '4,4']);
+  assert.deepStrictEqual(out[0].ops, [['0,88', '1,32']]);   // 0,8 и 1,2 (от начала нижней стены справа) × 1,1
+  assert.deepStrictEqual(out[1].plan, { x: 3.52, y: 0 });
 });

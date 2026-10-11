@@ -144,13 +144,23 @@ const p = w.px[d.edge], q = w.px[(d.edge + 1) % w.px.length];
 const l = p && q ? Math.hypot(q[0] - p[0], q[1] - p[1]) : 0;
 if (l >= 10) ratios.push(d.mm / l);
 }));
-if (!ratios.length) return { error: 'На чертеже не нашлось подписанных размеров — не из чего взять масштаб. Напишите внизу хотя бы один размер, например «ширина кухни 3200».' };
+let s;                                                       // мм на точку картинки
+if (ratios.length) {
 ratios.sort((a, b) => a - b);
 const med = ratios[Math.floor(ratios.length / 2)];
 const good = ratios.filter(v => Math.abs(v / med - 1) <= 0.12);
-const s = good.reduce((a, v) => a + v, 0) / good.length;   // мм на точку картинки
+s = good.reduce((a, v) => a + v, 0) / good.length;
 const off = ratios.length - good.length;
 if (off) warnings.push(`Размеров не по масштабу чертежа: ${off} — они не учтены, проверьте эти стены.`);
+} else {
+// размеров нет — масштаб примерный: межкомнатная дверь ~850 мм, без дверей — длинная стена ~5 м
+const med = (a) => a.sort((x, y) => x - y)[Math.floor(a.length / 2)];
+const doors = work.flatMap(w => (w.r.openings || []).filter(o => o.type === 'door' && Array.isArray(o.px) && o.px.length === 2)
+.map(o => Math.hypot(o.px[1][0] - o.px[0][0], o.px[1][1] - o.px[0][1]))).filter(l => l >= 5);
+const sides = work.flatMap(w => w.px.map((p, i) => { const q = w.px[(i + 1) % w.px.length]; return Math.hypot(q[0] - p[0], q[1] - p[1]); }));
+s = doors.length ? 850 / med(doors) : 5000 / Math.max(...sides, 1);
+warnings.push('На чертеже нет подписанных размеров — масштаб примерный (по ширине дверей). После добавления откройте «План квартиры» → «Масштаб по стене» и введите настоящую длину одной стены — весь план пересчитается.');
+}
 // начало координат — верхний левый край плана
 const all = work.flatMap(w => w.px);
 const ox = Math.min(...all.map(p => p[0])), oy = Math.min(...all.map(p => p[1]));
@@ -227,5 +237,5 @@ const m = Math.round((ca + cb) / 2);
 // 5) подложка: картинка в метрах плана
 const iw = gray ? gray.w : null, ih = gray ? gray.h : null;
 const underlay = iw ? { x: -ox * s / 1000, y: -oy * s / 1000, w: iw * s / 1000, ar: ih / iw } : null;
-return { rooms: out, warnings, underlay, scale: s };
+return { rooms: out, warnings, underlay, scale: s, ...(ratios.length ? {} : { roughScale: true }) };
 }

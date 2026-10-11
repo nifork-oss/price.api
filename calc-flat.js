@@ -180,6 +180,7 @@ const tap = opt.onTap ? ` onclick="${opt.onTap}('${r.id}')" style="cursor:pointe
 return `<g class="flat-room${sel ? ' sel' : ''}"${tap}>
 <path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}"${ul ? ' fill-opacity="0.35"' : ''} stroke="#14181f" stroke-width="${fs * 0.22}" stroke-linejoin="miter"/>
 ${ops}
+${opt.pickWalls ? r.pts.map((p, i) => (!r.closed && i === n - 1) ? '' : `<line x1="${p[0]}" y1="${p[1]}" x2="${r.pts[(i + 1) % n][0]}" y2="${r.pts[(i + 1) % n][1]}" stroke="#e8a900" stroke-opacity=".55" stroke-width="${fs * 0.5}" stroke-linecap="round" onclick="flatScaleWall('${r.id}', ${i})" style="cursor:pointer"/>`).join('') : ''}
 <title>${escapeHtml(name)} — ${areaTxt}</title>
 ${showName ? `<text x="${lx}" y="${ly - rf * 0.15}" font-size="${rf}" text-anchor="middle" font-family="Arial, sans-serif" fill="#14181f" font-weight="700" pointer-events="none">${escapeHtml(name)}</text>` : ''}
 <text x="${lx}" y="${showName ? ly + rf * 1.05 : ly + rf * 0.3}" font-size="${rf * 0.85}" text-anchor="middle" font-family="Arial, sans-serif" fill="#5a6470" pointer-events="none">${areaTxt}</text>
@@ -340,6 +341,7 @@ let flatZoom = 1;
 // Правка на плане: draft — новые углы комнат { roomId: [[x,y]…] }, undo — прошлые draft,
 // view — рамка рисунка (на время правки не меняется, чтобы план не «прыгал» под пальцем)
 let flatEdit = null;      // { sel, draft, undo, view }
+let flatScaleMode = false; // выбираем стену, чтобы задать масштаб всего плана
 
 function objectHasFlat(obj) {
 return objectRooms(obj).some(r => r.plan && r.measure);
@@ -355,6 +357,7 @@ return objectRooms(flatObj()).filter(r => r.plan && r.measure);
 
 function openFlatPlan(objectId) {
 flatObjectId = objectId;
+flatScaleMode = false;
 flatUlAdjust = null;
 flatZoom = 1;
 flatEdit = null;
@@ -386,7 +389,10 @@ const items = flatItems();
 const rest = objectRooms(flatObj()).length - items.length;
 const total = items.reduce((a, r) => a + flatPolyArea(r.pts), 0);
 const ed = flatEdit;
-const top = ed
+const top = flatScaleMode
+? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatScaleMode = false; renderFlatPlan()">Отмена</button></div>
+<div class="ai-hint"><b>Масштаб по стене.</b> Нажмите на стену (выделены жёлтым), длину которой знаете точно, и введите её. Весь план — все помещения, проёмы и подложка — пересчитается в том же соотношении.</div>`
+: ed
 ? `<div class="flat-tools">
 <button type="button" class="mp-head-btn" onclick="flatUndo()" ${ed.undo.length ? '' : 'disabled'}>↶ Шаг назад</button>
 <button type="button" class="mp-head-btn" onclick="flatFit()">Подогнать</button>
@@ -395,14 +401,14 @@ const top = ed
 </div>
 <div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — введёте точную длину стены. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}</div>`
 : `<div class="ai-hint">Нажмите на помещение — откроется его замер. После правки план обновится.${rest ? ` Помещений без места на плане: ${rest} (добавлены вручную).` : ''}</div>
-${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button>'}`;
+${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button><button type="button" class="measure-open-btn" onclick="flatScaleStart()">Масштаб по стене</button>'}`;
 const oldWrap = document.getElementById('flatWrap');
 const scroll = oldWrap ? [oldWrap.scrollLeft, oldWrap.scrollTop] : null;
 body.innerHTML = `<div class="mp-body-inner">
 ${top}
 <div class="flat-zoom"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><span>Площадь: <b>${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²</b></span><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button></div>
-<div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : { onTap: 'flatOpenRoom', underlay: flatUlOpt(), view: flatViewOf(items) })}</div></div>
-${ed ? '' : flatUlBarHtml()}
+<div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) } : { onTap: 'flatOpenRoom', underlay: flatUlOpt(), view: flatViewOf(items) })}</div></div>
+${ed || flatScaleMode ? '' : flatUlBarHtml()}
 </div>`;
 flatSizeInner();
 const wrap = document.getElementById('flatWrap');
@@ -690,7 +696,53 @@ svg.addEventListener('pointerup', end);
 svg.addEventListener('pointercancel', end);
 }
 
+/* ---------- масштаб всего плана по одной стене ---------- */
+// Распознали план без подписанных размеров (масштаб примерный) или масштаб чертежа
+// не тот: мастер вводит настоящую длину одной стены — весь план пересчитывается в том же
+// соотношении: стены, проёмы, места помещений и подложка. Дальше правится по одной стене
+
+function flatScaleStart() {
+flatEdit = null; flatUlAdjust = null;
+flatScaleMode = true;
+renderFlatPlan();
+}
+
+function flatScaleWall(roomId, i) {
+const it = flatItems().find(r => r.id === roomId);
+if (!it) return;
+const a = it.pts[i], b = it.pts[(i + 1) % it.pts.length];
+const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+if (!(len > 0.01)) return;
+const raw = prompt(`«${it.name}»: длина этой стены по плану — ${Math.round(len * 1000)} мм.\nСколько она на самом деле (мм)?`, String(Math.round(len * 1000)));
+if (raw == null) return;
+let v = mNum(String(raw).replace(/\s/g, ''));
+if (!(v > 0)) { alert('Введите длину числом, например 3200.'); return; }
+if (v < 100) v *= 1000;                                   // ввели в метрах
+const k = v / 1000 / len;
+if (Math.abs(k - 1) < 0.0005) { flatScaleMode = false; renderFlatPlan(); return; }
+if (!confirm(`Пересчитать весь план в ${String(Math.round(k * 1000) / 1000).replace('.', ',')} раза? Изменятся длины стен, проёмы и места всех помещений на плане, высоты — нет.`)) return;
+flatScaleAll(k);
+}
+
+async function flatScaleAll(k) {
+const sc = v => { const n = mNum(v); return isFinite(n) && n > 0 ? FLAT_FMT(n * k) : v; };
+flatRooms().forEach(room => {
+const m = room.measure;
+m.walls = (m.walls || []).map(sc);
+(m.openings || []).forEach(o => ['w', 'off', 'dw'].forEach(f => { if (o[f] !== undefined && o[f] !== '') o[f] = sc(o[f]); }));
+room.plan = { x: Math.round(room.plan.x * k * 1000) / 1000, y: Math.round(room.plan.y * k * 1000) / 1000 };
+});
+const u = getUnderlay(flatUlId());
+if (u) { u.x *= k; u.y *= k; u.w *= k; saveUnderlayView(flatUlId(), u); }
+flatScaleMode = false;
+await saveCloudData();
+renderFlatPlan();
+if (typeof renderInvoice === 'function') renderInvoice();
+showAddToast('Масштаб плана изменён — проверьте размеры');
+}
+
 function flatEditStart() {
+flatScaleMode = false;
 flatUlAdjust = null;
 const items = flatItems();
 const all = items.flatMap(r => r.pts);
