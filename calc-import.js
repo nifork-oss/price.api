@@ -411,7 +411,8 @@ const res = await fetch(`${WORKER_URL}/recognize-plan`, {
 method: 'POST',
 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
 body: JSON.stringify({ image: target.image, mediaType: target.mediaType, stream: true,
-turns: aiTurns(target.runs), hints: aiPlanHints(), effort: paidEffort('plan'), ...(target.pageText ? { pageText: target.pageText } : {}) }),
+turns: aiTurns(target.runs), hints: aiPlanHints(), effort: paidEffort('plan'), ...(target.pageText ? { pageText: target.pageText } : {}),
+...(target.imgW && target.mediaType !== 'application/pdf' ? { imgW: target.imgW, imgH: target.imgH } : {}) }),
 signal: target.abort.signal
 });
 let data = null;
@@ -445,6 +446,14 @@ if (!run.error && data.questions && data.questions.length && !(data.rooms && dat
 run.questions = data.questions;
 } else if (!run.error && (!data.rooms || !data.rooms.length)) run.error = 'Помещения не распознаны' + (data.warnings && data.warnings.length ? ': ' + data.warnings.join(' ') : '.') + ' Напишите внизу, что на плане (например, «это квартира из 3 комнат, размеры в мм»), или попробуйте более чёткое фото.';
 if (!run.error && !run.questions) run.result = { rooms: data.rooms, warnings: data.warnings || [] };
+// Помещения отмечены на картинке — в миллиметры переводим здесь (calc-plangeo.js)
+if (run.result && run.result.rooms.some(r => r.px)) {
+run.status = 'Подгоняю план по стенам и размерам…';
+renderAiPanel();
+const plan = await planFromPixels(run.result, 'data:image/jpeg;base64,' + target.image);
+if (plan.error) run.error = plan.error;
+else run.plan = plan;
+}
 if (data && data.model) run.model = data.model;
 if (data && data.cost) { run.cost = data.cost; paidApplyCost(data.cost); }
 } catch (err) {
@@ -534,7 +543,7 @@ renderAiPanel();
 // После неудачи — выделить часть того же плана (новый заход с нуля)
 function aiCropAgain() {
 if (!aiTarget || aiBusy() || !aiTarget.file) return;
-Object.assign(aiTarget, aiTarget.full, { pageText: '', chatId: null, runs: [] });
+Object.assign(aiTarget, aiTarget.full, { pageText: '', imgW: 0, imgH: 0, chatId: null, runs: [] });
 aiOpenCrop(aiTarget);
 }
 
@@ -595,14 +604,13 @@ if (!t || !t.cropStep) return;
 const c = t.crop;
 const whole = !useCrop || (c.w > 0.97 && c.h > 0.97);
 t.cropStep = false;
-if (whole) { runAiRecognition(''); return; }
-t.runs = [{ thinking: '', text: '', status: 'Вырезаю выделенное…' }];
+t.runs = [{ thinking: '', text: '', status: whole ? 'Готовлю картинку…' : 'Вырезаю выделенное…' }];
 renderAiPanel();
 try {
-const part = await aiCropImage(t.file, t.page, t.isPdf, c);
+const part = await aiCropImage(t.file, t.page, t.isPdf, whole ? { x: 0, y: 0, w: 1, h: 1 } : c);
 if (aiTarget !== t) return;
-Object.assign(t, { image: part.dataUrl.split(',')[1], mediaType: 'image/jpeg', preview: part.dataUrl, pageText: part.text || '',
-sentAs: `картинкой — выделенная часть${t.isPdf ? ' страницы PDF' + (part.text ? ', с её подписями и размерами текстом' : '') : ''}` });
+Object.assign(t, { image: part.dataUrl.split(',')[1], mediaType: 'image/jpeg', preview: part.dataUrl, pageText: part.text || '', imgW: part.w, imgH: part.h,
+sentAs: `картинкой${whole ? '' : ' — выделенная часть'}${t.isPdf ? (whole ? ' страницы PDF' : ' страницы PDF') + (part.text ? ', с подписями и размерами текстом' : '') : ''}` });
 t.runs = [];
 runAiRecognition('');
 } catch (err) {
@@ -613,8 +621,12 @@ renderAiPanel();
 }
 
 // Выделенная часть — заново из исходного файла, в хорошем разрешении: мелкие
-// размеры становятся читаемыми. У PDF заодно берём текст (размеры) внутри рамки.
-async function aiCropImage(file, pageNum, isPdf, c, maxSide = 1568) {
+// размеры становятся читаемыми. У PDF заодно берём текст (размеры) внутри рамки —
+// с местом на картинке («3650 @812,404»), чтобы нейросеть знала, к какой стене он.
+// До 2400 точек по длинной стороне и 3,6 Мп — такую картинку модель видит без уменьшения,
+// и её координаты совпадают с точками картинки
+const AI_IMG_SIDE = 2400, AI_IMG_PIXELS = 3.6e6;
+async function aiCropImage(file, pageNum, isPdf, c, maxSide = AI_IMG_SIDE) {
 const out = document.createElement('canvas');
 const ctx = out.getContext('2d');
 if (isPdf) {
@@ -622,7 +634,7 @@ const pdf = await openPdf(file);
 const page = await pdf.getPage(pageNum);
 const vp1 = page.getViewport({ scale: 1 });
 const cw = c.w * vp1.width, ch = c.h * vp1.height;
-const scale = Math.min(maxSide / Math.max(cw, ch), 8);
+const scale = Math.min(maxSide / Math.max(cw, ch), Math.sqrt(AI_IMG_PIXELS / (cw * ch)), 8);
 const vp = page.getViewport({ scale });
 out.width = Math.round(cw * scale); out.height = Math.round(ch * scale);
 ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height);
@@ -633,12 +645,17 @@ const tc = await page.getTextContent();
 tc.items.forEach(it => {
 const str = String(it.str || '').trim();
 if (!str) return;
-const [px, py] = vp1.convertToViewportPoint(it.transform[4], it.transform[5]);
+// середина надписи (у повёрнутых размеров — тоже по её направлению)
+const [a, b, , , e, f] = it.transform;
+const k = Math.hypot(a, b) || 1, half = (it.width || 0) / 2;
+const [px, py] = vp1.convertToViewportPoint(e + a / k * half, f + b / k * half);
 const nx = px / vp1.width, ny = py / vp1.height;
-if (nx >= c.x && nx <= c.x + c.w && ny >= c.y && ny <= c.y + c.h) words.push(str);
+if (nx >= c.x && nx <= c.x + c.w && ny >= c.y && ny <= c.y + c.h) {
+words.push(`${str} @${Math.round((nx - c.x) * vp1.width * scale)},${Math.round((ny - c.y) * vp1.height * scale)}`);
+}
 });
 } catch (e) { /* без текста */ }
-return { dataUrl: out.toDataURL('image/jpeg', 0.88), text: words.join(' ').slice(0, 8000) };
+return { dataUrl: out.toDataURL('image/jpeg', 0.88), text: words.join('\n').slice(0, 12000), w: out.width, h: out.height };
 }
 const url = URL.createObjectURL(file);
 try {
@@ -646,11 +663,11 @@ const img = new Image();
 img.src = url;
 await img.decode();
 const sx = c.x * img.naturalWidth, sy = c.y * img.naturalHeight, sw = c.w * img.naturalWidth, sh = c.h * img.naturalHeight;
-const k = Math.min(1, maxSide / Math.max(sw, sh));
+const k = Math.min(1, maxSide / Math.max(sw, sh), Math.sqrt(AI_IMG_PIXELS / (sw * sh)));
 out.width = Math.round(sw * k); out.height = Math.round(sh * k);
 ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, out.width, out.height);
 ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out.width, out.height);
-return { dataUrl: out.toDataURL('image/jpeg', 0.88), text: '' };
+return { dataUrl: out.toDataURL('image/jpeg', 0.88), text: '', w: out.width, h: out.height };
 } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
 }
 
@@ -766,7 +783,7 @@ const box = body.querySelector('.ai-chat');
 const stick = !box || body.scrollHeight - body.scrollTop - body.clientHeight < 80;
 const busy = aiBusy();
 const last = aiTarget.runs[aiTarget.runs.length - 1];
-const showReview = !busy && last && last.result;
+const showReview = !busy && last && last.result && !last.error;
 let html = '<div class="mp-body-inner ai-chat">';
 if (aiTarget.preview) html += `<img class="ai-preview" src="${aiTarget.preview}" alt="План">`;
 if (aiTarget.sentAs) html += `<div class="ai-sent">Отправлено ${escapeHtml(aiTarget.sentAs)}</div>`;
@@ -801,7 +818,7 @@ if (run.cost && !live) html += paidCostHtml(run.cost);
 if (run.model && !live) html += `<div class="as-model">${escapeHtml(run.model)}</div>`;
 html += '</div>';
 });
-if (showReview) html += aiReviewHtml(last.result);
+if (showReview) html += aiReviewHtml(last.plan || last.result);
 html += '</div>';
 body.innerHTML = html;
 const t = body.querySelector('.as-think[open] > div');
@@ -943,6 +960,17 @@ const plan = aiTarget.plans && aiTarget.plans[i];
 if (old) { aiUpdateMeasure(old.measure, m); if (plan) old.plan = plan; updated++; }
 else { obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: m, ...(plan ? { plan } : {}) }); added++; }
 });
+const lastPlan = [...aiTarget.runs].reverse().find(r => r.plan);
+const ul = lastPlan && lastPlan.plan.underlay;
+if (ul && aiTarget.preview && aiTarget.preview.startsWith('data:image/')) {
+// картинка, которую распознавали, — подложкой под план квартиры, сразу на своём месте
+const id = 'flat_' + obj.id;
+try {
+localStorage.setItem(ulImgKey(id), aiTarget.preview);
+ulCache[id] = aiTarget.preview;
+saveUnderlayView(id, { ...ul, rot: 0, op: 0.5, hidden: false, locked: true });
+} catch (e) { /* не хватило места — без подложки */ }
+}
 closeAiReview();
 await saveCloudData();
 renderInvoice();

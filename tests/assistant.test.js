@@ -675,3 +675,40 @@ test('план квартиры: перемычка в двери сквозь �
   assert.strictEqual(out.dx, -40);
   assert.strictEqual(out.dy, 0);
 });
+
+test('план в точках картинки: задание с размером картинки, разбор углов, размеров и проёмов', async () => {
+  const plan = '{"rooms":[{"name":"Кухня","height_mm":2700,"px":[[100,100],[420,100],[420,345],[100,345]],"dims":[{"edge":0,"mm":3200},{"edge":1,"mm":2450},{"edge":9,"mm":500}],"openings":[{"type":"window","px":[[200,100],[340,100]],"width_mm":1400}]}],"warnings":[]}';
+  const r = await callPlan({ mediaType: 'image/jpeg', imgW: 1600, imgH: 2260 }, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: plan }] }) }]);
+  const room = JSON.parse(r.text).rooms[0];
+  assert.deepStrictEqual(room.px, [[100, 100], [420, 100], [420, 345], [100, 345]]);
+  assert.deepStrictEqual(room.dims, [{ edge: 0, mm: 3200 }, { edge: 1, mm: 2450 }]);   // сторона 9 — нет такой
+  assert.deepStrictEqual(room.openings[0].px, [[200, 100], [340, 100]]);
+  const prompt = JSON.stringify(r.sent[0].messages[0].content);
+  assert.ok(prompt.includes('1600×2260 точек'));
+  // без размера картинки — прежнее задание в миллиметрах
+  const old = await callPlan({}, [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: plan }] }) }]);
+  assert.ok(!JSON.stringify(old.sent[0].messages[0].content).includes('точек'));
+});
+
+test('план в точках картинки → мм: масштаб по подписям, размеры точно по подписям, двери напротив', async () => {
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-flat.js', 'calc-plangeo.js']);
+  // 10 мм на точку; нейросеть отметила неточно (±3 точки), подписи — точные
+  const res = { rooms: [
+    { name: 'A', px: [[10, 10], [312, 12], [309, 408], [11, 410]], dims: [{ edge: 0, mm: 3000 }, { edge: 1, mm: 4000 }],
+      openings: [{ type: 'door', px: [[100, 409], [190, 410]], width_m: 0.9 }] },
+    { name: 'B', px: [[9, 428], [311, 431], [310, 612], [12, 610]], dims: [{ edge: 0, mm: 3000 }, { edge: 1, mm: 1800 }],
+      openings: [{ type: 'door', px: [[104, 429], [196, 430]], width_m: 0.9 }] },
+  ], warnings: [] };
+  const out = JSON.parse(JSON.stringify(await vm.runInContext(`planFromPixels(${JSON.stringify(res)}, 'нет картинки')`, c.ctx || c)));
+  assert.ok(Math.abs(out.scale - 10) < 0.3, 'масштаб ' + out.scale);
+  const size = (r) => [r.pts[1][0] - r.pts[0][0], r.pts[2][1] - r.pts[1][1]];
+  assert.deepStrictEqual(size(out.rooms[0]), [3000, 4000]);
+  assert.deepStrictEqual(size(out.rooms[1]), [3000, 1800]);
+  // двери — друг напротив друга (середины по x совпадают)
+  const mid = (o) => (o.at[0][0] + o.at[1][0]) / 2;
+  assert.ok(Math.abs(mid(out.rooms[0].openings[0]) - mid(out.rooms[1].openings[0])) <= 2);
+  assert.strictEqual(out.rooms[0].openings[0].width_m, 0.9);
+  // нет ни одного размера — масштаб не из чего взять
+  const none = JSON.parse(JSON.stringify(await vm.runInContext(`planFromPixels({ rooms: [{ name: 'A', px: [[0,0],[10,0],[10,10],[0,10]], dims: [], openings: [] }] }, '')`, c.ctx || c)));
+  assert.ok(/масштаб/.test(none.error));
+});

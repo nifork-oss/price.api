@@ -419,7 +419,10 @@ const u = flatUlOpt();
 if (u) {
 const h = u.w * u.ar, cx = u.x + u.w / 2, cy = u.y + h / 2;
 const [bw, bh] = (u.rot || 0) % 180 ? [h, u.w] : [u.w, h];
-all.push([cx - bw / 2, cy - bh / 2], [cx + bw / 2, cy + bh / 2]);
+// подложка — не дальше 1,5 м от плана: там надписи чертежа, дальше — пустые поля листа
+const m = 1.5, px = all.map(p => p[0]), py = all.map(p => p[1]);
+const lim = all.length ? [Math.min(...px) - m, Math.min(...py) - m, Math.max(...px) + m, Math.max(...py) + m] : [-Infinity, -Infinity, Infinity, Infinity];
+all.push([Math.max(cx - bw / 2, lim[0]), Math.max(cy - bh / 2, lim[1])], [Math.min(cx + bw / 2, lim[2]), Math.min(cy + bh / 2, lim[3])]);
 }
 if (!all.length) return undefined;
 const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
