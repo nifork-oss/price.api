@@ -436,7 +436,7 @@ ${getUnderlay(flatUlId()) && ed.sel ? '<button type="button" class="mp-head-btn"
 </div>
 <div class="ai-hint">${ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — точная длина стены, колонна или ниша на ней, на кружок — колонна в углу. Привязка — к углам и стенам соседних комнат.' : 'Нажмите на комнату, чтобы её править.'}${getUnderlay(flatUlId()) ? ' «Прилепить к подложке» — края ' + (ed.sel ? 'этой комнаты' : 'всех комнат') + ' встанут на стены чертежа.' + (ed.sel ? ' «Обвести по чертежу» — форма комнаты целиком по чертежу, с нишами и выступами.' : '') : ''}</div>`
 : `<div class="ai-hint">Нажмите на помещение — откроется его замер. После правки план обновится.${rest ? ` Помещений без места на плане: ${rest} (добавлены вручную).` : ''}</div>
-${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button><button type="button" class="measure-open-btn" onclick="flatScaleStart()">Масштаб по стене</button><button type="button" class="measure-open-btn" onclick="flatOpsStart()">Двери и проёмы</button><button type="button" class="measure-open-btn" onclick="flatHStart()">Высоты стен, окон и дверей</button>'}`;
+${isCurrentClient() || flatUlAdjust ? '' : '<button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatEditStart(); flatFit()">Подогнать стены и двери</button><button type="button" class="measure-open-btn" onclick="flatScaleStart()">Масштаб по стене</button><button type="button" class="measure-open-btn" onclick="flatOpsStart()">Двери и проёмы</button><button type="button" class="measure-open-btn" onclick="flatHStart()">Высоты стен, окон и дверей</button>' + flatHistBtnHtml()}`;
 const oldWrap = document.getElementById('flatWrap');
 const scroll = oldWrap ? [oldWrap.scrollLeft, oldWrap.scrollTop] : null;
 body.innerHTML = `<div class="mp-body-inner">
@@ -815,6 +815,55 @@ svg.addEventListener('pointerup', end);
 svg.addEventListener('pointercancel', end);
 }
 
+/* ---------- отмена сохранённого: как было до последних сохранений на плане ---------- */
+// Перед каждым сохранением с плана — снимок всех помещений объекта (до 5 последних, в этом браузере)
+const FLAT_HIST_MAX = 5;
+function flatHistKey() { return 'flatHist_' + flatObjectId; }
+function flatHistList() {
+try { const v = JSON.parse(localStorage.getItem(flatHistKey()) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+function flatHistSave(list) {
+for (let l = list.slice(-FLAT_HIST_MAX); l.length; l.shift()) {
+try { localStorage.setItem(flatHistKey(), JSON.stringify(l)); return; } catch (e) { /* мало места — храним меньше */ }
+}
+try { localStorage.removeItem(flatHistKey()); } catch (e) { /* пусто */ }
+}
+function flatHistSnap() { return JSON.stringify(objectRooms(flatObj())); }
+function flatHistPush(label, rooms) {
+if (!flatObjectId || !rooms) return;
+const list = flatHistList();
+list.push({ label, at: Date.now(), rooms });
+flatHistSave(list);
+}
+function flatHistMark(label) { flatHistPush(label, flatHistSnap()); }
+function flatHistDrop() { const list = flatHistList(); list.pop(); flatHistSave(list); }
+
+function flatHistBtnHtml() {
+const last = flatHistList().slice(-1)[0];
+if (!last) return '';
+const t = new Date(last.at);
+const hm = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+return `<button type="button" class="measure-open-btn" onclick="flatHistUndo()">↶ Отменить сохранённое: ${escapeHtml(last.label)} (${hm})</button>`;
+}
+
+async function flatHistUndo() {
+const list = flatHistList();
+const last = list[list.length - 1];
+const obj = flatObj();
+if (!last || !obj) return;
+if (!confirm(`Вернуть все помещения как было до «${last.label}»? Правки в замерах этих помещений, сделанные после, тоже откатятся.`)) return;
+let rooms;
+try { rooms = JSON.parse(last.rooms); } catch (e) { alert('Не получилось прочитать сохранённое.'); return; }
+obj.rooms = rooms;
+list.pop();
+flatHistSave(list);
+if (typeof syncCartWithRooms === 'function') syncCartWithRooms();
+if (typeof renderInvoice === 'function') renderInvoice();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === flatObjectId && typeof renderObjectDetail === 'function') renderObjectDetail();
+renderFlatPlan();
+if ((await saveCloudData()) !== false) showAddToast('Вернул как было. Ещё раньше — нажмите кнопку отмены ещё раз');
+}
+
 /* ---------- правка плана без нейросети: имя, удаление, двери и проёмы, объединение ---------- */
 
 async function flatRoomRename(roomId) {
@@ -822,6 +871,7 @@ const room = objectRooms(flatObj()).find(r => r.id === roomId);
 if (!room) return;
 const name = prompt('Название помещения:', roomName(room));
 if (name == null || !name.trim()) return;
+flatHistMark('Переименование');
 room.measure.room = name.trim().slice(0, 80);
 await saveCloudData();
 renderFlatPlan();
@@ -829,7 +879,9 @@ if (typeof renderInvoice === 'function') renderInvoice();
 }
 
 async function flatRoomDelete(roomId) {
+flatHistMark('Удаление помещения');
 await deleteRoom(flatObjectId, roomId);   // спросит подтверждение, уберёт и из счёта
+if (objectRooms(flatObj()).some(r => r.id === roomId)) flatHistDrop();   // передумали
 renderFlatPlan();
 }
 
@@ -837,7 +889,7 @@ function flatOpsStart() {
 flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatMergeFrom = null;
 flatHMode = false;
 flatOpsMode = true;
-flatOpsDraft = { orig: flatOpsSnap(), undo: [] };
+flatOpsDraft = { orig: flatOpsSnap(), undo: [], full: flatHistSnap() };
 renderFlatPlan();
 }
 
@@ -1090,6 +1142,7 @@ renderFlatPlan();
 
 async function flatOpsSave() {
 const changed = flatOpsDraft && flatOpsDraft.undo.length;
+if (changed) flatHistPush('Двери и проёмы', flatOpsDraft.full);
 flatOpsDraft = null; flatOpsMode = false;
 if (changed && (await saveCloudData()) !== false) showAddToast('Двери и проёмы сохранены.');
 renderFlatPlan();
@@ -1146,6 +1199,7 @@ const val = id => { const el = document.getElementById(id); return el ? flatHPar
 const v = { walls: val('flatHWalls'), win: val('flatHWin'), door: val('flatHDoor'), balc: val('flatHBalc') };
 if (Object.values(v).some(x => x === null)) { alert('Высота — число в метрах (2,7) или в миллиметрах (2700).'); return; }
 if (!Object.values(v).some(Boolean)) { alert('Заполните хотя бы одно поле.'); return; }
+flatHistMark('Высоты всем');
 let n = 0;
 flatRooms().forEach(r => {
 const m = r.measure;
@@ -1183,6 +1237,7 @@ const m = room.measure;
 const own = (m.wallHeights || []).some(v => mNum(v) > 0);
 const v = flatHAsk(`Высота стен — «${roomName(room)}»${own ? ' (отдельные высоты стен сбросятся)' : ''}`, m.height);
 if (v === undefined) return;
+flatHistMark('Высота стен');
 m.height = v;
 if (Array.isArray(m.wallHeights)) m.wallHeights = m.wallHeights.map(() => '');
 await flatHSave();
@@ -1195,6 +1250,7 @@ if (!room) return;
 const m = room.measure;
 const v = flatHAsk(`Высота стены ${i + 1} — «${roomName(room)}» (пусто — как у комнаты${m.height ? ', ' + m.height : ''})`, (m.wallHeights || [])[i] || '');
 if (v === undefined) return;
+flatHistMark('Высота стены');
 if (!Array.isArray(m.wallHeights)) m.wallHeights = [];
 while (m.wallHeights.length < m.walls.length) m.wallHeights.push('');
 m.wallHeights[i] = v && v !== FLAT_FMT(mNum(m.height)) ? v : '';
@@ -1212,10 +1268,12 @@ const h = flatHAsk('Балконный блок: высота окна', o.h);
 if (h === undefined) return;
 const dh = flatHAsk('Балконный блок: высота двери', o.dh);
 if (dh === undefined) return;
+flatHistMark('Высота проёма');
 list.forEach(x => { x.h = h; x.dh = dh; });
 } else {
 const h = flatHAsk(o.type === 'window' ? 'Высота окна' : o.pass ? 'Высота прохода' : 'Высота двери', o.h);
 if (h === undefined) return;
+flatHistMark('Высота проёма');
 list.forEach(x => { x.h = h; });
 }
 await flatHSave();
@@ -1342,6 +1400,7 @@ if (!ia.closed || !ib.closed) { alert('Сначала замкните конт�
 const pts = flatUnion(ia.pts, ib.pts);
 if (!pts) { alert('Не получилось объединить: комнаты должны быть соседними (через одну стену) и со стенами только вдоль осей.'); return; }
 if (!confirm(`Объединить «${ia.name}» и «${ib.name}» в одно помещение «${ia.name}»? Замер «${ib.name}» удалится, двери между ними — тоже.`)) return;
+flatHistMark('Объединение помещений');
 // проёмы обеих комнат, которые остаются на краях нового контура
 const edgeDist = (p) => Math.min(...pts.map((q, i) => {
 const r = pts[(i + 1) % pts.length], qx = q[0] / 1000, qy = q[1] / 1000, rx = r[0] / 1000, ry = r[1] / 1000;
@@ -1395,6 +1454,7 @@ flatScaleAll(k);
 }
 
 async function flatScaleAll(k) {
+flatHistMark('Масштаб по стене');
 const sc = v => { const n = mNum(v); return isFinite(n) && n > 0 ? FLAT_FMT(n * k) : v; };
 flatRooms().forEach(room => {
 const m = room.measure;
@@ -1842,6 +1902,7 @@ room.plan = { x: Math.round(pts[0][0] * 1000) / 1000, y: Math.round(pts[0][1] * 
 async function flatEditSave() {
 const rooms = flatRooms();
 const ids = Object.keys(flatEdit.draft);
+if (ids.length) flatHistMark('Правка на плане');
 ids.forEach(id => {
 const r = rooms.find(x => x.id === id);
 if (!r) return;
