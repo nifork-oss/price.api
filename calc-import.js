@@ -644,14 +644,15 @@ try {
 const tc = await page.getTextContent();
 tc.items.forEach(it => {
 const str = String(it.str || '').trim();
-if (!str) return;
+// только надписи с числами (размеры, высоты): слова и так видны на картинке, а токены стоят денег
+if (!str || !/\d/.test(str)) return;
 // середина надписи (у повёрнутых размеров — тоже по её направлению)
 const [a, b, , , e, f] = it.transform;
 const k = Math.hypot(a, b) || 1, half = (it.width || 0) / 2;
 const [px, py] = vp1.convertToViewportPoint(e + a / k * half, f + b / k * half);
 const nx = px / vp1.width, ny = py / vp1.height;
 if (nx >= c.x && nx <= c.x + c.w && ny >= c.y && ny <= c.y + c.h) {
-words.push(`${str} @${Math.round((nx - c.x) * vp1.width * scale)},${Math.round((ny - c.y) * vp1.height * scale)}`);
+words.push(`${str}@${Math.round((nx - c.x) * vp1.width * scale)},${Math.round((ny - c.y) * vp1.height * scale)}`);
 }
 });
 } catch (e) { /* без текста */ }

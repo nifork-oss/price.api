@@ -41,7 +41,7 @@ return (cloudData.self && cloudData.self.ai) || { balance: 0, month: {}, request
 // Под ответом нейросети: сколько стоило отправленное, сколько ответ, остаток
 function paidCostHtml(cost) {
 if (!cost || !(cost.total >= 0)) return '';
-return `<div class="as-cost">Отправлено ${paidRub(cost.sent)} · ответ ${paidRub(cost.reply)} · всего <b>${paidRub(cost.total)}</b>`
+return `<div class="as-cost">Отправлено ${paidRub(cost.sent)}${cost.saved > 0 ? ` (повтор из кеша — дешевле на ${paidRub(cost.saved)})` : ''} · ответ ${paidRub(cost.reply)} · всего <b>${paidRub(cost.total)}</b>`
 + (cost.balance != null ? ` · на балансе ${paidRub(cost.balance)}` : ' · с вас не списано') + '</div>';
 }
 

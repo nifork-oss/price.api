@@ -743,8 +743,11 @@ const handler = {
           // Выделенная часть PDF уходит картинкой — её подписи и размеры текстом отдельно
           const pageText = typeof body.pageText === "string" ? body.pageText.slice(0, 12000) : "";
           const onUsage = (u) => aiReport(env, request, auth, "plan", u);
-          // Уровень размышлений из настроек админа (страница берёт его из своих данных)
-          const effort = body.effort;
+          // Уровень размышлений из настроек админа (страница берёт его из своих данных);
+          // правка готового плана (добавить дверь, балкон) — простая: думать долго не нужно
+          let hasPlan = false;
+          try { hasPlan = turns.length > 0 && (JSON.parse(turns[turns.length - 1].answer || "{}").rooms || []).length > 0; } catch (e) { /* не JSON */ }
+          const effort = hasPlan ? "low" : body.effort;
           // Размер картинки — страница новая: помещения в точках картинки (см. planPromptPx)
           const iw = Math.round(Number(body.imgW)), ih = Math.round(Number(body.imgH));
           const size = iw > 0 && ih > 0 && iw <= 10000 && ih <= 10000 ? { w: iw, h: ih } : null;
@@ -1272,7 +1275,9 @@ async function aiUsageAdd(env, auth, feature, usage) {
   u.aiSpent = (u.aiSpent || 0) + kop;
   if (auth.role !== "admin") u.aiBalance = (u.aiBalance || 0) - kop;
   await writeUsers(env, record);
-  return { ok: true, kop, cost: { sent: kopIn / 100, reply: kopOut / 100, total: kop / 100, balance: auth.role === "admin" ? null : u.aiBalance / 100 } };
+  // сколько сберёг кеш (повтор начала запроса — 10% цены вместо 100%)
+  const kopSaved = Math.round(tr * (1 - AI_CACHE_READ) * prices.in / 1e4);
+  return { ok: true, kop, cost: { sent: kopIn / 100, reply: kopOut / 100, total: kop / 100, ...(kopSaved > 0 ? { saved: kopSaved / 100 } : {}), balance: auth.role === "admin" ? null : u.aiBalance / 100 } };
 }
 
 // Токены из ответа сервиса: вход отдельно — обычный, запись в кеш и чтение из кеша
@@ -1499,7 +1504,7 @@ function planPayload(env, image, mediaType, turns, hints, pageText, size) {
         : { type: "image", source: { type: "base64", media_type: mediaType, data: image } },
       // До этого места запрос одинаковый при каждом уточнении — кешируется
       { type: "text", text: (pageText
-        ? (px ? "Картинка — страница PDF (или её часть). Текст с неё из PDF — подписи и размеры, точнее, чем на картинке; после @ — где стоит надпись (x,y в точках картинки):\n<pdf_text>\n"
+        ? (px ? "Картинка — страница PDF (или её часть). Надписи с числами из PDF (размеры, высоты) — точнее, чем на картинке; после @ — где стоит надпись (x,y в точках картинки):\n<pdf_text>\n"
           : "На картинке — выделенная мастером часть страницы PDF. Текст этой части из PDF (подписи и размеры, точнее, чем на картинке):\n<pdf_text>\n") + pageText + "\n</pdf_text>\n\n" : "")
         + (px ? planPromptPx(size.w, size.h) : PLAN_PROMPT) + planHintsText(hints), cache_control: CACHE },
     ],
