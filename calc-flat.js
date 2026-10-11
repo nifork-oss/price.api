@@ -1523,7 +1523,7 @@ const mp = await flatUlMapping();
 if (!mp) return;
 const { gray, toPx, toM, ppm } = mp;
 const poly = it.pts.map(toPx);
-const margin = 0.4 * ppm;
+const margin = 0.3 * ppm;
 const x0 = Math.max(0, Math.floor(Math.min(...poly.map(p => p[0])) - margin)), y0 = Math.max(0, Math.floor(Math.min(...poly.map(p => p[1])) - margin));
 const x1 = Math.min(gray.w, Math.ceil(Math.max(...poly.map(p => p[0])) + margin)), y1 = Math.min(gray.h, Math.ceil(Math.max(...poly.map(p => p[1])) + margin));
 const W = x1 - x0, H = y1 - y0;
@@ -1568,12 +1568,35 @@ d = Math.min(d, Math.hypot(x - ax - t * dx, y - ay - t * dy));
 }
 return d;
 };
+// соседние комнаты (их контуры, чуть ужатые) — туда заливке нельзя
+const others = flatItems().filter(r => r.id !== id && r.closed).map(r => r.pts.map(toPx))
+.filter(q => q.some(([x, y]) => x > x0 - margin && x < x1 + margin && y > y0 - margin && y < y1 + margin));
+const inPoly = (P, x, y) => {
+let c = false;
+for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+const [xi, yi] = P[i], [xj, yj] = P[j];
+if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+}
+return c;
+};
+const edgeD = (P, x, y) => {
+let d = Infinity;
+for (let i = 0; i < P.length; i++) {
+const [ax, ay] = P[i], [bx, by] = P[(i + 1) % P.length];
+const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy || 1;
+const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2));
+d = Math.min(d, Math.hypot(x - ax - t * dx, y - ay - t * dy));
+}
+return d;
+};
+const inOther = (x, y) => others.some(P => inPoly(P, x, y) && edgeD(P, x, y) > 0.03 * ppm);
 const ok = new Uint8Array(W * H), out = new Uint8Array(W * H), far = new Uint8Array(W * H);
 for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
 const i = y * W + x;
 if (wall[i]) continue;
 const px = x + x0 + 0.5, py = y + y0 + 0.5;
 if (inside(px, py)) { ok[i] = 1; continue; }
+if (inOther(px, py)) continue;                               // в соседнюю комнату не заходим
 const d = segD(px, py);
 if (d <= margin) { ok[i] = 1; out[i] = 1; if (d >= margin - 2) far[i] = 1; }
 }
@@ -1626,6 +1649,49 @@ if (reg[j] && out[j] && !seen[j]) { seen[j] = 1; st.push(j); comp.push(j); }
 });
 }
 if (leak) comp.forEach(i => { reg[i] = 0; });
+}
+// шум: щели и выступы уже ~8 см (щели в стенах из двух тонких линий, цифры размеров у стен) —
+// закрыть узкие щели и срезать узкие выступы
+const kr = Math.max(1, Math.round(0.04 * ppm));
+const passR = (src, keep, r, horiz) => {
+const o = new Uint8Array(W * H);
+const L = horiz ? W : H, M = horiz ? H : W;
+for (let m = 0; m < M; m++) {
+let cnt = 0;
+const at = i => (horiz ? m * W + i : i * W + m);
+for (let i = 0; i < Math.min(L, r); i++) cnt += src[at(i)];
+for (let i = 0; i < L; i++) {
+if (i + r < L) cnt += src[at(i + r)];
+if (i - r - 1 >= 0) cnt -= src[at(i - r - 1)];
+const span = Math.min(L - 1, i + r) - Math.max(0, i - r) + 1;
+o[at(i)] = keep ? (cnt === span ? 1 : 0) : (cnt > 0 ? 1 : 0);
+}
+}
+return o;
+};
+const dil = m => passR(passR(m, 0, kr, true), 0, kr, false), ero = m => passR(passR(m, 1, kr, true), 1, kr, false);
+let clean = dil(ero(ero(dil(reg))));                         // закрытие, потом размыкание
+// не дальше, чем позволено (закрытие не должно выйти за 30 см и в соседние комнаты)
+for (let i = 0; i < W * H; i++) if (clean[i] && !reg[i] && !ok[i] && !wall[i]) clean[i] = 0;
+// после чистки — только кусок, где центр комнаты (отрезанные мелкие куски — прочь)
+let s1 = -1, b1 = Infinity;
+for (let i = 0; i < W * H; i++) {
+if (!clean[i]) continue;
+const x = i % W, y = (i - x) / W, d = (x + x0 - lx) ** 2 + (y + y0 - ly) ** 2;
+if (d < b1) { b1 = d; s1 = i; }
+}
+reg.fill(0);
+if (s1 >= 0) {
+const st = [s1];
+reg[s1] = 1;
+while (st.length) {
+const i = st.pop(), x = i % W, y = (i - x) / W;
+[[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]].forEach(([a, b]) => {
+if (a < 0 || b < 0 || a >= W || b >= H) return;
+const j = b * W + a;
+if (clean[j] && !reg[j]) { reg[j] = 1; st.push(j); }
+});
+}
 }
 // касания уголками — закрываем, чтобы край был одной линией
 const on = (x, y) => x >= 0 && y >= 0 && x < W && y < H && reg[y * W + x] === 1;
