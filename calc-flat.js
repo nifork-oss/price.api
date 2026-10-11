@@ -1603,6 +1603,47 @@ out[at(i)] = keep ? (cnt === span ? 1 : 0) : (cnt > 0 ? 1 : 0);
 return out;
 };
 m = pass(pass(pass(pass(m, 1, true), 1, false), 0, true), 0, false);
+// новые перегородки на чертежах перепланировки — красный контур (часто со штриховкой): сами линии
+// тонкие, поэтому красное отдельно — закрыть промежуток между линиями контура (до ~16 см) и убрать
+// одиночные тонкие красные линии
+if (gray.red) {
+const rc = Math.max(2, Math.round(0.08 * ppm)), rk0 = k;
+const passR = (src, keep, rr, horiz) => {
+const out = new Uint8Array(W * H);
+const L = horiz ? W : H, M = horiz ? H : W;
+for (let q = 0; q < M; q++) {
+let cnt = 0;
+const at = i => (horiz ? q * W + i : i * W + q);
+for (let i = 0; i < Math.min(L, rr); i++) cnt += src[at(i)];
+for (let i = 0; i < L; i++) {
+if (i + rr < L) cnt += src[at(i + rr)];
+if (i - rr - 1 >= 0) cnt -= src[at(i - rr - 1)];
+const span = Math.min(L - 1, i + rr) - Math.max(0, i - rr) + 1;
+out[at(i)] = keep ? (cnt === span ? 1 : 0) : (cnt > 0 ? 1 : 0);
+}
+}
+return out;
+};
+const dil = (x, rr) => passR(passR(x, 0, rr, true), 0, rr, false), ero = (x, rr) => passR(passR(x, 1, rr, true), 1, rr, false);
+const rw = dil(ero(ero(dil(gray.red, rc), rc), rk0), rk0);
+// короткие красные пятна (надписи площадей, номера комнат) — не стены: берём куски длиной от 40 см
+const seen = new Uint8Array(W * H), minLen = 0.4 * ppm;
+for (let s0 = 0; s0 < W * H; s0++) {
+if (!rw[s0] || seen[s0]) continue;
+const comp = [s0], st = [s0];
+seen[s0] = 1;
+let xa = W, xb = 0, ya = H, yb = 0;
+while (st.length) {
+const i = st.pop(), x = i % W, y = (i - x) / W;
+if (x < xa) xa = x; if (x > xb) xb = x; if (y < ya) ya = y; if (y > yb) yb = y;
+if (x > 0 && rw[i - 1] && !seen[i - 1]) { seen[i - 1] = 1; st.push(i - 1); comp.push(i - 1); }
+if (x < W - 1 && rw[i + 1] && !seen[i + 1]) { seen[i + 1] = 1; st.push(i + 1); comp.push(i + 1); }
+if (y > 0 && rw[i - W] && !seen[i - W]) { seen[i - W] = 1; st.push(i - W); comp.push(i - W); }
+if (y < H - 1 && rw[i + W] && !seen[i + W]) { seen[i + W] = 1; st.push(i + W); comp.push(i + W); }
+}
+if (Math.max(xb - xa, yb - ya) >= minLen) comp.forEach(i => { m[i] = 1; });
+}
+}
 g.walls = m;
 return m;
 }
@@ -1708,27 +1749,10 @@ const x0 = Math.max(0, Math.floor(Math.min(...poly.map(p => p[0])) - margin)), y
 const x1 = Math.min(gray.w, Math.ceil(Math.max(...poly.map(p => p[0])) + margin)), y1 = Math.min(gray.h, Math.ceil(Math.max(...poly.map(p => p[1])) + margin));
 const W = x1 - x0, H = y1 - y0;
 if (W < 10 || H < 10) { alert('Комната вне подложки.'); return; }
-// стены: тёмное, толще ~5 см (размыкание: сжать и снова расширить)
-let wall = new Uint8Array(W * H);
-for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) wall[y * W + x] = gray.g[(y + y0) * gray.w + x + x0] < 200 ? 1 : 0;
-const k = Math.max(1, Math.round(0.025 * ppm));
-const pass = (src, keep, horiz) => {                         // keep=1 — сжатие (все тёмные рядом), 0 — расширение (хоть одна)
-const out = new Uint8Array(W * H);
-const L = horiz ? W : H, M = horiz ? H : W;
-for (let m = 0; m < M; m++) {
-let cnt = 0;
-const at = i => (horiz ? m * W + i : i * W + m);
-for (let i = 0; i < Math.min(L, k); i++) cnt += src[at(i)];
-for (let i = 0; i < L; i++) {
-if (i + k < L) cnt += src[at(i + k)];
-if (i - k - 1 >= 0) cnt -= src[at(i - k - 1)];
-const span = Math.min(L - 1, i + k) - Math.max(0, i - k) + 1;
-out[at(i)] = keep ? (cnt === span ? 1 : 0) : (cnt > 0 ? 1 : 0);
-}
-}
-return out;
-};
-wall = pass(pass(pass(pass(wall, 1, true), 1, false), 0, true), 0, false);
+// стены чертежа (толстое тёмное и плотная штриховка) — кусок вокруг комнаты
+const wallsAll = flatUlWalls(mp);
+const wall = new Uint8Array(W * H);
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) wall[y * W + x] = wallsAll[(y + y0) * gray.w + x + x0];
 // куда можно лить: внутри контура или до 40 см от него; двери и окна комнаты перекрыты снаружи
 const inside = (x, y) => {
 let c = false;
