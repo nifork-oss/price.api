@@ -415,10 +415,11 @@ const top = flatHMode
 : flatOpsMode
 ? `<div class="flat-tools">
 <button type="button" class="mp-head-btn" onclick="flatOpsUndo()" ${flatOpsDraft && flatOpsDraft.undo.length ? '' : 'disabled'}>↶ Шаг назад</button>
+${getUnderlay(flatUlId()) ? '<button type="button" class="mp-head-btn" onclick="flatOpsFitUnderlay()">По подложке</button>' : ''}
 <button type="button" class="mp-head-btn" onclick="flatOpsCancel()">Отмена</button>
 <button type="button" class="mp-btn mp-btn-primary" onclick="flatOpsSave()">Сохранить</button>
 </div>
-<div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>, а нажатием — поменять ширину, сделать из двери проход без двери (и обратно) или убрать. В облако — только по «Сохранить». Дверь между комнатами — сразу у обеих.</div>`
+<div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>${getUnderlay(flatUlId()) ? ' («По подложке» — все сразу встанут на разрывы в стенах чертежа)' : ''}, а нажатием — поменять ширину, сделать из двери проход без двери (и обратно) или убрать. В облако — только по «Сохранить». Дверь между комнатами — сразу у обеих.</div>`
 : flatMergeFrom
 ? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatMergeFrom = null; renderFlatPlan()">Отмена</button></div>
 <div class="ai-hint"><b>Объединить.</b> Нажмите на соседнюю комнату — она станет частью «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatMergeFrom) || {}))}» вместе со стеной между ними.</div>`
@@ -1576,6 +1577,123 @@ showAddToast(`Прилеплено к чертежу помещений: ${Objec
 // Толстое тёмное — стены и колонны (тонкие линии — размеры, текст, мебель — убираем), от центра
 // комнаты заливаем светлый пол — не дальше 40 см за нынешний контур и не через её двери и окна.
 // Края заливки — в прямые стены; ступеньки меньше 6 см — шум. Только черновик
+// Стены чертежа: тёмное толще ~5 см (тонкие линии — размеры, текст, рамы окон — убраны).
+// Считаем на всю подложку один раз и храним рядом с яркостями
+function flatUlWalls(mp) {
+const g = flatUlGray;
+if (g.walls) return g.walls;
+const { gray, ppm } = mp, W = gray.w, H = gray.h;
+let m = new Uint8Array(W * H);
+for (let i = 0; i < W * H; i++) m[i] = gray.g[i] < 200 ? 1 : 0;
+const k = Math.max(1, Math.round(0.025 * ppm));
+const pass = (src, keep, horiz) => {
+const out = new Uint8Array(W * H);
+const L = horiz ? W : H, M = horiz ? H : W;
+for (let r = 0; r < M; r++) {
+let cnt = 0;
+const at = i => (horiz ? r * W + i : i * W + r);
+for (let i = 0; i < Math.min(L, k); i++) cnt += src[at(i)];
+for (let i = 0; i < L; i++) {
+if (i + k < L) cnt += src[at(i + k)];
+if (i - k - 1 >= 0) cnt -= src[at(i - k - 1)];
+const span = Math.min(L - 1, i + k) - Math.max(0, i - k) + 1;
+out[at(i)] = keep ? (cnt === span ? 1 : 0) : (cnt > 0 ? 1 : 0);
+}
+}
+return out;
+};
+m = pass(pass(pass(pass(m, 1, true), 1, false), 0, true), 0, false);
+g.walls = m;
+return m;
+}
+
+// «По подложке» в дверях и проёмах: вдоль каждой стены с проёмами смотрим чуть снаружи комнаты —
+// где на чертеже нет стены (разрыв 0,4–3 м, со стеной по обе стороны), там дверь или окно.
+// Отмеченный проём встаёт на ближайший такой разрыв: его место и ширина. Новых не добавляем
+async function flatOpsFitUnderlay() {
+if (!flatOpsDraft) return;
+const mp = await flatUlMapping();
+if (!mp) return;
+const walls = flatUlWalls(mp);
+const { gray, toPx, ppm } = mp;
+const isWall = ([x, y]) => { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < gray.w && y < gray.h && walls[y * gray.w + x] === 1; };
+const step = 1 / ppm;
+const items = flatItems();
+let moved = 0, total = 0;
+const done = new Set();                                      // вторые половины дверей, уже поставленные вместе с первой
+flatOpsPush();
+items.forEach(it => {
+const room = flatRooms().find(r => r.id === it.id);
+if (!room || !it.closed) return;
+const n = it.pts.length;
+const byWall = {};
+(room.measure.openings || []).forEach((o, oi) => { if (o.wall >= 0 && o.wall < n) (byWall[o.wall] = byWall[o.wall] || []).push(oi); });
+Object.keys(byWall).forEach(j => {
+j = Number(j);
+const a = it.pts[j], b = it.pts[(j + 1) % n];
+const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+if (!(L > 0.3)) return;
+const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L, ox = uy, oy = -ux;   // наружу — налево от стены
+// где вдоль стены есть стена чертежа (хоть на одной глубине 3–15 см снаружи)
+const N = Math.ceil(L / step), prof = new Uint8Array(N + 1);
+for (let t = 0; t <= N; t++) {
+const s0 = t * step;
+prof[t] = [0.03, 0.06, 0.1, 0.15].some(d => isWall(toPx([a[0] + ux * s0 + ox * d, a[1] + uy * s0 + oy * d]))) ? 1 : 0;
+}
+// разрывы: со стеной по обе стороны, 0,4–3 м
+const gaps = [];
+for (let t = 0; t <= N;) {
+if (prof[t]) { t++; continue; }
+let e = t;
+while (e <= N && !prof[e]) e++;
+const g0 = t * step, g1 = (e - 1) * step + step;
+if (t > 0 && e <= N && g1 - g0 >= 0.4 && g1 - g0 <= 3) gaps.push({ g0, g1, used: false });
+t = e;
+}
+byWall[j].forEach(oi => {
+const o = room.measure.openings[oi];
+if (done.has(o)) return;
+total++;
+const partners = o.type === 'window' ? [] : flatOpPartners(it.id, oi);
+const w = mNum(o.w), st = flatOpStart(o, L), c = st + w / 2;
+let best = null, bs = -Infinity;
+gaps.forEach(gp => {
+if (gp.used) return;
+const ov = Math.min(st + w, gp.g1) - Math.max(st, gp.g0), dc = Math.abs((gp.g0 + gp.g1) / 2 - c);
+if (ov <= 0 && dc > 0.6) return;
+const sc = ov - dc * 0.5;
+if (sc > bs) { bs = sc; best = gp; }
+});
+if (!best) return;
+best.used = true;
+const nw = Math.round((best.g1 - best.g0) * 100) / 100;
+const nst = Math.round(best.g0 * 100) / 100;
+if (Math.abs(nw - w) < 0.01 && Math.abs(nst - st) < 0.01) return;
+o.w = FLAT_FMT(nw);
+flatOpSetStart(o, L, nst);
+moved++;
+// вторая половина двери у соседней комнаты — на тот же разрыв
+const s0 = [a[0] + ux * nst, a[1] + uy * nst], s1 = [a[0] + ux * (nst + nw), a[1] + uy * (nst + nw)];
+partners.forEach(({ room: r2, oi: j2 }) => {
+const it2 = items.find(x => x.id === r2.id), o2 = r2.measure.openings[j2];
+if (!it2 || !o2) return;
+const n2 = it2.pts.length, p2 = it2.pts[o2.wall], q2 = it2.pts[(o2.wall + 1) % n2];
+const L2 = Math.hypot(q2[0] - p2[0], q2[1] - p2[1]);
+if (!(L2 > 0)) return;
+const vx = (q2[0] - p2[0]) / L2, vy = (q2[1] - p2[1]) / L2;
+const t0 = (s0[0] - p2[0]) * vx + (s0[1] - p2[1]) * vy, t1 = (s1[0] - p2[0]) * vx + (s1[1] - p2[1]) * vy;
+o2.w = FLAT_FMT(Math.round(Math.abs(t1 - t0) * 100) / 100);
+flatOpSetStart(o2, L2, Math.round(Math.min(t0, t1) * 100) / 100);
+done.add(o2);
+});
+});
+});
+});
+if (!moved) { flatOpsDraft.undo.pop(); showAddToast(total ? 'Проёмы уже стоят по чертежу (или разрывы в стенах не найдены)' : 'На плане нет проёмов'); return; }
+renderFlatPlan();
+showAddToast(`Подогнано по чертежу проёмов: ${moved} из ${total}. Проверьте — лишнее «Шаг назад» — и «Сохранить»`);
+}
+
 async function flatTraceUnderlay() {
 const id = flatEdit && flatEdit.sel;
 const it = id && flatItems().find(r => r.id === id);
