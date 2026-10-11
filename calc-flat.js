@@ -352,6 +352,7 @@ let flatZoom = 1;
 let flatEdit = null;      // { sel, draft, undo, view }
 let flatScaleMode = false; // выбираем стену, чтобы задать масштаб всего плана
 let flatOpsMode = false;   // ставим и убираем двери и проёмы нажатием на стену
+let flatOpsDraft = null;   // { orig, undo } — проёмы до правки и шаги назад; в облако — только по «Сохранить»
 let flatMergeFrom = null;  // id комнаты, к которой присоединяем соседнюю
 let flatHMode = false;     // высоты стен, окон и дверей: всем сразу или по одной нажатием
 
@@ -369,6 +370,7 @@ return objectRooms(flatObj()).filter(r => r.plan && r.measure);
 
 function openFlatPlan(objectId) {
 flatObjectId = objectId;
+flatOpsDraft = null;
 flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatHMode = false;
 flatUlAdjust = null;
 flatZoom = 1;
@@ -380,6 +382,8 @@ renderFlatPlan();
 
 function closeFlatPlan() {
 if (flatEdit && Object.keys(flatEdit.draft).length && !confirm('Выйти без сохранения правок на плане?')) return;
+if (flatOpsDraft && flatOpsDraft.undo.length && !confirm('Выйти без сохранения дверей и проёмов?')) return;
+if (flatOpsDraft) { flatOpsRestore(flatOpsDraft.orig); flatOpsDraft = null; flatOpsMode = false; }
 flatObjectId = null;
 flatEdit = null;
 document.getElementById('flatPanel').classList.remove('open');
@@ -404,8 +408,12 @@ const ed = flatEdit;
 const top = flatHMode
 ? flatHTopHtml()
 : flatOpsMode
-? `<div class="flat-tools"><button type="button" class="mp-btn mp-btn-primary" onclick="flatOpsMode = false; renderFlatPlan()">Готово</button></div>
-<div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>, а нажатием — сделать из двери проход без двери (и обратно) или убрать. Дверь между комнатами — сразу у обеих.</div>`
+? `<div class="flat-tools">
+<button type="button" class="mp-head-btn" onclick="flatOpsUndo()" ${flatOpsDraft && flatOpsDraft.undo.length ? '' : 'disabled'}>↶ Шаг назад</button>
+<button type="button" class="mp-head-btn" onclick="flatOpsCancel()">Отмена</button>
+<button type="button" class="mp-btn mp-btn-primary" onclick="flatOpsSave()">Сохранить</button>
+</div>
+<div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>, а нажатием — поменять ширину, сделать из двери проход без двери (и обратно) или убрать. В облако — только по «Сохранить». Дверь между комнатами — сразу у обеих.</div>`
 : flatMergeFrom
 ? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatMergeFrom = null; renderFlatPlan()">Отмена</button></div>
 <div class="ai-hint"><b>Объединить.</b> Нажмите на соседнюю комнату — она станет частью «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatMergeFrom) || {}))}» вместе со стеной между ними.</div>`
@@ -809,6 +817,7 @@ function flatOpsStart() {
 flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatMergeFrom = null;
 flatHMode = false;
 flatOpsMode = true;
+flatOpsDraft = { orig: flatOpsSnap(), undo: [] };
 renderFlatPlan();
 }
 
@@ -858,6 +867,7 @@ w = Math.min(w, len);
 const off = Math.max(0, Math.min(len - w, t - w / 2));
 const make = (wall, o) => ({ type: k.type, w: FLAT_FMT(w), h: FLAT_FMT(k.h / 1000), n: '1', slopes: true, wall, off: FLAT_FMT(o), from: 'start',
 ...(k.type === 'balcony' ? { dw: '0,7', dh: '2,2', side: 'start' } : {}), ...(k.pass ? { pass: true } : {}) });
+flatOpsPush();
 room.measure.openings = (room.measure.openings || []).concat(make(i, off));
 let both = '';
 if (k.type === 'door') {
@@ -887,9 +897,8 @@ break;
 }
 });
 }
-await saveCloudData();
 renderFlatPlan();
-showAddToast(`${k.label} добавлен${kind === 'window' ? 'о' : kind === 'door' ? 'а' : ''} в «${it.name}»${both}. Высоту проверьте в замере.`);
+showAddToast(`${k.label} добавлен${kind === 'window' ? 'о' : kind === 'door' ? 'а' : ''} в «${it.name}»${both}. Не забудьте «Сохранить».`);
 }
 
 // Тот же проём у соседней комнаты за стеной (вторая половина двери): [{ room, oi }]
@@ -928,6 +937,7 @@ const items = [];
 if (o.type === 'door') items.push(o.pass
 ? { icon: '✏️', label: 'Поставить дверь', onClick: () => flatOpsSetPass(both, false) }
 : { icon: '✏️', label: 'Сделать проходом без двери', onClick: () => flatOpsSetPass(both, true) });
+items.push({ icon: '↔️', label: 'Изменить ширину', onClick: () => flatOpsWidth(both) });
 items.push({ icon: '🗑️', label: both.length > 1 ? 'Убрать (у обеих комнат)' : 'Убрать', danger: true, onClick: () => flatOpsDelete(both) });
 openSheet(`${what} ${mFmt(mNum(o.w))} м`, items);
 }
@@ -949,10 +959,7 @@ const sg = it && o && flatOpeningSeg(it, o);
 if (!sg) return;
 e.preventDefault(); e.stopPropagation();
 wrap._drag = true;
-// длина стены и как записан отступ (от начала или от конца стены)
-const wallLen = (item, op) => { const n = item.pts.length, a = item.pts[op.wall], b = item.pts[(op.wall + 1) % n]; return Math.hypot(b[0] - a[0], b[1] - a[1]); };
-const startOf = (op, len) => { const off = mNum(op.off); const w = mNum(op.w); return op.from === 'end' ? len - (isFinite(off) ? off : 0) - w : (isFinite(off) ? off : (len - w) / 2); };
-const setStart = (op, len, st) => { const w = mNum(op.w); const v = Math.max(0, Math.min(len - w, st)); op.off = FLAT_FMT(Math.round((op.from === 'end' ? len - v - w : v) * 100) / 100); };
+const wallLen = flatOpWallLen, startOf = flatOpStart, setStart = flatOpSetStart;
 const items = flatItems();
 const moving = [{ room, o, len: wallLen(it, o), st0: startOf(o, wallLen(it, o)), k: 1 }];
 flatOpPartners(roomId, oi).forEach(({ room: r2, oi: j }) => {
@@ -968,9 +975,16 @@ let moved = false;
 const move = (ev) => {
 if (ev.pointerId !== e.pointerId) return;
 if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+if (!moved) flatOpsPush();
 moved = true;
 const p1 = toM(ev);
-const d = (p1[0] - p0[0]) * sg.ux + (p1[1] - p0[1]) * sg.uy;   // сдвиг вдоль стены, м
+let d = (p1[0] - p0[0]) * sg.ux + (p1[1] - p0[1]) * sg.uy;     // сдвиг вдоль стены, м
+// упёрлась в конец стены любая из половинок — стоят обе, чтобы не разойтись
+moving.forEach(m => {
+const lo = -m.st0, hi = m.len - mNum(m.o.w) - m.st0;          // допустимый сдвиг этой половинки
+const [a1, b1] = m.k > 0 ? [lo / m.k, hi / m.k] : [hi / m.k, lo / m.k];
+d = Math.max(Math.min(a1, 0), Math.min(Math.max(b1, 0), d));
+});
 moving.forEach(m => setStart(m.o, m.len, m.st0 + d * m.k));
 renderFlatPlan();
 };
@@ -980,7 +994,6 @@ window.removeEventListener('pointermove', move);
 window.removeEventListener('pointerup', up);
 wrap._drag = false;
 if (!moved) { flatOpsRemove(roomId, oi); return; }
-await saveCloudData();
 renderFlatPlan();
 showAddToast(`Отступ от начала стены: ${mFmt(startOf(o, moving[0].len))} м`);
 };
@@ -989,17 +1002,78 @@ window.addEventListener('pointerup', up);
 });
 }
 
-async function flatOpsSetPass(list, on) {
+function flatOpsSetPass(list, on) {
+flatOpsPush();
 list.forEach(({ room, oi }) => { const o = room.measure.openings[oi]; if (on) o.pass = true; else delete o.pass; });
-await saveCloudData();
 renderFlatPlan();
 }
 
-async function flatOpsDelete(list) {
+function flatOpsDelete(list) {
+flatOpsPush();
 // с конца — чтобы номера проёмов в одной комнате не сдвигались
 list.slice().sort((x, y) => y.oi - x.oi).forEach(({ room, oi }) => room.measure.openings.splice(oi, 1));
-await saveCloudData();
 renderFlatPlan();
+}
+
+// Длина стены проёма и где он начинается (отступ записан от начала или от конца стены)
+function flatOpWallLen(item, op) { const n = item.pts.length, a = item.pts[op.wall], b = item.pts[(op.wall + 1) % n]; return Math.hypot(b[0] - a[0], b[1] - a[1]); }
+function flatOpStart(op, len) { const off = mNum(op.off); const w = mNum(op.w); return op.from === 'end' ? len - (isFinite(off) ? off : 0) - w : (isFinite(off) ? off : (len - w) / 2); }
+function flatOpSetStart(op, len, st) { const w = mNum(op.w); const v = Math.max(0, Math.min(len - w, st)); op.off = FLAT_FMT(Math.round((op.from === 'end' ? len - v - w : v) * 100) / 100); }
+
+// Новая ширина проёма — середина остаётся на месте; дверь — сразу у обеих комнат
+function flatOpsWidth(list) {
+const first = list[0].room.measure.openings[list[0].oi];
+const raw = prompt('Ширина, мм', String(Math.round(mNum(first.w) * 1000)));
+if (raw == null) return;
+let w = mNum(String(raw).replace(/\s/g, ''));
+if (!(w > 0)) return;
+if (w >= 20) w /= 1000;                                    // ввели в миллиметрах
+const items = flatItems();
+flatOpsPush();
+list.forEach(({ room, oi }) => {
+const o = room.measure.openings[oi], it = items.find(x => x.id === room.id);
+if (!o || !it) return;
+const len = flatOpWallLen(it, o), mid = flatOpStart(o, len) + mNum(o.w) / 2;
+const nw = Math.min(w, len);
+o.w = FLAT_FMT(Math.round(nw * 1000) / 1000);
+flatOpSetStart(o, len, mid - nw / 2);
+});
+renderFlatPlan();
+}
+
+// Черновик дверей и проёмов: снимок всех проёмов, шаг назад, отмена, сохранение
+function flatOpsSnap() {
+return JSON.stringify(flatRooms().map(r => [r.id, r.measure.openings || []]));
+}
+
+function flatOpsRestore(snap) {
+const rooms = flatRooms();
+JSON.parse(snap).forEach(([id, ops]) => { const r = rooms.find(x => x.id === id); if (r) r.measure.openings = ops; });
+}
+
+function flatOpsPush() {
+if (flatOpsDraft) flatOpsDraft.undo.push(flatOpsSnap());
+}
+
+function flatOpsUndo() {
+if (!flatOpsDraft || !flatOpsDraft.undo.length) return;
+flatOpsRestore(flatOpsDraft.undo.pop());
+renderFlatPlan();
+}
+
+function flatOpsCancel() {
+if (flatOpsDraft && flatOpsDraft.undo.length && !confirm('Отменить все изменения дверей и проёмов?')) return;
+if (flatOpsDraft) flatOpsRestore(flatOpsDraft.orig);
+flatOpsDraft = null; flatOpsMode = false;
+renderFlatPlan();
+}
+
+async function flatOpsSave() {
+const changed = flatOpsDraft && flatOpsDraft.undo.length;
+flatOpsDraft = null; flatOpsMode = false;
+if (changed && (await saveCloudData()) !== false) showAddToast('Двери и проёмы сохранены.');
+renderFlatPlan();
+if (changed && typeof renderInvoice === 'function') renderInvoice();
 }
 
 /* ---------- высоты: стены (потолок), окна, двери — всем сразу или по одной ---------- */
