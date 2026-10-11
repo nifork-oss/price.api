@@ -186,7 +186,7 @@ return `<g class="flat-room${sel ? ' sel' : ''}"${tap}>
 <path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}"${ul ? ' fill-opacity="0.35"' : ''} stroke="#14181f" stroke-width="${fs * 0.22}" stroke-linejoin="miter"/>
 ${ops}
 ${opt.pickWalls ? r.pts.map((p, i) => (!r.closed && i === n - 1) ? '' : `<line x1="${p[0]}" y1="${p[1]}" x2="${r.pts[(i + 1) % n][0]}" y2="${r.pts[(i + 1) % n][1]}" stroke="#e8a900" stroke-opacity=".55" stroke-width="${fs * 0.5}" stroke-linecap="round" onclick="${opt.pickWalls === true ? 'flatScaleWall' : opt.pickWalls}('${r.id}', ${i}, event)" style="cursor:pointer"/>`).join('') : ''}
-${opt.pickOps ? r.openings.map((o, oi) => { const sg = flatOpeningSeg(r, o); return sg ? `<line x1="${sg.x}" y1="${sg.y}" x2="${sg.x + sg.ux * sg.w}" y2="${sg.y + sg.uy * sg.w}" stroke="#c2361f" stroke-opacity=".01" stroke-width="${fs * 0.9}" onclick="${opt.pickOps}('${r.id}', ${oi})" style="cursor:pointer"/>` : ''; }).join('') : ''}
+${opt.pickOps ? r.openings.map((o, oi) => { const sg = flatOpeningSeg(r, o); return sg ? `<line x1="${sg.x}" y1="${sg.y}" x2="${sg.x + sg.ux * sg.w}" y2="${sg.y + sg.uy * sg.w}" stroke="#c2361f" stroke-opacity=".01" stroke-width="${fs * 0.9}" data-op-room="${r.id}" data-op="${oi}" style="cursor:grab"/>` : ''; }).join('') : ''}
 <title>${escapeHtml(name)} — ${areaTxt}</title>
 ${showName ? `<text x="${lx}" y="${ly - rf * 0.15}" font-size="${rf}" text-anchor="middle" font-family="Arial, sans-serif" fill="#14181f" font-weight="700" pointer-events="none">${escapeHtml(name)}</text>` : ''}
 <text x="${lx}" y="${showName ? ly + rf * 1.05 : ly + rf * 0.3}" font-size="${rf * 0.85}" text-anchor="middle" font-family="Arial, sans-serif" fill="#5a6470" pointer-events="none">${areaTxt}</text>
@@ -401,7 +401,7 @@ const total = items.reduce((a, r) => a + flatPolyArea(r.pts), 0);
 const ed = flatEdit;
 const top = flatOpsMode
 ? `<div class="flat-tools"><button type="button" class="mp-btn mp-btn-primary" onclick="flatOpsMode = false; renderFlatPlan()">Готово</button></div>
-<div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Нажмите на уже стоящий проём — сделаете из двери проход без двери (и обратно) или уберёте его. Дверь между комнатами — сразу у обеих.</div>`
+<div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>, а нажатием — сделать из двери проход без двери (и обратно) или убрать. Дверь между комнатами — сразу у обеих.</div>`
 : flatMergeFrom
 ? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatMergeFrom = null; renderFlatPlan()">Отмена</button></div>
 <div class="ai-hint"><b>Объединить.</b> Нажмите на соседнюю комнату — она станет частью «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatMergeFrom) || {}))}» вместе со стеной между ними.</div>`
@@ -433,6 +433,7 @@ const wrap = document.getElementById('flatWrap');
 if (scroll && wrap) { wrap.scrollLeft = scroll[0]; wrap.scrollTop = scroll[1]; }
 if (ed) flatBindEdit();
 else if (flatUlAdjust) flatBindUnderlay();
+else if (flatOpsMode) flatBindOps();
 if (!flatUlAdjust) flatBindPanZoom();
 }
 
@@ -870,6 +871,63 @@ if (o.type === 'door') items.push(o.pass
 : { icon: '✏️', label: 'Сделать проходом без двери', onClick: () => flatOpsSetPass(both, true) });
 items.push({ icon: '🗑️', label: both.length > 1 ? 'Убрать (у обеих комнат)' : 'Убрать', danger: true, onClick: () => flatOpsDelete(both) });
 openSheet(`${what} ${mFmt(mNum(o.w))} м`, items);
+}
+
+// Проём тянем пальцем вдоль его стены; вторая половина двери у соседней комнаты — вместе с ним.
+// Короткое нажатие без движения — меню проёма
+function flatBindOps() {
+const wrap = document.getElementById('flatWrap');
+const svg = wrap && wrap.querySelector('svg');
+if (!svg) return;
+svg.addEventListener('pointerdown', (e) => {
+const t = e.target;
+if (!t.dataset || t.dataset.op == null) return;
+const roomId = t.dataset.opRoom, oi = Number(t.dataset.op);
+const it = flatItems().find(r => r.id === roomId);
+const room = flatRooms().find(r => r.id === roomId);
+const o = room && room.measure.openings[oi];
+const sg = it && o && flatOpeningSeg(it, o);
+if (!sg) return;
+e.preventDefault(); e.stopPropagation();
+wrap._drag = true;
+// длина стены и как записан отступ (от начала или от конца стены)
+const wallLen = (item, op) => { const n = item.pts.length, a = item.pts[op.wall], b = item.pts[(op.wall + 1) % n]; return Math.hypot(b[0] - a[0], b[1] - a[1]); };
+const startOf = (op, len) => { const off = mNum(op.off); const w = mNum(op.w); return op.from === 'end' ? len - (isFinite(off) ? off : 0) - w : (isFinite(off) ? off : (len - w) / 2); };
+const setStart = (op, len, st) => { const w = mNum(op.w); const v = Math.max(0, Math.min(len - w, st)); op.off = FLAT_FMT(Math.round((op.from === 'end' ? len - v - w : v) * 100) / 100); };
+const items = flatItems();
+const moving = [{ room, o, len: wallLen(it, o), st0: startOf(o, wallLen(it, o)), k: 1 }];
+flatOpPartners(roomId, oi).forEach(({ room: r2, oi: j }) => {
+const it2 = items.find(x => x.id === r2.id), o2 = r2.measure.openings[j], s2 = it2 && flatOpeningSeg(it2, o2);
+if (!s2) return;
+const l2 = wallLen(it2, o2);
+moving.push({ room: r2, o: o2, len: l2, st0: startOf(o2, l2), k: sg.ux * s2.ux + sg.uy * s2.uy });   // ±1 — стена в ту же сторону или навстречу
+});
+const ctm = svg.getScreenCTM().inverse();
+const toM = (ev) => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; const q = p.matrixTransform(ctm); return [q.x, q.y]; };
+const p0 = toM(e), sx = e.clientX, sy = e.clientY;
+let moved = false;
+const move = (ev) => {
+if (ev.pointerId !== e.pointerId) return;
+if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+moved = true;
+const p1 = toM(ev);
+const d = (p1[0] - p0[0]) * sg.ux + (p1[1] - p0[1]) * sg.uy;   // сдвиг вдоль стены, м
+moving.forEach(m => setStart(m.o, m.len, m.st0 + d * m.k));
+renderFlatPlan();
+};
+const up = async (ev) => {
+if (ev.pointerId !== e.pointerId) return;
+window.removeEventListener('pointermove', move);
+window.removeEventListener('pointerup', up);
+wrap._drag = false;
+if (!moved) { flatOpsRemove(roomId, oi); return; }
+await saveCloudData();
+renderFlatPlan();
+showAddToast(`Отступ от начала стены: ${mFmt(startOf(o, moving[0].len))} м`);
+};
+window.addEventListener('pointermove', move);
+window.addEventListener('pointerup', up);
+});
 }
 
 async function flatOpsSetPass(list, on) {
