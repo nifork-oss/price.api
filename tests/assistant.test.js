@@ -736,3 +736,16 @@ test('план: уточнение — с тем же уровнем размы�
   const fix = await callPlan({ effort: 'high', imgW: 100, imgH: 100, turns: [{ note: 'добавь дверь', answer: plan }] }, resp);
   assert.strictEqual(fix.sent[0].output_config.effort, 'high');
 });
+
+test('план квартиры: объединение соседних комнат — общий контур вместе со стеной между ними', () => {
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-flat.js']);
+  const run = (code) => JSON.parse(JSON.stringify(vm.runInContext(code, c.ctx || c)));
+  // прихожая (Г-образная) и гостиная под ней, стена 0,12
+  const hall = [[0,0],[4.2,0],[4.2,2],[3,2],[3,1.7],[0,1.7]];
+  const living = [[0,1.82],[3,1.82],[3,2.12],[4.2,2.12],[4.2,5],[0,5]];
+  assert.deepStrictEqual(run(`flatUnion(${JSON.stringify(hall)}, ${JSON.stringify(living)})`), [[0,0],[4200,0],[4200,5000],[0,5000]]);
+  // не соседи (между ними больше 0,7 м) — нельзя
+  assert.strictEqual(run(`flatUnion([[0,0],[2,0],[2,2],[0,2]], [[0,3],[2,3],[2,5],[0,5]])`), null);
+  // косая стена — нельзя
+  assert.strictEqual(run(`flatUnion([[0,0],[2,0],[2,2],[0,1.5]], [[0,2.1],[2,2.1],[2,4],[0,4]])`), null);
+});
