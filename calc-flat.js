@@ -1596,23 +1596,25 @@ out[at(i)] = keep ? (cnt === span ? 1 : 0) : (cnt > 0 ? 1 : 0);
 return out;
 };
 const dil = (x, rr) => pass(pass(x, 0, rr, true), 0, rr, false), ero = (x, rr) => pass(pass(x, 1, rr, true), 1, rr, false);
-// куски маски длиной от minLen точек (короткие — надписи, номера комнат — не стены)
-const keepLong = (x, minLen, into) => {
+// куски маски длиной от minLen точек или примыкающие к стенам touch (короткий выступ от стены);
+// короткие отдельные пятна посреди комнаты — надписи, номера — не стены
+const keepLong = (x, minLen, into, touch) => {
 const seen = new Uint8Array(W * H);
 for (let s0 = 0; s0 < W * H; s0++) {
 if (!x[s0] || seen[s0]) continue;
 const comp = [s0], st = [s0];
 seen[s0] = 1;
-let xa = W, xb = 0, ya = H, yb = 0;
+let xa = W, xb = 0, ya = H, yb = 0, near = false;
 while (st.length) {
 const i = st.pop(), px = i % W, py = (i - px) / W;
+if (touch && !near && ((px > 1 && touch[i - 2]) || (px < W - 2 && touch[i + 2]) || (py > 1 && touch[i - 2 * W]) || (py < H - 2 && touch[i + 2 * W]))) near = true;
 if (px < xa) xa = px; if (px > xb) xb = px; if (py < ya) ya = py; if (py > yb) yb = py;
 if (px > 0 && x[i - 1] && !seen[i - 1]) { seen[i - 1] = 1; st.push(i - 1); comp.push(i - 1); }
 if (px < W - 1 && x[i + 1] && !seen[i + 1]) { seen[i + 1] = 1; st.push(i + 1); comp.push(i + 1); }
 if (py > 0 && x[i - W] && !seen[i - W]) { seen[i - W] = 1; st.push(i - W); comp.push(i - W); }
 if (py < H - 1 && x[i + W] && !seen[i + W]) { seen[i + W] = 1; st.push(i + W); comp.push(i + W); }
 }
-if (Math.max(xb - xa, yb - ya) >= minLen) comp.forEach(i => { into[i] = 1; });
+if (near || Math.max(xb - xa, yb - ya) >= minLen) comp.forEach(i => { into[i] = 1; });
 }
 };
 return { dil, ero, keepLong };
@@ -1629,7 +1631,8 @@ for (let i = 0; i < W * H; i++) m[i] = gray.g[i] < 200 ? 1 : 0;
 m = dil(ero(m, k), k);
 // новые перегородки на чертежах перепланировки — красный контур (часто со штриховкой): закрыть
 // промежуток между линиями контура (до ~16 см), убрать одиночные тонкие линии и короткие пятна
-if (gray.red) keepLong(dil(ero(ero(dil(gray.red, Math.round(0.08 * ppm)), Math.round(0.08 * ppm)), k), k), 0.4 * ppm, m);
+const base = m.slice();                                     // толстые тёмные стены — к ним примыкают короткие выступы
+if (gray.red) keepLong(dil(ero(ero(dil(gray.red, Math.round(0.08 * ppm)), Math.round(0.08 * ppm)), k), k), 0.4 * ppm, m, base);
 // образцы, показанные на этом чертеже: такой же цвет — стена (контур, штриховка, заливка)
 flatWallSamples().forEach(sm => {
 if (!gray.rgba) return;
@@ -1640,7 +1643,7 @@ const dr = d[j] - cr, dg = d[j + 1] - cg, db = d[j + 2] - cb;
 x[i] = dr * dr + dg * dg + db * db < 4900 ? 1 : 0;      // цвет ближе 70
 }
 const rc = Math.max(1, Math.round(sm.r * ppm));
-keepLong(dil(ero(ero(dil(x, rc), rc), k), k), 0.4 * ppm, m);
+keepLong(dil(ero(ero(dil(x, rc), rc), k), k), 0.4 * ppm, m, base);
 });
 g.walls = m;
 return m;
