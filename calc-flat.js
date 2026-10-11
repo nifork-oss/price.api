@@ -479,7 +479,7 @@ v.w = Math.max(...xs) - v.minX + pad; v.h = Math.max(...ys) - v.minY + pad;
 return v;
 }
 
-// Рисунок в окне: при масштабе 1 — весь целиком, дальше — крупнее (до 8 раз)
+// Рисунок в окне: при масштабе 1 — весь целиком, дальше — крупнее (до 30 раз — подгонять по чертежу до сантиметра)
 function flatSizeInner() {
 const wrap = document.getElementById('flatWrap');
 const inner = wrap && wrap.firstElementChild;
@@ -559,7 +559,7 @@ function flatZoomAt(z, cx, cy) {
 const wrap = document.getElementById('flatWrap');
 const inner = wrap && wrap.firstElementChild;
 if (!inner) return;
-z = Math.max(1, Math.min(8, z));
+z = Math.max(1, Math.min(30, z));
 const ow = inner.offsetWidth || 1, ol = inner.offsetLeft, ot = inner.offsetTop;
 const fx = (wrap.scrollLeft + cx - ol) / ow, fy = (wrap.scrollTop + cy - ot) / (inner.offsetHeight || 1);
 flatZoom = z;
@@ -1951,12 +1951,12 @@ e.preventDefault();
 wrap._drag = true;
 const ctm = svg.getScreenCTM().inverse();
 const toM = (ev) => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; const q = p.matrixTransform(ctm); return [q.x, q.y]; };
-const start = toM(e);
+let start = toM(e);
 const base = flatPts(ed.sel);
 const idx = Number(kind === 'v' ? t.dataset.v : t.dataset.w);
 const n = base.length;
-// привязка — к углам других комнат и остальным углам этой; порог ~ 12 точек экрана
-const tol = 12 * Math.abs(ctm.a);
+// привязка — к углам других комнат и остальным углам этой; порог ~ 8 точек экрана
+const tol = 8 * Math.abs(ctm.a);
 const others = flatItems().filter(r => r.id !== ed.sel).flatMap(r => r.pts);
 const moving = kind === 'v' ? [idx] : kind === 'w' ? [idx, (idx + 1) % n] : base.map((_, i) => i);
 const own = base.filter((_, i) => !moving.includes(i));
@@ -1967,6 +1967,8 @@ if (ev.pointerId !== e.pointerId) return;
 const [x, y] = toM(ev);
 let dx = x - start[0], dy = y - start[1];
 if (!moved && Math.hypot(dx, dy) < tol * 0.4) return;
+// с места трогаемся плавно: отсчёт — от точки, где палец «сдвинулся», без рывка на порог
+if (!moved) { start = [x, y]; dx = 0; dy = 0; }
 moved = true;
 if (!pushed) { flatPushUndo(); pushed = true; }
 const pts = base.map(p => p.slice());
@@ -2024,6 +2026,7 @@ flatBindEdit();
 function flatWallMenu(i) {
 openSheet(`Стена ${i + 1}`, [
 { icon: '📏', label: 'Точная длина', onClick: () => flatAskWall(i) },
+{ icon: '↔️', label: 'Сдвинуть точно (на мм)', onClick: () => flatNudgeWall(i) },
 { icon: '▭', label: 'Обойти колонну (выступ на стене)', onClick: () => flatColumnWall(i) },
 { icon: '⊔', label: 'Ниша в стене (углубление)', onClick: () => flatColumnWall(i, true) },
 ]);
@@ -2112,6 +2115,26 @@ const prev = (i - 1 + n) % n;
 flatInsertCorners(id, out, j => (j >= i ? j + 2 : j),
 (j, st, w) => (j === i ? { wall: i + 2, start: Math.max(0, st - Y) } : { wall: j >= i ? j + 2 : j, start: j === prev ? Math.min(st, L1 - X - w) : st }),
 wh => { const h = wh.slice(); h.length = n; h.splice(i, 0, h[prev] || '', h[prev] || ''); return h.map(x => x || ''); });
+}
+
+// Сдвиг стены на заданное число мм: плюс — наружу (комната больше), минус — внутрь
+function flatNudgeWall(i) {
+const id = flatEdit && flatEdit.sel;
+const pts = id && flatPts(id);
+if (!pts) return;
+const raw = prompt('Сдвинуть стену, мм: плюс — наружу (комната больше), минус — внутрь. Например «15» или «-8»', '10');
+if (raw == null) return;
+const mm = mNum(String(raw).replace(/\s/g, '').replace('+', ''));
+if (!isFinite(mm) || !mm) return;
+const n = pts.length, a = pts[i], b = pts[(i + 1) % n];
+const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+if (!(len > 0)) return;
+const k = -mm / 1000;                                       // внутрь — направо от стены, наружу — налево
+const nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len;
+flatPushUndo();
+[i, (i + 1) % n].forEach(j => { pts[j] = [pts[j][0] + nx * k, pts[j][1] + ny * k]; });
+flatEdit.draft[id] = pts.map(p => [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000]);
+renderFlatPlan();
 }
 
 // Точная длина стены: двигаем следующую стену вдоль этой — соседние углы остаются прямыми
