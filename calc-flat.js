@@ -463,6 +463,9 @@ const inner = wrap && wrap.firstElementChild;
 const svg = inner && inner.querySelector('svg');
 if (!svg) return;
 const vb = svg.viewBox.baseVal;
+// окно не выше рисунка: широкий план на телефоне — без пустого места снизу
+const maxH = Math.round((window.visualViewport ? window.visualViewport.height : window.innerHeight) * 0.68);
+wrap.style.height = Math.max(200, Math.min(maxH, Math.ceil((wrap.clientWidth - 12) * vb.height / vb.width) + 14)) + 'px';
 const W = wrap.clientWidth - 12, H = wrap.clientHeight - 12;
 const base = Math.max(100, Math.min(W, H * vb.width / vb.height));
 inner.style.width = Math.round(base * flatZoom) + 'px';
