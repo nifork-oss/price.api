@@ -743,11 +743,10 @@ const handler = {
           // Выделенная часть PDF уходит картинкой — её подписи и размеры текстом отдельно
           const pageText = typeof body.pageText === "string" ? body.pageText.slice(0, 12000) : "";
           const onUsage = (u) => aiReport(env, request, auth, "plan", u);
-          // Уровень размышлений из настроек админа (страница берёт его из своих данных);
-          // правка готового плана (добавить дверь, балкон) — простая: думать долго не нужно
-          let hasPlan = false;
-          try { hasPlan = turns.length > 0 && (JSON.parse(turns[turns.length - 1].answer || "{}").rooms || []).length > 0; } catch (e) { /* не JSON */ }
-          const effort = hasPlan ? "low" : body.effort;
+          // Уровень размышлений из настроек админа (страница берёт его из своих данных).
+          // У уточнений — тот же: смена уровня между запросами сбрасывает кеш, и начало
+          // запроса (картинка, задание) оплачивается заново по полной цене
+          const effort = body.effort;
           // Размер картинки — страница новая: помещения в точках картинки (см. planPromptPx)
           const iw = Math.round(Number(body.imgW)), ih = Math.round(Number(body.imgH));
           const size = iw > 0 && ih > 0 && iw <= 10000 && ih <= 10000 ? { w: iw, h: ih } : null;
@@ -1277,7 +1276,8 @@ async function aiUsageAdd(env, auth, feature, usage) {
   await writeUsers(env, record);
   // сколько сберёг кеш (повтор начала запроса — 10% цены вместо 100%)
   const kopSaved = Math.round(tr * (1 - AI_CACHE_READ) * prices.in / 1e4);
-  return { ok: true, kop, cost: { sent: kopIn / 100, reply: kopOut / 100, total: kop / 100, ...(kopSaved > 0 ? { saved: kopSaved / 100 } : {}), balance: auth.role === "admin" ? null : u.aiBalance / 100 } };
+  return { ok: true, kop, cost: { sent: kopIn / 100, reply: kopOut / 100, total: kop / 100, ...(kopSaved > 0 ? { saved: kopSaved / 100 } : {}),
+    tokens: { in: tin, cacheRead: tr, cacheWrite: tw, out: tout }, balance: auth.role === "admin" ? null : u.aiBalance / 100 } };
 }
 
 // Токены из ответа сервиса: вход отдельно — обычный, запись в кеш и чтение из кеша

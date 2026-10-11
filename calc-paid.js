@@ -42,7 +42,9 @@ return (cloudData.self && cloudData.self.ai) || { balance: 0, month: {}, request
 function paidCostHtml(cost) {
 if (!cost || !(cost.total >= 0)) return '';
 return `<div class="as-cost">Отправлено ${paidRub(cost.sent)}${cost.saved > 0 ? ` (повтор из кеша — дешевле на ${paidRub(cost.saved)})` : ''} · ответ ${paidRub(cost.reply)} · всего <b>${paidRub(cost.total)}</b>`
-+ (cost.balance != null ? ` · на балансе ${paidRub(cost.balance)}` : ' · с вас не списано') + '</div>';
++ (cost.balance != null ? ` · на балансе ${paidRub(cost.balance)}` : ' · с вас не списано') + '</div>'
+// админу — токены: куда ушли деньги (сработал ли кеш, сколько в ответе)
++ (cost.tokens && isCurrentAdmin() ? `<div class="as-model">Токены: отправка ${cost.tokens.in}, из кеша ${cost.tokens.cacheRead}, в кеш ${cost.tokens.cacheWrite} · ответ ${cost.tokens.out}</div>` : '');
 }
 
 // Свежий остаток после запроса — чтобы профиль и проверки видели его сразу

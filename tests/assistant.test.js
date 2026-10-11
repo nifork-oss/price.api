@@ -418,7 +418,7 @@ test('баланс: каждый запрос списывает стоимос�
   const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', aiBalance: 200 }]);
   const first = await call('/assistant', { body: ask, storage: st });
   assert.strictEqual(first.status, 200);
-  assert.deepStrictEqual(first.data.cost, { sent: 0.6, reply: 0.75, total: 1.35, balance: 0.65 });
+  assert.deepStrictEqual(first.data.cost, { sent: 0.6, reply: 0.75, total: 1.35, tokens: { in: 1200, cacheRead: 0, cacheWrite: 0, out: 300 }, balance: 0.65 });
   const u = user(st, 'ivan');
   assert.strictEqual(u.aiBalance, 200 - 135);
   assert.deepStrictEqual(u.aiUse.assistant, { req: 1, in: 1200, out: 300, kop: 135 });
@@ -441,7 +441,7 @@ test('кеш: повтор из кеша — 10% цены отправки, за
   const st = fakeStorage([{ login: 'admin', role: 'admin' }, { login: 'ivan', role: 'master', aiBalance: 1000 }]);
   const reply = { content: [{ type: 'text', text: 'ok' }], usage: { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10000, output_tokens: 100 } };
   const r = await call('/assistant', { body: ask, storage: st, reply });
-  assert.deepStrictEqual(r.data.cost, { sent: 2.25, reply: 0.25, total: 2.5, saved: 4.5, balance: 7.5 });
+  assert.deepStrictEqual(r.data.cost, { sent: 2.25, reply: 0.25, total: 2.5, saved: 4.5, tokens: { in: 1000, cacheRead: 10000, cacheWrite: 2000, out: 100 }, balance: 7.5 });
   assert.strictEqual(user(st, 'ivan').aiUse.assistant.in, 13000);
   // Окно переписки: до 20 реплик — всё; дальше начало сдвигается по 10
   const chat = (n) => ({ messages: Array.from({ length: n }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'м' + i })) });
@@ -730,14 +730,9 @@ test('план квартиры: масштаб по стене — весь п�
   assert.deepStrictEqual(out[1].plan, { x: 3.52, y: 0 });
 });
 
-test('план: правка готового плана — с низким уровнем размышлений, первое распознавание — как в настройках', async () => {
+test('план: уточнение — с тем же уровнем размышлений, что и распознавание (иначе сбросится кеш)', async () => {
   const plan = '{"rooms":[{"name":"Кухня","px":[[0,0],[10,0],[10,10],[0,10]],"dims":[],"openings":[]}],"warnings":[]}';
   const resp = [{ type: 'application/json', body: JSON.stringify({ content: [{ type: 'text', text: plan }] }) }];
-  const first = await callPlan({ effort: 'high', imgW: 100, imgH: 100 }, resp);
-  assert.strictEqual(first.sent[0].output_config.effort, 'high');
   const fix = await callPlan({ effort: 'high', imgW: 100, imgH: 100, turns: [{ note: 'добавь дверь', answer: plan }] }, resp);
-  assert.strictEqual(fix.sent[0].output_config.effort, 'low');
-  // ответ на вопросы нейросети (плана ещё нет) — думает как обычно
-  const ans = await callPlan({ effort: 'high', imgW: 100, imgH: 100, turns: [{ note: 'это кухня', answer: '{"questions":["Что это?"]}' }] }, resp);
-  assert.strictEqual(ans.sent[0].output_config.effort, 'high');
+  assert.strictEqual(fix.sent[0].output_config.effort, 'high');
 });
