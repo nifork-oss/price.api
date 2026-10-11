@@ -92,7 +92,7 @@ m.angles.push(Math.abs(interior - 90) < 0.3 ? '' : FLAT_FMT(Math.round(interior 
 const [fx, fy] = dir(0);
 m.startHeading = Math.round(((Math.atan2(fy, fx) * 180 / Math.PI) + 360) % 360 * 100) / 100;
 m.openings = ops.map(o => {
-const base = { type: o.type, w: FLAT_FMT(o.width_m || 0), h: o.height_m ? FLAT_FMT(o.height_m) : '', n: '1', slopes: true };
+const base = { type: o.type, w: FLAT_FMT(o.width_m || 0), h: o.height_m ? FLAT_FMT(o.height_m) : '', n: '1', slopes: true, ...(o.pass ? { pass: true } : {}) };
 if (o.type === 'balcony') Object.assign(base, { dw: o.door_width_m ? FLAT_FMT(o.door_width_m) : '', dh: o.door_height_m ? FLAT_FMT(o.door_height_m) : '', side: 'start' });
 if (o.wall_index != null) Object.assign(base, { wall: o.wall_index, off: o.offset_m != null ? FLAT_FMT(o.offset_m) : '', from: 'start' });
 return base;
@@ -161,6 +161,11 @@ const sg = flatOpeningSeg(r, o);
 if (!sg) return '';
 const { x: x1, y: y1, ux, uy, w: ow } = sg;
 const col = o.type === 'door' ? '#9a6b3c' : o.type === 'balcony' ? '#3a9a5c' : '#3d8bd9';
+if (o.pass) {
+const x2 = x1 + ux * ow, y2 = y1 + uy * ow, jx = -uy * fs * 0.35, jy = ux * fs * 0.35;
+return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${opt.sel === r.id ? '#ffe7a3' : '#fff4d1'}" stroke-width="${fs * 0.34}"/>`
++ `<path d="M${x1 - jx} ${y1 - jy}L${x1 + jx} ${y1 + jy}M${x2 - jx} ${y2 - jy}L${x2 + jx} ${y2 + jy}" stroke="#14181f" stroke-width="${fs * 0.12}"/>`;
+}
 return `<line x1="${x1}" y1="${y1}" x2="${x1 + ux * ow}" y2="${y1 + uy * ow}" stroke="${col}" stroke-width="${fs * 0.5}"/>`;
 }).join('');
 const [lx, ly] = flatLabelPoint(r.pts);
@@ -181,7 +186,7 @@ return `<g class="flat-room${sel ? ' sel' : ''}"${tap}>
 <path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}"${ul ? ' fill-opacity="0.35"' : ''} stroke="#14181f" stroke-width="${fs * 0.22}" stroke-linejoin="miter"/>
 ${ops}
 ${opt.pickWalls ? r.pts.map((p, i) => (!r.closed && i === n - 1) ? '' : `<line x1="${p[0]}" y1="${p[1]}" x2="${r.pts[(i + 1) % n][0]}" y2="${r.pts[(i + 1) % n][1]}" stroke="#e8a900" stroke-opacity=".55" stroke-width="${fs * 0.5}" stroke-linecap="round" onclick="${opt.pickWalls === true ? 'flatScaleWall' : opt.pickWalls}('${r.id}', ${i}, event)" style="cursor:pointer"/>`).join('') : ''}
-${opt.pickOps ? r.openings.map((o, oi) => { const sg = flatOpeningSeg(r, o); return sg ? `<line x1="${sg.x}" y1="${sg.y}" x2="${sg.x + sg.ux * sg.w}" y2="${sg.y + sg.uy * sg.w}" stroke="#c2361f" stroke-opacity=".01" stroke-width="${fs * 0.9}" onclick="${opt.pickOps}('${r.id}', ${oi})" style="cursor:pointer"/>` : ''; }).join('') : ''}
+${opt.pickOps ? r.openings.map((o, oi) => { const sg = flatOpeningSeg(r, o); return sg ? `<line x1="${sg.x}" y1="${sg.y}" x2="${sg.x + sg.ux * sg.w}" y2="${sg.y + sg.uy * sg.w}" stroke="#c2361f" stroke-opacity=".01" stroke-width="${fs * 0.9}" data-op-room="${r.id}" data-op="${oi}" style="cursor:grab"/>` : ''; }).join('') : ''}
 <title>${escapeHtml(name)} — ${areaTxt}</title>
 ${showName ? `<text x="${lx}" y="${ly - rf * 0.15}" font-size="${rf}" text-anchor="middle" font-family="Arial, sans-serif" fill="#14181f" font-weight="700" pointer-events="none">${escapeHtml(name)}</text>` : ''}
 <text x="${lx}" y="${showName ? ly + rf * 1.05 : ly + rf * 0.3}" font-size="${rf * 0.85}" text-anchor="middle" font-family="Arial, sans-serif" fill="#5a6470" pointer-events="none">${areaTxt}</text>
@@ -226,7 +231,7 @@ const segs = [];
 items.forEach((r, ri) => r.openings.forEach(o => {
 if (o.type !== 'door' && o.type !== 'balcony') return;
 const sg = flatOpeningSeg(r, o);
-if (sg) segs.push({ ...sg, ri, type: o.type });
+if (sg) segs.push({ ...sg, ri, type: o.type, pass: !!o.pass });
 }));
 const pairs = [];
 for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
@@ -246,10 +251,12 @@ return pairs;
 
 // Перемычка сквозь стену между парой дверей — проём читается одним
 function flatBridges(items, fs) {
-return flatDoorPairs(items).map(({ a, d, t0, t1 }) => {
+return flatDoorPairs(items).map(({ a, b, d, t0, t1 }) => {
 const p = t => [a.x + a.ux * t, a.y + a.uy * t];
 const q = ([x, y]) => [x - a.uy * d, y + a.ux * d];
 const pts = [p(t0), p(t1), q(p(t1)), q(p(t0))];
+// проход без двери — стена открыта: перемычка цветом пола
+if (a.pass && b.pass) return `<path d="M${pts.map(v => v.join(' ')).join('L')}Z" fill="#fff4d1" stroke="none"/>`;
 return `<path d="M${pts.map(v => v.join(' ')).join('L')}Z" fill="#d9b48f" stroke="#9a6b3c" stroke-width="${fs * 0.06}"/>`;
 }).join('');
 }
@@ -394,7 +401,7 @@ const total = items.reduce((a, r) => a + flatPolyArea(r.pts), 0);
 const ed = flatEdit;
 const top = flatOpsMode
 ? `<div class="flat-tools"><button type="button" class="mp-btn mp-btn-primary" onclick="flatOpsMode = false; renderFlatPlan()">Готово</button></div>
-<div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Нажмите на уже стоящий проём — уберёте его. Дверь между комнатами ставится сразу у обеих.</div>`
+<div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>, а нажатием — сделать из двери проход без двери (и обратно) или убрать. Дверь между комнатами — сразу у обеих.</div>`
 : flatMergeFrom
 ? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatMergeFrom = null; renderFlatPlan()">Отмена</button></div>
 <div class="ai-hint"><b>Объединить.</b> Нажмите на соседнюю комнату — она станет частью «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatMergeFrom) || {}))}» вместе со стеной между ними.</div>`
@@ -426,6 +433,7 @@ const wrap = document.getElementById('flatWrap');
 if (scroll && wrap) { wrap.scrollLeft = scroll[0]; wrap.scrollTop = scroll[1]; }
 if (ed) flatBindEdit();
 else if (flatUlAdjust) flatBindUnderlay();
+else if (flatOpsMode) flatBindOps();
 if (!flatUlAdjust) flatBindPanZoom();
 }
 
@@ -756,7 +764,7 @@ return [q.x, q.y];
 
 const FLAT_OP_KINDS = {
 door: { label: 'Дверь', type: 'door', w: 800, h: 2000 },
-pass: { label: 'Проход без двери', type: 'door', w: 1000, h: 2000 },
+pass: { label: 'Проход без двери', type: 'door', w: 1000, h: 2000, pass: true },
 window: { label: 'Окно', type: 'window', w: 1500, h: 1500 },
 balcony: { label: 'Балконный блок (окно + дверь)', type: 'balcony', w: 1500, h: 1500 },
 };
@@ -790,7 +798,7 @@ const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
 w = Math.min(w, len);
 const off = Math.max(0, Math.min(len - w, t - w / 2));
 const make = (wall, o) => ({ type: k.type, w: FLAT_FMT(w), h: FLAT_FMT(k.h / 1000), n: '1', slopes: true, wall, off: FLAT_FMT(o), from: 'start',
-...(k.type === 'balcony' ? { dw: '0,7', dh: '2,2', side: 'start' } : {}) });
+...(k.type === 'balcony' ? { dw: '0,7', dh: '2,2', side: 'start' } : {}), ...(k.pass ? { pass: true } : {}) });
 room.measure.openings = (room.measure.openings || []).concat(make(i, off));
 let both = '';
 if (k.type === 'door') {
@@ -825,13 +833,112 @@ renderFlatPlan();
 showAddToast(`${k.label} добавлен${kind === 'window' ? 'о' : kind === 'door' ? 'а' : ''} в «${it.name}»${both}. Высоту проверьте в замере.`);
 }
 
-async function flatOpsRemove(roomId, oi) {
+// Тот же проём у соседней комнаты за стеной (вторая половина двери): [{ room, oi }]
+function flatOpPartners(roomId, oi) {
+const items = flatItems();
+const it = items.find(r => r.id === roomId);
+const sg = it && flatOpeningSeg(it, it.openings[oi]);
+if (!sg) return [];
+const out = [];
+items.forEach(other => {
+if (other.id === roomId) return;
+other.openings.forEach((o, j) => {
+if (o.type === 'window') return;
+const sb = flatOpeningSeg(other, o);
+if (!sb || Math.abs(sg.ux * sb.uy - sg.uy * sb.ux) > 0.02) return;
+const dx = sb.x - sg.x, dy = sb.y - sg.y;
+const dist = Math.abs(dx * -sg.uy + dy * sg.ux);
+if (dist < 0.01 || dist > 0.7) return;
+const t1 = dx * sg.ux + dy * sg.uy, t2 = t1 + sb.w * (sg.ux * sb.ux + sg.uy * sb.uy);
+if (Math.min(sg.w, Math.max(t1, t2)) - Math.max(0, Math.min(t1, t2)) < 0.2) return;
+const room = flatRooms().find(r => r.id === other.id);
+if (room) out.push({ room, oi: j });
+});
+});
+return out;
+}
+
+// Нажали на проём: проход ↔ дверь или убрать — сразу у обеих комнат
+function flatOpsRemove(roomId, oi) {
 const room = flatRooms().find(r => r.id === roomId);
 const o = room && room.measure.openings && room.measure.openings[oi];
 if (!o) return;
-const what = o.type === 'window' ? 'окно' : o.type === 'balcony' ? 'балконный блок' : 'дверь';
-if (!confirm(`Убрать ${what} ${mFmt(mNum(o.w))} м из «${roomName(room)}»?`)) return;
-room.measure.openings.splice(oi, 1);
+const what = o.type === 'window' ? 'Окно' : o.type === 'balcony' ? 'Балконный блок' : o.pass ? 'Проход без двери' : 'Дверь';
+const both = [{ room, oi }].concat(o.type === 'window' ? [] : flatOpPartners(roomId, oi));
+const items = [];
+if (o.type === 'door') items.push(o.pass
+? { icon: '✏️', label: 'Поставить дверь', onClick: () => flatOpsSetPass(both, false) }
+: { icon: '✏️', label: 'Сделать проходом без двери', onClick: () => flatOpsSetPass(both, true) });
+items.push({ icon: '🗑️', label: both.length > 1 ? 'Убрать (у обеих комнат)' : 'Убрать', danger: true, onClick: () => flatOpsDelete(both) });
+openSheet(`${what} ${mFmt(mNum(o.w))} м`, items);
+}
+
+// Проём тянем пальцем вдоль его стены; вторая половина двери у соседней комнаты — вместе с ним.
+// Короткое нажатие без движения — меню проёма
+function flatBindOps() {
+const wrap = document.getElementById('flatWrap');
+const svg = wrap && wrap.querySelector('svg');
+if (!svg) return;
+svg.addEventListener('pointerdown', (e) => {
+const t = e.target;
+if (!t.dataset || t.dataset.op == null) return;
+const roomId = t.dataset.opRoom, oi = Number(t.dataset.op);
+const it = flatItems().find(r => r.id === roomId);
+const room = flatRooms().find(r => r.id === roomId);
+const o = room && room.measure.openings[oi];
+const sg = it && o && flatOpeningSeg(it, o);
+if (!sg) return;
+e.preventDefault(); e.stopPropagation();
+wrap._drag = true;
+// длина стены и как записан отступ (от начала или от конца стены)
+const wallLen = (item, op) => { const n = item.pts.length, a = item.pts[op.wall], b = item.pts[(op.wall + 1) % n]; return Math.hypot(b[0] - a[0], b[1] - a[1]); };
+const startOf = (op, len) => { const off = mNum(op.off); const w = mNum(op.w); return op.from === 'end' ? len - (isFinite(off) ? off : 0) - w : (isFinite(off) ? off : (len - w) / 2); };
+const setStart = (op, len, st) => { const w = mNum(op.w); const v = Math.max(0, Math.min(len - w, st)); op.off = FLAT_FMT(Math.round((op.from === 'end' ? len - v - w : v) * 100) / 100); };
+const items = flatItems();
+const moving = [{ room, o, len: wallLen(it, o), st0: startOf(o, wallLen(it, o)), k: 1 }];
+flatOpPartners(roomId, oi).forEach(({ room: r2, oi: j }) => {
+const it2 = items.find(x => x.id === r2.id), o2 = r2.measure.openings[j], s2 = it2 && flatOpeningSeg(it2, o2);
+if (!s2) return;
+const l2 = wallLen(it2, o2);
+moving.push({ room: r2, o: o2, len: l2, st0: startOf(o2, l2), k: sg.ux * s2.ux + sg.uy * s2.uy });   // ±1 — стена в ту же сторону или навстречу
+});
+const ctm = svg.getScreenCTM().inverse();
+const toM = (ev) => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; const q = p.matrixTransform(ctm); return [q.x, q.y]; };
+const p0 = toM(e), sx = e.clientX, sy = e.clientY;
+let moved = false;
+const move = (ev) => {
+if (ev.pointerId !== e.pointerId) return;
+if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+moved = true;
+const p1 = toM(ev);
+const d = (p1[0] - p0[0]) * sg.ux + (p1[1] - p0[1]) * sg.uy;   // сдвиг вдоль стены, м
+moving.forEach(m => setStart(m.o, m.len, m.st0 + d * m.k));
+renderFlatPlan();
+};
+const up = async (ev) => {
+if (ev.pointerId !== e.pointerId) return;
+window.removeEventListener('pointermove', move);
+window.removeEventListener('pointerup', up);
+wrap._drag = false;
+if (!moved) { flatOpsRemove(roomId, oi); return; }
+await saveCloudData();
+renderFlatPlan();
+showAddToast(`Отступ от начала стены: ${mFmt(startOf(o, moving[0].len))} м`);
+};
+window.addEventListener('pointermove', move);
+window.addEventListener('pointerup', up);
+});
+}
+
+async function flatOpsSetPass(list, on) {
+list.forEach(({ room, oi }) => { const o = room.measure.openings[oi]; if (on) o.pass = true; else delete o.pass; });
+await saveCloudData();
+renderFlatPlan();
+}
+
+async function flatOpsDelete(list) {
+// с конца — чтобы номера проёмов в одной комнате не сдвигались
+list.slice().sort((x, y) => y.oi - x.oi).forEach(({ room, oi }) => room.measure.openings.splice(oi, 1));
 await saveCloudData();
 renderFlatPlan();
 }
@@ -933,7 +1040,7 @@ if (!sg) return;
 const end = [sg.x + sg.ux * sg.w, sg.y + sg.uy * sg.w];
 if (edgeDist([(sg.x + end[0]) / 2, (sg.y + end[1]) / 2]) > 0.05) return;   // была в стене между ними
 ops.push({ type: o.type, at: [[sg.x, sg.y], end].map(p => p.map(v => Math.round(v * 1000))), width_m: sg.w,
-height_m: mNum(o.h) || null, door_width_m: mNum(o.dw) || null, door_height_m: mNum(o.dh) || null });
+height_m: mNum(o.h) || null, door_width_m: mNum(o.dw) || null, door_height_m: mNum(o.dh) || null, ...(o.pass ? { pass: true } : {}) });
 }));
 const conv = flatPtsToMeasure({ name: ia.name, height_m: mNum(ra.measure.height) || null, pts, openings: ops }, obj.id);
 ra.measure = { ...conv.measure, id: ra.measure.id, objectId: ra.measure.objectId };

@@ -1437,7 +1437,7 @@ function planPromptPx(w, h) {
   Бери размеры, относящиеся к этому помещению, а не к соседнему и не габаритные снаружи квартиры.
   Нужны хотя бы ширина и длина, если они подписаны;
 - height_mm — высота потолка, если подписана;
-- openings — окна, двери, балконные блоки (окно с дверью в одном проёме), проходы без двери (как "door").
+- openings — окна, двери, балконные блоки (окно с дверью в одном проёме), проходы без двери ("pass").
   Дверь или проход — это дуга открывания ИЛИ просто разрыв в стене между помещениями (на планах монтажа и
   перепланировки дуг часто нет — там двери показаны только разрывом стены и размером проёма). Входная дверь —
   разрыв в наружной стене у прихожей; это дверь, а не окно. Окно — проём в наружной стене с рамой (двойные линии).
@@ -1456,7 +1456,7 @@ function planPromptPx(w, h) {
 "dims":[{"edge":0,"mm":3200},{"edge":1,"mm":2450}],
 "openings":[{"type":"window","px":[[200,80],[330,80]],"width_mm":1400,"height_mm":1500}]}],
 "warnings":["..."]}
-Поля без значения не пиши. type — одно из: "window", "door", "balcony".`;
+Поля без значения не пиши. type — одно из: "window", "door", "balcony", "pass" (проход без двери — арка, открытый проём).`;
 }
 
 // Правила мастера к распознаванию (профиль, «Запомнить как правило»)
@@ -1651,7 +1651,8 @@ function sanitizePlan(raw) {
       return {
         ...(atOk ? { at } : {}),
         ...(px.length >= 3 && opx.length === 2 ? { px: opx } : {}),
-        type: ["window", "door", "balcony"].includes(o && o.type) ? o.type : "window",
+        type: ["window", "door", "balcony"].includes(o && o.type) ? o.type : o && o.type === "pass" ? "door" : "window",
+        ...(o && o.type === "pass" ? { pass: true } : {}),
         wall_index: Number.isInteger(w) && w >= 0 && w < sides ? w : null,
         width_m: num(mm(o, "width") != null ? mm(o, "width") : atLen, 0.1, 20), height_m: num(mm(o, "height"), 0.1, 10),
         door_width_m: num(mm(o, "door_width"), 0.1, 5), door_height_m: num(mm(o, "door_height"), 0.1, 5),
