@@ -143,6 +143,8 @@ v = { minX: Math.min(...xs) - pad, minY: Math.min(...ys) - pad };
 v.w = Math.max(...xs) - v.minX + pad; v.h = Math.max(...ys) - v.minY + pad;
 }
 const fs = opt.fs || Math.max(0.16, Math.min(0.32, Math.max(v.w, v.h) / 45));
+// приближено больше чем в 2 раза — ручки и подписи не растут дальше, иначе закрывают чертёж
+const zk = Math.min(1, 2 / (opt.zoom || 1));
 const bridges = flatBridges(items, fs);
 // подложка — чертёж под планом (opt.underlay: { href, x, y, w, ar, rot, op, adjust })
 let under = '';
@@ -163,10 +165,10 @@ const { x: x1, y: y1, ux, uy, w: ow } = sg;
 const col = o.type === 'door' ? '#9a6b3c' : o.type === 'balcony' ? '#3a9a5c' : '#3d8bd9';
 if (o.pass) {
 const x2 = x1 + ux * ow, y2 = y1 + uy * ow, jx = -uy * fs * 0.35, jy = ux * fs * 0.35;
-return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${opt.sel === r.id ? '#ffe7a3' : '#fff4d1'}" stroke-width="${fs * 0.34}"/>`
+return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${opt.sel === r.id ? '#ffe7a3' : '#fff4d1'}" stroke-width="${fs * 0.34 * zk}"/>`
 + `<path d="M${x1 - jx} ${y1 - jy}L${x1 + jx} ${y1 + jy}M${x2 - jx} ${y2 - jy}L${x2 + jx} ${y2 + jy}" stroke="#14181f" stroke-width="${fs * 0.12}"/>`;
 }
-return `<line x1="${x1}" y1="${y1}" x2="${x1 + ux * ow}" y2="${y1 + uy * ow}" stroke="${col}" stroke-width="${fs * 0.5}"/>`;
+return `<line x1="${x1}" y1="${y1}" x2="${x1 + ux * ow}" y2="${y1 + uy * ow}" stroke="${col}" stroke-width="${fs * 0.5 * zk}"/>`;
 }).join('');
 const [lx, ly] = flatLabelPoint(r.pts);
 const area = flatPolyArea(r.pts);
@@ -181,9 +183,10 @@ const fitW = (chars, k) => (bw * 0.9) / Math.max(1, chars * k);
 let rf = Math.min(fs, fitW(name.length, 0.62), bh / 3);
 const showName = name && rf >= fs * 0.6;
 if (!showName) rf = Math.min(fs, fitW(areaTxt.length, 0.5) / 0.85, bh / 1.6);
+rf *= zk;
 const tap = opt.onTap ? ` onclick="${opt.onTap}('${r.id}')" style="cursor:pointer"` : '';
 return `<g class="flat-room${sel ? ' sel' : ''}"${tap}>
-<path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}"${ul ? ' fill-opacity="0.35"' : ''} stroke="#14181f" stroke-width="${fs * 0.22}" stroke-linejoin="miter"/>
+<path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}"${ul ? ' fill-opacity="0.35"' : ''} stroke="#14181f" stroke-width="${fs * 0.22 * zk}" stroke-linejoin="miter"/>
 ${ops}
 ${opt.pickWalls ? r.pts.map((p, i) => (!r.closed && i === n - 1) ? '' : `<line x1="${p[0]}" y1="${p[1]}" x2="${r.pts[(i + 1) % n][0]}" y2="${r.pts[(i + 1) % n][1]}" stroke="#e8a900" stroke-opacity=".55" stroke-width="${fs * 0.5}" stroke-linecap="round" onclick="${opt.pickWalls === true ? 'flatScaleWall' : opt.pickWalls}('${r.id}', ${i}, event)" style="cursor:pointer"/>`).join('') : ''}
 ${opt.pickOps ? r.openings.map((o, oi) => { const sg = flatOpeningSeg(r, o); return sg ? `<line x1="${sg.x}" y1="${sg.y}" x2="${sg.x + sg.ux * sg.w}" y2="${sg.y + sg.uy * sg.w}" stroke="#c2361f" stroke-opacity=".01" stroke-width="${fs * 0.9}" data-op-room="${r.id}" data-op="${oi}" style="cursor:grab"/>` : ''; }).join('') : ''}
@@ -197,16 +200,17 @@ ${opt.heights ? flatHeightLabels(r, lx, (showName ? ly + rf * 1.05 : ly + rf * 0
 let handles = '';
 const s = opt.sel && items.find(r => r.id === opt.sel);
 if (s) {
-const n = s.pts.length, hr = fs * 0.55;
+const n = s.pts.length, hr = fs * 0.55 * zk, hf = fs * zk;
 for (let i = 0; i < n; i++) {
 const a = s.pts[i], b = s.pts[(i + 1) % n];
 const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, len = Math.hypot(b[0] - a[0], b[1] - a[1]);
 // подпись длины — внутрь комнаты (обход по часовой: внутрь — направо от стены)
 const nx = len ? -(b[1] - a[1]) / len : 0, ny = len ? (b[0] - a[0]) / len : 0;
-handles += `<text x="${mx + nx * fs * 1.6}" y="${my + ny * fs * 1.6 + fs * 0.35}" font-size="${fs * 0.8}" text-anchor="middle" font-family="Arial, sans-serif" fill="#c2361f" font-weight="700" pointer-events="none">${FLAT_FMT(len)}</text>`
-+ `<rect data-w="${i}" x="${mx - hr * 0.8}" y="${my - hr * 0.8}" width="${hr * 1.6}" height="${hr * 1.6}" fill="#ffffff" stroke="#c2361f" stroke-width="${fs * 0.12}"/>`;
+// длина — только если подпись помещается вдоль стены (у коротких стенок ниш и колонн — нет)
+if (len >= hf * 2.6) handles += `<text x="${mx + nx * hf * 1.6}" y="${my + ny * hf * 1.6 + hf * 0.35}" font-size="${hf * 0.8}" text-anchor="middle" font-family="Arial, sans-serif" fill="#c2361f" font-weight="700" pointer-events="none">${FLAT_FMT(len)}</text>`;
+handles += `<rect data-w="${i}" x="${mx - hr * 0.8}" y="${my - hr * 0.8}" width="${hr * 1.6}" height="${hr * 1.6}" fill="#ffffff" stroke="#c2361f" stroke-width="${hf * 0.12}"/>`;
 }
-s.pts.forEach((p, i) => { handles += `<circle data-v="${i}" cx="${p[0]}" cy="${p[1]}" r="${hr}" fill="#ffcf3d" stroke="#14181f" stroke-width="${fs * 0.12}"/>`; });
+s.pts.forEach((p, i) => { handles += `<circle data-v="${i}" cx="${p[0]}" cy="${p[1]}" r="${hr}" fill="#ffcf3d" stroke="#14181f" stroke-width="${hf * 0.12}"/>`; });
 }
 return `<svg class="flat-svg" viewBox="${v.minX} ${v.minY} ${v.w} ${v.h}" xmlns="http://www.w3.org/2000/svg">${under}${bridges}${body}${handles}</svg>`;
 }
@@ -437,10 +441,10 @@ const scroll = oldWrap ? [oldWrap.scrollLeft, oldWrap.scrollTop] : null;
 body.innerHTML = `<div class="mp-body-inner">
 ${top}
 <div class="flat-zoom"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><span>Площадь: <b>${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²</b></span><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button></div>
-<div class="flat-viewbox"><div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
+<div class="flat-viewbox"><div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, { zoom: flatZoom, ...(ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatHMode ? { pickWalls: 'flatHWall', pickOps: true, onTap: 'flatHRoom', heights: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatOpsMode ? { pickWalls: 'flatOpsWall', pickOps: 'flatOpsRemove', underlay: flatUlOpt(), view: flatViewOf(items) }
-: { onTap: flatMergeFrom ? 'flatMergeTap' : 'flatOpenRoom', sel: flatMergeFrom || undefined, underlay: flatUlOpt(), view: flatViewOf(items) })}</div></div>
+: { onTap: flatMergeFrom ? 'flatMergeTap' : 'flatOpenRoom', sel: flatMergeFrom || undefined, underlay: flatUlOpt(), view: flatViewOf(items) }) })}</div></div>
 <div class="flat-bar flat-bar-x" id="flatBarX"><div></div></div><div class="flat-bar flat-bar-y" id="flatBarY"><div></div></div></div>
 ${ed || flatScaleMode || flatOpsMode || flatHMode || flatMergeFrom ? '' : flatUlBarHtml()}
 </div>`;
@@ -537,6 +541,18 @@ bar.addEventListener('pointercancel', up);
 flatBarsUpdate();
 }
 
+// После приближения — перерисовать (ручки и подписи — под новый масштаб), когда пальцы отпущены
+let flatZoomTimer = null;
+function flatZoomRedraw() {
+clearTimeout(flatZoomTimer);
+flatZoomTimer = setTimeout(() => {
+const wrap = document.getElementById('flatWrap');
+if (!wrap) return;
+if ((wrap._pz && wrap._pz.size) || wrap._drag) { flatZoomRedraw(); return; }
+if (flatEdit) flatRedrawSvg(); else if (!flatUlAdjust) renderFlatPlan();
+}, 250);
+}
+
 // Масштаб с сохранением точки под (cx, cy) — координаты внутри окна
 function flatZoomAt(z, cx, cy) {
 const wrap = document.getElementById('flatWrap');
@@ -547,6 +563,7 @@ const ow = inner.offsetWidth || 1, ol = inner.offsetLeft, ot = inner.offsetTop;
 const fx = (wrap.scrollLeft + cx - ol) / ow, fy = (wrap.scrollTop + cy - ot) / (inner.offsetHeight || 1);
 flatZoom = z;
 flatSizeInner();
+flatZoomRedraw();
 wrap.scrollLeft = fx * inner.offsetWidth + inner.offsetLeft - cx;
 wrap.scrollTop = fy * inner.offsetHeight + inner.offsetTop - cy;
 }
@@ -1633,7 +1650,7 @@ const wrap = document.getElementById('flatWrap');
 if (!wrap || !flatEdit) return;
 const old = wrap.querySelector('svg');
 const holder = document.createElement('div');
-holder.innerHTML = flatSvg(flatItems(), { view: flatEdit.view, sel: flatEdit.sel, underlay: flatUlOpt() });
+holder.innerHTML = flatSvg(flatItems(), { view: flatEdit.view, sel: flatEdit.sel, underlay: flatUlOpt(), zoom: flatZoom });
 const svg = holder.firstElementChild;
 old.replaceWith(svg);
 flatBindEdit();
