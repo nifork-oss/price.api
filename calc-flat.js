@@ -361,6 +361,7 @@ let flatOpsDraft = null;   // { orig, undo } — проёмы до правки 
 let flatMergeFrom = null;  // id комнаты, к которой присоединяем соседнюю
 let flatSplitFrom = null;  // id комнаты, которую режем на две (ждём нажатия на её стену)
 let flatTapMode = false;
+let flatTapScale = null;   // в «Комнатах с чертежа» — задать масштаб: точки на концах размера чертежа
 let flatTapPick = false;   // в «Комнатах с чертежа» следующее нажатие — образец стены   // «Комнаты с чертежа»: нажатие внутрь комнаты на подложке — новое помещение
 let flatHMode = false;     // высоты стен, окон и дверей: всем сразу или по одной нажатием
 
@@ -425,8 +426,10 @@ ${getUnderlay(flatUlId()) ? '<button type="button" class="mp-head-btn" onclick="
 </div>
 <div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>${getUnderlay(flatUlId()) ? ' («По подложке» — все сразу встанут на разрывы в стенах чертежа)' : ''}, а нажатием — поменять ширину, сделать из двери проход без двери (и обратно) или убрать. В облако — только по «Сохранить». Дверь между комнатами — сразу у обеих.</div>`
 : flatTapMode
-? `<div class="flat-tools"><button type="button" class="mp-head-btn${flatTapPick ? ' on' : ''}" onclick="flatTapPick = !flatTapPick; renderFlatPlan()">${flatTapPick ? 'Нажмите на стену… ✕' : 'Показать стену'}</button><button type="button" class="mp-btn mp-btn-primary" onclick="flatTapMode = false; flatTapPick = false; renderFlatPlan()">Готово</button></div>
-<div class="ai-hint"><b>Комнаты с чертежа.</b> Нажмите внутрь комнаты на подложке — сайт зальёт её пол до стен и создаст помещение (без нейросети). Двигать план — пальцем, приближать — двумя. Стены нарисованы тонко или цветом — «Показать стену» и нажмите на такую стену. Масштаб потом — «Ещё» → «Масштаб по стене».</div>`
+? `<div class="flat-tools"><button type="button" class="mp-head-btn${flatTapScale ? ' on' : ''}" onclick="flatTapScaleToggle()">${flatTapScale ? 'Масштаб ✕' : 'Масштаб'}</button><button type="button" class="mp-head-btn${flatTapPick ? ' on' : ''}" onclick="flatTapPick = !flatTapPick; flatTapScale = null; renderFlatPlan()">${flatTapPick ? 'Нажмите на стену… ✕' : 'Показать стену'}</button><button type="button" class="mp-btn mp-btn-primary" onclick="flatTapMode = false; flatTapPick = false; flatTapScale = null; renderFlatPlan()">Готово</button></div>
+${flatTapScale
+? `<div class="ai-hint"><b>Масштаб чертежа.</b> Сайт должен знать размеры в метрах — иначе путает двери с щелями. Приблизьте и нажмите на <b>два конца любого размера</b> на чертеже (лучше длинного, например «4900») — ${flatTapScale.length ? '<b>теперь второй конец</b>' : 'сначала первый конец'}, потом введите число в мм.</div>`
+: `<div class="ai-hint"><b>Комнаты с чертежа.</b> Нажмите внутрь комнаты на подложке — сайт зальёт её пол до стен и создаст помещение (без нейросети). Двигать план — пальцем, приближать — двумя. Стены нарисованы тонко или цветом — «Показать стену» и нажмите на такую стену. Размеры не те — «Масштаб».</div>`}`
 : flatSplitFrom
 ? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatSplitFrom = null; renderFlatPlan()">Отмена</button></div>
 <div class="ai-hint"><b>Разделить «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatSplitFrom) || {}))}».</b> Нажмите на её стену (выделены жёлтым) в том месте, откуда провести разрез — он пойдёт поперёк этой стены через всю комнату.</div>`
@@ -470,7 +473,7 @@ flatBindJoy();
 if (ed) flatBindEdit();
 else if (flatUlAdjust) flatBindUnderlay();
 else if (flatOpsMode) flatBindOps();
-else if (flatTapMode) { const sv = document.querySelector('#flatWrap svg'); if (sv) sv.addEventListener('click', (ev) => { ev.stopPropagation(); const pt = flatEventPoint(ev); if (!pt) return; if (flatTapPick) { flatTapPick = false; flatWallPickAt(pt); } else flatTapRoomAt(pt); }, true); }
+else if (flatTapMode) { const sv = document.querySelector('#flatWrap svg'); if (sv) sv.addEventListener('click', (ev) => { ev.stopPropagation(); const pt = flatEventPoint(ev); if (!pt) return; if (flatTapScale) flatTapScaleAt(pt); else if (flatTapPick) { flatTapPick = false; flatWallPickAt(pt); } else flatTapRoomAt(pt); }, true); }
 else if (flatHMode) flatBindHeights();
 if (!flatUlAdjust) flatBindPanZoom();
 }
@@ -1612,7 +1615,7 @@ m.walls = (m.walls || []).map(sc);
 room.plan = { x: Math.round(room.plan.x * k * 1000) / 1000, y: Math.round(room.plan.y * k * 1000) / 1000 };
 });
 const u = getUnderlay(flatUlId());
-if (u) { u.x *= k; u.y *= k; u.w *= k; saveUnderlayView(flatUlId(), u); }
+if (u) { u.x *= k; u.y *= k; u.w *= k; u.scaled = true; saveUnderlayView(flatUlId(), u); }
 flatScaleMode = false;
 await saveCloudData();
 renderFlatPlan();
@@ -1679,6 +1682,8 @@ try { flatUlGray = { src: u.src, gray: await pgLoadGray(u.src) }; }
 catch (e) { alert('Не удалось прочитать подложку.'); return null; }
 }
 const gray = flatUlGray.gray;
+// стены, комнаты и «улица» посчитаны в метрах — после смены масштаба подложки пересчитать
+if (flatUlGray.ppm !== gray.w / u.w) { delete flatUlGray.walls; delete flatUlGray.dist; delete flatUlGray.labels; delete flatUlGray.outside; flatUlGray.ppm = gray.w / u.w; }
 const uh = u.w * u.ar, cx = u.x + u.w / 2, cy = u.y + uh / 2;
 const a = (u.rot || 0) * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
 const toPx = ([x, y]) => {
@@ -1937,7 +1942,56 @@ showAddToast(`Совмещено: сдвиг ${Math.round(Math.hypot(best.dx, be
 function flatTapStart() {
 flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatHMode = false;
 flatTapMode = true;
+flatTapPick = false;
+// пустой план, а масштаб подложки не задан — сначала масштаб, иначе все размеры мимо
+const u = getUnderlay(flatUlId());
+flatTapScale = u && !u.scaled && !flatItems().length ? [] : null;
 renderFlatPlan();
+}
+
+function flatTapScaleToggle() {
+flatTapScale = flatTapScale ? null : [];
+flatTapPick = false;
+if (flatWallsView) flatWallsView = null;
+renderFlatPlan();
+}
+
+// Масштаб подложки по размеру на чертеже: два нажатия на концы размера и его длина в мм
+async function flatTapScaleAt(pt) {
+const u = getUnderlay(flatUlId());
+if (!u || !flatTapScale) return;
+flatTapScale.push(pt);
+if (flatTapScale.length < 2) {
+// первая точка — красной меткой поверх подложки
+const mp = await flatUlMapping();
+if (mp) {
+const c = document.createElement('canvas');
+c.width = mp.gray.w; c.height = mp.gray.h;
+const ctx = c.getContext('2d'), [x, y] = mp.toPx(pt), r = Math.max(4, mp.gray.w / 150);
+ctx.strokeStyle = 'rgba(230,0,0,.9)'; ctx.lineWidth = Math.max(2, r / 3);
+ctx.beginPath(); ctx.moveTo(x - r * 2, y); ctx.lineTo(x + r * 2, y); ctx.moveTo(x, y - r * 2); ctx.lineTo(x, y + r * 2); ctx.stroke();
+ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+flatWallsView = { src: u.src, url: c.toDataURL('image/png') };
+}
+renderFlatPlan();
+return;
+}
+const [a, b] = flatTapScale, d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+flatTapScale = [];
+if (flatWallsView) flatWallsView = null;
+if (d < 1e-6) { renderFlatPlan(); alert('Точки совпали — нажмите на два разных конца размера.'); return; }
+const s = prompt('Длина между точками на чертеже, мм (число с размерной линии):', '');
+if (s == null) { renderFlatPlan(); return; }
+const mm = parseFloat(String(s).replace(',', '.'));
+if (!(mm > 50 && mm < 100000)) { renderFlatPlan(); alert('Введите длину в миллиметрах, например 4900.'); return; }
+if (flatItems().length && !confirm('Комнаты на плане останутся прежнего размера, поменяется только подложка. Продолжить?')) { renderFlatPlan(); return; }
+const k = mm / 1000 / d, uh = u.w * u.ar;
+// растягиваем подложку от первой точки (поворот — вокруг центра, при растяжении он не меняется)
+const cx = a[0] + (u.x + u.w / 2 - a[0]) * k, cy = a[1] + (u.y + uh / 2 - a[1]) * k, w = u.w * k;
+saveUnderlayView(flatUlId(), { ...u, x: cx - w / 2, y: cy - w * u.ar / 2, w, scaled: true });
+flatTapScale = null;
+renderFlatPlan();
+showAddToast(`Масштаб задан: лист ${mFmt(w)} м в ширину. Теперь нажимайте внутрь комнат`);
 }
 
 function flatUlRoomLabels(mp) {
@@ -1974,6 +2028,36 @@ if (e - x > G) for (let k = x; k < e; k++) dk += dark(y * W + k);
 if (e - x <= G || dk >= (e - x) * 0.5) for (let k = x; k < e; k++) v[y * W + k] = 1;
 }
 x = e;
+}
+// дверь у торца стены (часто — между концом перегородки и углом другой стены): продолжаем линию
+// стены от торца до 1,2 м; встретили торец или угол другой стены (в стороне не дальше 15 см) — закрываем до него.
+// Торец — не стык «Т» (там поперечная стена идёт в обе стороны — продолжать нельзя)
+const E = Math.round(1.2 * mp.ppm), D = Math.max(1, Math.round(0.15 * mp.ppm));
+const ext = (x, y, dx, dy) => {
+const ox = dy ? 1 : 0, oy = dx ? 1 : 0;
+for (let st = 1; st <= E; st++) {
+const px = x + dx * st, py = y + dy * st;
+if (px < 0 || py < 0 || px >= W || py >= H) return;
+for (let o = 0; o <= D; o++) for (const sg of (o ? [-1, 1] : [1])) {
+const qx = px + ox * sg * o, qy = py + oy * sg * o;
+if (qx < 0 || qy < 0 || qx >= W || qy >= H || !walls[qy * W + qx]) continue;
+// упёрлись в сплошную стену, идущую в обе стороны дальше 35 см, — это коридор или комната, не дверь
+const q = qy * W + qx;
+if (dx ? (up[q] >= C && dn[q] >= C) : (lf[q] >= C && rt[q] >= C)) return;
+for (let k = 1; k < st; k++) v[(y + dy * k) * W + x + dx * k] = 1;
+for (let k = 0; k < o; k++) v[(py + oy * sg * k) * W + px + ox * sg * k] = 1;
+return;
+}
+}
+};
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+const i = y * W + x;
+if (!walls[i]) continue;
+const hor = !(up[i] >= C && dn[i] >= C), ver = !(lf[i] >= C && rt[i] >= C);
+if (hor && lf[i] === 1 && rt[i] >= C) ext(x, y, -1, 0);
+if (hor && rt[i] === 1 && lf[i] >= C) ext(x, y, 1, 0);
+if (ver && up[i] === 1 && dn[i] >= C) ext(x, y, 0, -1);
+if (ver && dn[i] === 1 && up[i] >= C) ext(x, y, 0, 1);
 }
 // комнаты — связные куски пола
 const lab = new Int32Array(N);
@@ -2031,7 +2115,8 @@ m[j] = 1; st.push(j);
 }
 }
 const area = cnt / (ppm * ppm);
-return { m, xa, xb, ya, yb, area, gate, bad: xa <= 1 || ya <= 1 || xb >= W - 2 || yb >= H - 2 || area > 150 };
+// с контуром квартиры край листа не страшен: стена квартиры может идти прямо по краю
+return { m, xa, xb, ya, yb, area, gate, bad: (!out && (xa <= 1 || ya <= 1 || xb >= W - 2 || yb >= H - 2)) || area > 150 };
 };
 let R = grow(null), spots = [];
 if (R.bad) {
