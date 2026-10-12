@@ -1828,7 +1828,7 @@ try { const v = JSON.parse(localStorage.getItem(flatWallSamplesKey()) || '[]'); 
 }
 function flatWallSamplesSet(list) {
 try { localStorage.setItem(flatWallSamplesKey(), JSON.stringify(list)); } catch (e) { /* пусто */ }
-if (flatUlGray) { delete flatUlGray.walls; delete flatUlGray.dist; delete flatUlGray.labels; }   // пересчитать стены
+if (flatUlGray) { delete flatUlGray.walls; delete flatUlGray.dist; delete flatUlGray.labels; delete flatUlGray.outside; }   // пересчитать стены
 flatWallsView = null;                                        // подсветка устарела — включится заново после образца
 }
 
@@ -2009,16 +2009,42 @@ const lab = flatUlRoomLabels(mp);
 let [sx, sy] = toPx(pt).map(Math.round);
 if (sx < 0 || sy < 0 || sx >= W || sy >= H) { alert('Это вне подложки.'); return; }
 // нажали на стену или надпись — ближайший пол
-let L = lab[sy * W + sx];
+let si = sy * W + sx, L = lab[si];
 for (let r = 1; !L && r < 0.15 * ppm; r++) for (let dy = -r; dy <= r && !L; dy++) for (let dx = -r; dx <= r && !L; dx++) {
 const x = sx + dx, y = sy + dy;
-if (x >= 0 && y >= 0 && x < W && y < H && lab[y * W + x]) L = lab[y * W + x];
+if (x >= 0 && y >= 0 && x < W && y < H && lab[y * W + x]) { si = y * W + x; L = lab[si]; }
 }
 if (!L) { alert('Здесь не нашёл пола между стенами. Нажмите в середину комнаты.'); return; }
+// пол комнаты от точки нажатия; out — «улица» (если задана, туда не идём, а места выхода запоминаем)
+const grow = (out) => {
+const m = new Uint8Array(W * H), st = [si], gate = [];
 let xa = W, xb = 0, ya = H, yb = 0, cnt = 0;
-for (let i = 0; i < W * H; i++) if (lab[i] === L) { const x = i % W, y = (i - x) / W; cnt++; if (x < xa) xa = x; if (x > xb) xb = x; if (y < ya) ya = y; if (y > yb) yb = y; }
+m[si] = 1;
+while (st.length) {
+const i = st.pop(), x = i % W, y = (i - x) / W;
+cnt++; if (x < xa) xa = x; if (x > xb) xb = x; if (y < ya) ya = y; if (y > yb) yb = y;
+const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, y > 0 ? i - W : -1, y < H - 1 ? i + W : -1];
+for (const j of nb) {
+if (j < 0 || m[j] || lab[j] !== L) continue;
+if (out && out[j]) { if (gate.length < 5000) gate.push(i); continue; }
+m[j] = 1; st.push(j);
+}
+}
 const area = cnt / (ppm * ppm);
-if (xa <= 1 || ya <= 1 || xb >= W - 2 || yb >= H - 2 || area > 150) {
+return { m, xa, xb, ya, yb, area, gate, bad: xa <= 1 || ya <= 1 || xb >= W - 2 || yb >= H - 2 || area > 150 };
+};
+let R = grow(null), spots = [];
+if (R.bad) {
+// заливка ушла наружу: закрываем разрывы во внешнем контуре квартиры (окна, остекление балкона,
+// неузнанная тонкая стена) всё шире — до 2,5 / 5 / 8 м — и режем комнату по этому контуру
+for (const rM of [1.25, 2.5, 4]) {
+const out = flatUlOutside(mp, rM);
+if (out[si]) break;
+const R2 = grow(out);
+if (!R2.bad) { R = R2; spots = flatGateCarve(R.m, R2.gate, flatUlWalls(mp), W, H, ppm); break; }
+}
+}
+if (R.bad) {
 // показать, куда утекла заливка: оранжевым поверх подложки
 const c = document.createElement('canvas');
 c.width = W; c.height = H;
@@ -2031,12 +2057,13 @@ alert('Комната не замкнута: заливка пола ушла н
 return;
 }
 if (flatWallsView) { flatWallsView = null; renderFlatPlan(); }
+const { xa, xb, ya, yb, area } = R;
 if (area < 0.3) { alert('Слишком маленькая область — нажмите в середину комнаты.'); return; }
 // кусок с запасом, чистка мелких щелей и выступов (~8 см) — как в «Обвести по чертежу»
 const kr = Math.max(1, Math.round(0.04 * ppm)), mg = kr * 2 + 3;      // запас шире сглаживания — иначе край расползается
 const x0 = Math.max(0, xa - mg), y0 = Math.max(0, ya - mg), Wc = Math.min(W, xb + mg + 1) - x0, Hc = Math.min(H, yb + mg + 1) - y0;
 let reg = new Uint8Array(Wc * Hc);
-for (let y = 0; y < Hc; y++) for (let x = 0; x < Wc; x++) reg[y * Wc + x] = lab[(y + y0) * W + x + x0] === L ? 1 : 0;
+for (let y = 0; y < Hc; y++) for (let x = 0; x < Wc; x++) reg[y * Wc + x] = R.m[(y + y0) * W + x + x0];
 const { dil, ero } = flatUlMorph(Wc, Hc);
 reg = dil(ero(ero(dil(reg, kr), kr), kr), kr);
 const pts = flatRegionPolygon(reg, Wc, Hc, x0, y0, toM, ppm);
@@ -2051,7 +2078,86 @@ if (typeof syncCartWithRooms === 'function') syncCartWithRooms();
 if (typeof renderInvoice === 'function') renderInvoice();
 if (typeof currentObjectId !== 'undefined' && currentObjectId === flatObjectId && typeof renderObjectDetail === 'function') renderObjectDetail();
 renderFlatPlan();
-if ((await saveCloudData()) !== false) showAddToast(`Добавлено «${conv.measure.room}» ${mFmt(a1)} м². Следующая — нажмите в другую комнату`);
+if (spots.length) {
+// где комната выходила наружу — красные рамки поверх подложки: там на чертеже дыра в стене
+const c = document.createElement('canvas');
+c.width = W; c.height = H;
+const ctx = c.getContext('2d'), pd = 0.3 * ppm;
+ctx.strokeStyle = 'rgba(230,0,0,.9)'; ctx.lineWidth = Math.max(2, 0.08 * ppm);
+spots.slice(0, 8).forEach(([xa, ya, xb, yb]) => ctx.strokeRect(xa - pd, ya - pd, xb - xa + 2 * pd, yb - ya + 2 * pd));
+flatWallsView = { src: mp.u.src, url: c.toDataURL('image/png') };
+renderFlatPlan();
+}
+if ((await saveCloudData()) !== false) {
+if (spots.length) alert(`Добавлено «${conv.measure.room}» ${mFmt(a1)} м². Комната была не замкнута — обрезал её по внешнему контуру квартиры. Красной рамкой отмечено место, где в стене на чертеже дыра (окно, остекление, бледная стена): проверьте там контур комнаты и при необходимости поправьте в «Править».`);
+else showAddToast(`Добавлено «${conv.measure.room}» ${mFmt(a1)} м². Следующая — нажмите в другую комнату`);
+}
+}
+
+// Комната, обрезанная по внешнему контуру, заходит в проём на всю толщину стены — срезаем этот
+// выступ: от места выхода внутрь, пока по обе стороны проёма ещё стена (не дальше 1 м)
+function flatGateCarve(m, gates, walls, W, H, ppm) {
+const boxes = [];
+const used = new Uint8Array(gates.length), lim = Math.round(1 * ppm);
+for (let a = 0; a < gates.length; a++) {
+if (used[a]) continue;
+// кучка соседних точек выхода — один проём
+const grp = [gates[a]];
+used[a] = 1;
+let gx0 = gates[a] % W, gx1 = gx0, gy0 = (gates[a] - gx0) / W, gy1 = gy0;
+for (let changed = true; changed;) {
+changed = false;
+for (let b = 0; b < gates.length; b++) {
+if (used[b]) continue;
+const x = gates[b] % W, y = (gates[b] - x) / W;
+if (x >= gx0 - 2 && x <= gx1 + 2 && y >= gy0 - 2 && y <= gy1 + 2) {
+used[b] = 1; grp.push(gates[b]); changed = true;
+if (x < gx0) gx0 = x; if (x > gx1) gx1 = x; if (y < gy0) gy0 = y; if (y > gy1) gy1 = y;
+}
+}
+}
+const vert = gy1 - gy0 >= gx1 - gx0;                        // проём в вертикальной стене
+const at = (u, t) => vert ? t * W + u : u * W + t;           // u — поперёк стены, t — вдоль
+const t0 = vert ? gy0 : gx0, t1 = vert ? gy1 : gx1, uMax = vert ? W : H;
+if (grp.length >= Math.max(3, 0.1 * ppm)) boxes.push([gx0, gy0, gx1, gy1]);
+if (t1 - t0 < 3) continue;
+for (const i of grp) {
+const x = i % W, y = (i - x) / W, u0 = vert ? x : y;
+// вглубь комнаты — туда, где ещё её пол
+const dir = (u0 + 1 < uMax && m[at(u0 + 1, vert ? y : x)]) ? 1 : -1;
+for (let u = u0, k = 0; k < lim && u >= 0 && u < uMax; u += dir, k++) {
+const t = vert ? y : x;
+if (t0 < 2 || t1 > (vert ? H : W) - 3 || !walls[at(u, t0 - 2)] || !walls[at(u, t1 + 2)]) break;
+m[at(u, t)] = 0;
+}
+}
+}
+return boxes;
+}
+
+// «Улица» вокруг квартиры: стены, у которых разрывы до 2·rM закрыты (окна, остекление, неузнанная
+// стена), а всё, что связано с краем листа, — снаружи
+function flatUlOutside(mp, rM) {
+const g = flatUlGray;
+g.outside = g.outside || {};
+if (g.outside[rM]) return g.outside[rM];
+const W = mp.gray.w, H = mp.gray.h, r = Math.max(1, Math.round(rM * mp.ppm));
+// вокруг листа — пустое поле шире радиуса, иначе стена у края листа «закрывает» весь край
+const P = r + 2, Wp = W + 2 * P, Hp = H + 2 * P, Np = Wp * Hp, walls = flatUlWalls(mp);
+let hull = new Uint8Array(Np);
+for (let y = 0; y < H; y++) hull.set(walls.subarray(y * W, y * W + W), (y + P) * Wp + P);
+const { dil, ero } = flatUlMorph(Wp, Hp);
+hull = ero(dil(hull, r), r);
+const op = new Uint8Array(Np), st = [0];
+op[0] = 1;
+while (st.length) {
+const i = st.pop(), x = i % Wp;
+for (const j of [x > 0 ? i - 1 : -1, x < Wp - 1 ? i + 1 : -1, i >= Wp ? i - Wp : -1, i + Wp < Np ? i + Wp : -1]) if (j >= 0 && !op[j] && !hull[j]) { op[j] = 1; st.push(j); }
+}
+const out = new Uint8Array(W * H);
+for (let y = 0; y < H; y++) out.set(op.subarray((y + P) * Wp + P, (y + P) * Wp + P + W), y * W);
+g.outside[rM] = out;
+return out;
 }
 
 function flatPointIn(P, [x, y]) {
