@@ -2307,6 +2307,7 @@ function flatWallMenu(i) {
 openSheet(`Стена ${i + 1}`, [
 { icon: '📏', label: 'Точная длина', onClick: () => flatAskWall(i) },
 { icon: '↔️', label: 'Сдвинуть точно (на мм)', onClick: () => flatNudgeWall(i) },
+{ icon: '📐', label: 'Убрать ступеньку (выпрямить)', onClick: () => flatStraightenWall(i) },
 { icon: '▭', label: 'Обойти колонну (выступ на стене)', onClick: () => flatColumnWall(i) },
 { icon: '⊔', label: 'Ниша в стене (углубление)', onClick: () => flatColumnWall(i, true) },
 ]);
@@ -2395,6 +2396,41 @@ const prev = (i - 1 + n) % n;
 flatInsertCorners(id, out, j => (j >= i ? j + 2 : j),
 (j, st, w) => (j === i ? { wall: i + 2, start: Math.max(0, st - Y) } : { wall: j >= i ? j + 2 : j, start: j === prev ? Math.min(st, L1 - X - w) : st }),
 wh => { const h = wh.slice(); h.length = n; h.splice(i, 0, h[prev] || '', h[prev] || ''); return h.map(x => x || ''); });
+}
+
+// Ступенька — короткая стенка i между двумя стенами в одну сторону: убираем её, стена после
+// встаёт на одну линию со стеной до (соседняя за ней удлиняется или укорачивается на ступеньку)
+function flatStraightenWall(i) {
+const id = flatEdit && flatEdit.sel;
+const it = id && flatItems().find(r => r.id === id);
+if (!it) return;
+const pts = it.pts.map(p => p.slice()), n = pts.length;
+if (n < 6) { alert('У комнаты слишком мало углов — убирать нечего.'); return; }
+const at = k => pts[((k % n) + n) % n];
+const dir = (p, q) => { const L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1; return [(q[0] - p[0]) / L, (q[1] - p[1]) / L]; };
+const before = dir(at(i - 1), at(i)), after = dir(at(i + 1), at(i + 2));
+if (before[0] * after[0] + before[1] * after[1] < 0.99) { alert('Это не ступенька: стены по обе стороны от неё должны идти в одну сторону.'); return; }
+const a = at(i), b = at(i + 1), dx = a[0] - b[0], dy = a[1] - b[1];
+const j2 = (i + 2) % n;
+const moved = [at(i + 2)[0] + dx, at(i + 2)[1] + dy];
+const out = [];
+for (let k = 0; k < n; k++) {
+if (k === i % n || k === (i + 1) % n) continue;
+out.push(k === j2 ? moved : pts[k]);
+}
+// совпавшие точки и точки посреди прямой — убираем (две ступеньки подряд могут схлопнуться в прямую)
+let res = out.map(p => p.map(v => Math.round(v * 1000) / 1000));
+for (let again = true; again && res.length > 3;) {
+again = false;
+for (let k = 0; k < res.length; k++) {
+const p = res[(k - 1 + res.length) % res.length], q = res[k], r = res[(k + 1) % res.length];
+const cross = (q[0] - p[0]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[0] - q[0]);
+if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.0005 || Math.abs(cross) < 1e-7) { res.splice(k, 1); again = true; break; }
+}
+}
+if (res.length < 3) return;
+flatReplacePolygon(id, it, res);
+showAddToast(`Ступенька ${Math.round(Math.hypot(dx, dy) * 1000)} мм убрана. Проверьте и «Сохранить»`);
 }
 
 // Сдвиг стены на заданное число мм: плюс — наружу (комната больше), минус — внутрь
