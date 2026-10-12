@@ -189,7 +189,7 @@ const tap = opt.onTap ? ` onclick="${opt.onTap}('${r.id}')" style="cursor:pointe
 return `<g class="flat-room${sel ? ' sel' : ''}"${tap}>
 <path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}"${ul ? ' fill-opacity="0.35"' : ''} stroke="#14181f" stroke-width="${fs * 0.22 * zk}" stroke-linejoin="miter"/>
 ${ops}
-${opt.pickWalls ? r.pts.map((p, i) => (!r.closed && i === n - 1) ? '' : `<line x1="${p[0]}" y1="${p[1]}" x2="${r.pts[(i + 1) % n][0]}" y2="${r.pts[(i + 1) % n][1]}" stroke="#e8a900" stroke-opacity=".55" stroke-width="${fs * 0.5}" stroke-linecap="round" onclick="${opt.pickWalls === true ? 'flatScaleWall' : opt.pickWalls}('${r.id}', ${i}, event)" style="cursor:pointer"/>`).join('') : ''}
+${opt.pickWalls && (!opt.pickRoom || opt.pickRoom === r.id) ? r.pts.map((p, i) => (!r.closed && i === n - 1) ? '' : `<line x1="${p[0]}" y1="${p[1]}" x2="${r.pts[(i + 1) % n][0]}" y2="${r.pts[(i + 1) % n][1]}" stroke="#e8a900" stroke-opacity=".55" stroke-width="${fs * 0.5}" stroke-linecap="round" onclick="${opt.pickWalls === true ? 'flatScaleWall' : opt.pickWalls}('${r.id}', ${i}, event)" style="cursor:pointer"/>`).join('') : ''}
 ${opt.pickOps ? r.openings.map((o, oi) => { const sg = flatOpeningSeg(r, o); return sg ? `<line x1="${sg.x}" y1="${sg.y}" x2="${sg.x + sg.ux * sg.w}" y2="${sg.y + sg.uy * sg.w}" stroke="#c2361f" stroke-opacity=".01" stroke-width="${fs * 0.9}" data-op-room="${r.id}" data-op="${oi}" style="cursor:grab"/>` : ''; }).join('') : ''}
 <title>${escapeHtml(name)} — ${areaTxt}</title>
 ${showName ? `<text x="${lx}" y="${ly - rf * 0.15}" font-size="${rf}" text-anchor="middle" font-family="Arial, sans-serif" fill="#14181f" font-weight="700" pointer-events="none">${escapeHtml(name)}</text>` : ''}
@@ -359,6 +359,7 @@ let flatScaleMode = false; // выбираем стену, чтобы задат
 let flatOpsMode = false;   // ставим и убираем двери и проёмы нажатием на стену
 let flatOpsDraft = null;   // { orig, undo } — проёмы до правки и шаги назад; в облако — только по «Сохранить»
 let flatMergeFrom = null;  // id комнаты, к которой присоединяем соседнюю
+let flatSplitFrom = null;  // id комнаты, которую режем на две (ждём нажатия на её стену)
 let flatHMode = false;     // высоты стен, окон и дверей: всем сразу или по одной нажатием
 
 function objectHasFlat(obj) {
@@ -376,7 +377,7 @@ return objectRooms(flatObj()).filter(r => r.plan && r.measure);
 function openFlatPlan(objectId) {
 flatObjectId = objectId;
 flatOpsDraft = null;
-flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatHMode = false;
+flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatHMode = false;
 flatUlAdjust = null;
 flatZoom = 1;
 flatEdit = null;
@@ -421,8 +422,11 @@ ${getUnderlay(flatUlId()) ? '<button type="button" class="mp-head-btn" onclick="
 <button type="button" class="mp-btn mp-btn-primary" onclick="flatOpsSave()">Сохранить</button>
 </div>
 <div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>${getUnderlay(flatUlId()) ? ' («По подложке» — все сразу встанут на разрывы в стенах чертежа)' : ''}, а нажатием — поменять ширину, сделать из двери проход без двери (и обратно) или убрать. В облако — только по «Сохранить». Дверь между комнатами — сразу у обеих.</div>`
+: flatSplitFrom
+? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatSplitFrom = null; renderFlatPlan()">Отмена</button></div>
+<div class="ai-hint"><b>Разделить «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatSplitFrom) || {}))}».</b> Нажмите на её стену (выделены жёлтым) в том месте, откуда провести разрез — он пойдёт поперёк этой стены через всю комнату.</div>`
 : flatMergeFrom
-? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatMergeFrom = null; renderFlatPlan()">Отмена</button></div>
+? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatMergeFrom = null; flatSplitFrom = null; renderFlatPlan()">Отмена</button></div>
 <div class="ai-hint"><b>Объединить.</b> Нажмите на соседнюю комнату — она станет частью «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatMergeFrom) || {}))}» вместе со стеной между ними.</div>`
 : flatScaleMode
 ? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatScaleMode = false; renderFlatPlan()">Отмена</button></div>
@@ -445,9 +449,10 @@ ${top}
 <div class="flat-viewbox"><div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, { zoom: flatZoom, ...(ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatHMode ? { pickWalls: 'flatHWall', pickOps: true, onTap: 'flatHRoom', heights: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatOpsMode ? { pickWalls: 'flatOpsWall', pickOps: 'flatOpsRemove', underlay: flatUlOpt(), view: flatViewOf(items) }
+: flatSplitFrom ? { pickWalls: 'flatSplitWall', pickRoom: flatSplitFrom, underlay: flatUlOpt(), view: flatViewOf(items) }
 : { onTap: flatMergeFrom ? 'flatMergeTap' : 'flatOpenRoom', sel: flatMergeFrom || undefined, underlay: flatUlOpt(), view: flatViewOf(items) }) })}</div></div>
 <div class="flat-bar flat-bar-x" id="flatBarX"><div></div></div><div class="flat-bar flat-bar-y" id="flatBarY"><div></div></div>${ed || flatOpsMode || flatHMode ? '<div class="flat-joy" id="flatJoy"><div></div></div>' : ''}</div>
-${ed || flatScaleMode || flatOpsMode || flatHMode || flatMergeFrom ? '' : flatUlBarHtml()}
+${ed || flatScaleMode || flatOpsMode || flatHMode || flatMergeFrom || flatSplitFrom ? '' : flatUlBarHtml()}
 </div>`;
 flatSizeInner();
 const wrap = document.getElementById('flatWrap');
@@ -678,6 +683,7 @@ openSheet(roomName(room), [
 { icon: '📏', label: 'Открыть замер', onClick: () => flatOpenMeasure(roomId) },
 { icon: '✏️', label: 'Переименовать', onClick: () => flatRoomRename(roomId) },
 { icon: '➕', label: 'Объединить с соседней', onClick: () => { flatMergeFrom = roomId; renderFlatPlan(); } },
+{ icon: '✂️', label: 'Разделить на две', onClick: () => { flatSplitFrom = roomId; renderFlatPlan(); } },
 null,
 { icon: '🗑️', label: 'Удалить помещение', danger: true, onClick: () => flatRoomDelete(roomId) },
 ]);
@@ -922,7 +928,7 @@ renderFlatPlan();
 }
 
 function flatOpsStart() {
-flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatMergeFrom = null;
+flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatMergeFrom = null; flatSplitFrom = null;
 flatHMode = false;
 flatOpsMode = true;
 let full = null;
@@ -1190,7 +1196,7 @@ if (changed && typeof renderInvoice === 'function') renderInvoice();
 /* ---------- высоты: стены (потолок), окна, двери — всем сразу или по одной ---------- */
 
 function flatHStart() {
-flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null;
+flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null;
 flatHMode = true;
 renderFlatPlan();
 }
@@ -1457,10 +1463,103 @@ height_m: mNum(o.h) || null, door_width_m: mNum(o.dw) || null, door_height_m: mN
 const conv = flatPtsToMeasure({ name: ia.name, height_m: mNum(ra.measure.height) || null, pts, openings: ops }, obj.id);
 ra.measure = { ...conv.measure, id: ra.measure.id, objectId: ra.measure.objectId };
 ra.plan = conv.plan;
-flatMergeFrom = null;
+flatMergeFrom = null; flatSplitFrom = null;
 await removeObjectRooms(obj, [bId]);                              // сохранит и уберёт из счёта
 renderFlatPlan();
 showAddToast(`Объединено: «${ia.name}»`);
+}
+
+/* ---------- разделить помещение на два ---------- */
+// Разрез — прямая поперёк нажатой стены через всю комнату. Большая часть остаётся этим
+// помещением (имя, высоты, всё остальное), меньшая — новое помещение. Проёмы — в своей части
+
+// Часть многоугольника по одну сторону прямой x = c (axis 0) или y = c (axis 1); keep: +1 — больше c, −1 — меньше
+function flatClipHalf(pts, axis, c, keep) {
+const inside = p => (p[axis] - c) * keep >= -1e-9;
+const out = [];
+for (let i = 0; i < pts.length; i++) {
+const a = pts[i], b = pts[(i + 1) % pts.length];
+const ia = inside(a), ib = inside(b);
+if (ia) out.push(a);
+if (ia !== ib) {
+const t = (c - a[axis]) / (b[axis] - a[axis]);
+const q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+q[axis] = c;
+out.push(q);
+}
+}
+// повторы и точки посреди прямой — прочь
+let res = out.map(p => p.map(v => Math.round(v * 1000) / 1000));
+for (let again = true; again && res.length > 3;) {
+again = false;
+for (let k = 0; k < res.length; k++) {
+const p = res[(k - 1 + res.length) % res.length], q = res[k], r = res[(k + 1) % res.length];
+const cross = (q[0] - p[0]) * (r[1] - q[1]) - (q[1] - p[1]) * (r[0] - q[0]);
+if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.0005 || Math.abs(cross) < 1e-7) { res.splice(k, 1); again = true; break; }
+}
+}
+return res;
+}
+
+async function flatSplitWall(roomId, i, ev) {
+if (ev) ev.stopPropagation();
+if (roomId !== flatSplitFrom) return;
+const obj = flatObj();
+const ra = flatRooms().find(r => r.id === roomId);
+const it = flatItems().find(r => r.id === roomId);
+if (!ra || !it || !it.closed) return;
+const a = it.pts[i], b = it.pts[(i + 1) % it.pts.length];
+const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+const pt = flatEventPoint(ev) || [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L;
+if (Math.abs(ux) > 0.02 && Math.abs(uy) > 0.02) { alert('Резать можно от стены, идущей вдоль плана (не косой).'); return; }
+// стена вдоль x — разрез вертикальный (x = const), вдоль y — горизонтальный
+const axis = Math.abs(uy) < 0.02 ? 0 : 1;
+const t = Math.max(0, Math.min(L, (pt[0] - a[0]) * ux + (pt[1] - a[1]) * uy));
+let c = axis === 0 ? a[0] + ux * t : a[1] + uy * t;
+// рядом угол комнаты (выступ стены, конец перегородки) — разрез по нему, а не на глаз
+let bestD = 0.15;
+it.pts.forEach(p => { const d = Math.abs(p[axis] - c); if (d > 0.001 && d < bestD) { bestD = d; c = p[axis]; } });
+c = Math.round(c * 1000) / 1000;
+const A = flatClipHalf(it.pts, axis, c, -1), B = flatClipHalf(it.pts, axis, c, 1);
+const onCut = P => P.filter((p, k) => { const q = P[(k + 1) % P.length]; return Math.abs(p[axis] - c) < 1e-6 && Math.abs(q[axis] - c) < 1e-6; }).length;
+if (A.length < 4 || B.length < 4 || flatPolyArea(A) < 0.2 || flatPolyArea(B) < 0.2) { alert('Здесь разрез почти ничего не отрезает — нажмите в другом месте стены.'); return; }
+if (onCut(A) !== 1 || onCut(B) !== 1) { alert('Разрез здесь прошёл бы через несколько частей комнаты. Нажмите в другом месте.'); return; }
+const [big, small] = flatPolyArea(A) >= flatPolyArea(B) ? [A, B] : [B, A];
+const name = prompt(`Отрезается ${mFmt(flatPolyArea(small))} м². Как назвать эту часть?`, 'Помещение');
+if (name == null) return;
+flatHistMark('Разделение помещения');
+// проёмы — в той части, на краю которой лежат
+const edgeDist = (P, p) => Math.min(...P.map((q, k) => {
+const r = P[(k + 1) % P.length], l = Math.hypot(r[0] - q[0], r[1] - q[1]) || 1;
+const s2 = Math.max(0, Math.min(l, ((p[0] - q[0]) * (r[0] - q[0]) + (p[1] - q[1]) * (r[1] - q[1])) / l));
+return Math.hypot(p[0] - (q[0] + (r[0] - q[0]) * s2 / l), p[1] - (q[1] + (r[1] - q[1]) * s2 / l));
+}));
+const opsFor = P => {
+const ops = [];
+it.openings.forEach(o => {
+const sg = flatOpeningSeg(it, o);
+if (!sg) return;
+const end = [sg.x + sg.ux * sg.w, sg.y + sg.uy * sg.w];
+if (edgeDist(P, [(sg.x + end[0]) / 2, (sg.y + end[1]) / 2]) > 0.05) return;
+ops.push({ type: o.type, at: [[sg.x, sg.y], end].map(p => p.map(v => Math.round(v * 1000))), width_m: sg.w,
+height_m: mNum(o.h) || null, door_width_m: mNum(o.dw) || null, door_height_m: mNum(o.dh) || null, ...(o.pass ? { pass: true } : {}) });
+});
+return ops;
+};
+const H = mNum(ra.measure.height) || null;
+const mm = P => P.map(p => p.map(v => Math.round(v * 1000)));
+const convA = flatPtsToMeasure({ name: roomName(ra), height_m: H, pts: mm(big), openings: opsFor(big) }, obj.id);
+const convB = flatPtsToMeasure({ name: name.trim().slice(0, 80) || 'Помещение', height_m: H, pts: mm(small), openings: opsFor(small) }, obj.id);
+ra.measure = { ...convA.measure, id: ra.measure.id, objectId: ra.measure.objectId };
+ra.plan = convA.plan;
+obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: convB.measure, plan: convB.plan });
+flatSplitFrom = null;
+if (typeof syncCartWithRooms === 'function') syncCartWithRooms();
+if (typeof renderInvoice === 'function') renderInvoice();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === flatObjectId && typeof renderObjectDetail === 'function') renderObjectDetail();
+renderFlatPlan();
+if ((await saveCloudData()) !== false) showAddToast(`Разделено: «${roomName(ra)}» ${mFmt(flatPolyArea(big))} м² и «${convB.measure.room}» ${mFmt(flatPolyArea(small))} м²`);
 }
 
 /* ---------- масштаб всего плана по одной стене ---------- */
@@ -1469,7 +1568,7 @@ showAddToast(`Объединено: «${ia.name}»`);
 // соотношении: стены, проёмы, места помещений и подложка. Дальше правится по одной стене
 
 function flatScaleStart() {
-flatEdit = null; flatUlAdjust = null; flatOpsMode = false; flatMergeFrom = null; flatHMode = false;
+flatEdit = null; flatUlAdjust = null; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatHMode = false;
 flatScaleMode = true;
 renderFlatPlan();
 }
@@ -1510,7 +1609,7 @@ showAddToast('Масштаб плана изменён — проверьте р
 }
 
 function flatEditStart() {
-flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatHMode = false;
+flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatHMode = false;
 flatUlAdjust = null;
 const items = flatItems();
 const all = items.flatMap(r => r.pts);
