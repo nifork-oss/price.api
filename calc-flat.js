@@ -2158,6 +2158,7 @@ const name = prompt(`Комната ${mFmt(a1)} м². Название:`, `По�
 if (name == null) return;
 flatHistMark('Комната с чертежа');
 const conv = flatPtsToMeasure({ name: name.trim().slice(0, 80) || 'Помещение', height_m: null, pts: pts.map(p => p.map(v => Math.round(v * 1000))), openings: [] }, obj.id);
+if (!Array.isArray(obj.rooms)) obj.rooms = [];   // у нового объекта списка комнат ещё нет
 obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: conv.measure, plan: conv.plan });
 if (typeof syncCartWithRooms === 'function') syncCartWithRooms();
 if (typeof renderInvoice === 'function') renderInvoice();
