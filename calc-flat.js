@@ -446,13 +446,14 @@ ${top}
 : flatHMode ? { pickWalls: 'flatHWall', pickOps: true, onTap: 'flatHRoom', heights: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatOpsMode ? { pickWalls: 'flatOpsWall', pickOps: 'flatOpsRemove', underlay: flatUlOpt(), view: flatViewOf(items) }
 : { onTap: flatMergeFrom ? 'flatMergeTap' : 'flatOpenRoom', sel: flatMergeFrom || undefined, underlay: flatUlOpt(), view: flatViewOf(items) }) })}</div></div>
-<div class="flat-bar flat-bar-x" id="flatBarX"><div></div></div><div class="flat-bar flat-bar-y" id="flatBarY"><div></div></div></div>
+<div class="flat-bar flat-bar-x" id="flatBarX"><div></div></div><div class="flat-bar flat-bar-y" id="flatBarY"><div></div></div>${ed || flatOpsMode || flatHMode ? '<div class="flat-joy" id="flatJoy"><div></div></div>' : ''}</div>
 ${ed || flatScaleMode || flatOpsMode || flatHMode || flatMergeFrom ? '' : flatUlBarHtml()}
 </div>`;
 flatSizeInner();
 const wrap = document.getElementById('flatWrap');
 if (scroll && wrap) { wrap.scrollLeft = scroll[0]; wrap.scrollTop = scroll[1]; }
 flatBindBars();
+flatBindJoy();
 if (ed) flatBindEdit();
 else if (flatUlAdjust) flatBindUnderlay();
 else if (flatOpsMode) flatBindOps();
@@ -552,6 +553,41 @@ if (!wrap) return;
 if ((wrap._pz && wrap._pz.size) || wrap._drag) { flatZoomRedraw(); return; }
 if (flatEdit) flatRedrawSvg(); else if (!flatUlAdjust) renderFlatPlan();
 }, 250);
+}
+
+// Джойстик в углу окна (в правке, дверях, высотах): ручку — в сторону, план плывёт туда,
+// чем дальше от центра — тем быстрее; комнаты и проёмы не задеваются
+function flatBindJoy() {
+const joy = document.getElementById('flatJoy'), wrap = document.getElementById('flatWrap');
+if (!joy || !wrap) return;
+const knob = joy.firstElementChild;
+let v = null, raf = 0;
+const tick = () => {
+if (!v) { raf = 0; return; }
+wrap.scrollLeft += v[0]; wrap.scrollTop += v[1];
+raf = requestAnimationFrame(tick);
+};
+const set = (e) => {
+const r = joy.getBoundingClientRect(), R = r.width / 2;
+let dx = e.clientX - (r.left + R), dy = e.clientY - (r.top + R);
+const d = Math.hypot(dx, dy), lim = R * 0.7;
+if (d > lim) { dx *= lim / d; dy *= lim / d; }
+knob.style.transform = `translate(${dx}px, ${dy}px)`;
+const k = Math.min(1, d / lim);
+// плавно у центра, быстро у края: до ~18 точек за кадр
+v = d < 4 ? [0, 0] : [dx / (Math.hypot(dx, dy) || 1) * 18 * k * k, dy / (Math.hypot(dx, dy) || 1) * 18 * k * k];
+if (!raf) raf = requestAnimationFrame(tick);
+};
+joy.addEventListener('pointerdown', (e) => {
+e.preventDefault(); e.stopPropagation();
+try { joy.setPointerCapture(e.pointerId); } catch (err) { /* пусто */ }
+joy.classList.add('on');
+set(e);
+});
+joy.addEventListener('pointermove', (e) => { if (joy.classList.contains('on')) set(e); });
+const stop = () => { joy.classList.remove('on'); v = null; knob.style.transform = ''; };
+joy.addEventListener('pointerup', stop);
+joy.addEventListener('pointercancel', stop);
 }
 
 // Масштаб с сохранением точки под (cx, cy) — координаты внутри окна
