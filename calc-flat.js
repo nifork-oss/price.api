@@ -2044,6 +2044,8 @@ if (qx < 0 || qy < 0 || qx >= W || qy >= H || !walls[qy * W + qx]) continue;
 // упёрлись в сплошную стену, идущую в обе стороны дальше 35 см, — это коридор или комната, не дверь
 const q = qy * W + qx;
 if (dx ? (up[q] >= C && dn[q] >= C) : (lf[q] >= C && rt[q] >= C)) return;
+// цифры размеров и мелкие пятна — не стена: нужна стена от 35 см хоть в одну сторону
+if (lf[q] + rt[q] - 1 < C && up[q] + dn[q] - 1 < C) continue;
 for (let k = 1; k < st; k++) v[(y + dy * k) * W + x + dx * k] = 1;
 for (let k = 0; k < o; k++) v[(py + oy * sg * k) * W + px + ox * sg * k] = 1;
 return;
