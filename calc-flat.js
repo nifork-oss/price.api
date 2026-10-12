@@ -1637,12 +1637,8 @@ if (gray.red) keepLong(dil(ero(ero(dil(gray.red, Math.round(0.08 * ppm)), Math.r
 // образцы, показанные на этом чертеже: такой же цвет — стена (контур, штриховка, заливка)
 flatWallSamples().forEach(sm => {
 if (!gray.rgba) return;
-const d = gray.rgba, [cr, cg, cb] = sm.c;
-const x = new Uint8Array(W * H);
-for (let i = 0, j = 0; i < W * H; i++, j += 4) {
-const dr = d[j] - cr, dg = d[j + 1] - cg, db = d[j + 2] - cb;
-x[i] = dr * dr + dg * dg + db * db < 4900 ? 1 : 0;      // цвет ближе 70
-}
+const d = gray.rgba, x = new Uint8Array(W * H), like = flatColorLike(sm.c);
+for (let i = 0, j = 0; i < W * H; i++, j += 4) x[i] = like(d[j], d[j + 1], d[j + 2]) ? 1 : 0;
 const rc = Math.max(1, Math.round(sm.r * ppm));
 keepLong(dil(ero(ero(dil(x, rc), rc), k), k), 0.4 * ppm, m, base);
 });
@@ -1655,6 +1651,29 @@ g.walls = m;
 return m;
 }
 
+// Похож ли цвет точки на образец: цветной образец — по оттенку (насыщенная середина линии
+// и бледные края одного цвета — одно и то же), серый и чёрный — по яркости
+function flatHue(r, g, b) {
+const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+if (!d) return 0;
+const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+return (h * 60 + 360) % 360;
+}
+function flatColorLike([cr, cg, cb]) {
+const cs = Math.max(cr, cg, cb) - Math.min(cr, cg, cb);
+const cl = (cr * 299 + cg * 587 + cb * 114) / 1000;
+if (cs >= 40) {
+const ch = flatHue(cr, cg, cb), smin = Math.max(25, cs * 0.3);
+return (r, g, b) => {
+const s = Math.max(r, g, b) - Math.min(r, g, b);
+if (s < smin) return false;
+const dh = Math.abs(flatHue(r, g, b) - ch);
+return Math.min(dh, 360 - dh) <= 22;
+};
+}
+return (r, g, b) => Math.max(r, g, b) - Math.min(r, g, b) < 40 && (r * 299 + g * 587 + b * 114) / 1000 <= cl + 45;
+}
+
 // Образцы стен этого чертежа (цвет и половина толщины, м) — в этом браузере, по подложке
 function flatWallSamplesKey() { return 'flatWallSamples_' + flatUlId(); }
 function flatWallSamples() {
@@ -1663,7 +1682,7 @@ try { const v = JSON.parse(localStorage.getItem(flatWallSamplesKey()) || '[]'); 
 function flatWallSamplesSet(list) {
 try { localStorage.setItem(flatWallSamplesKey(), JSON.stringify(list)); } catch (e) { /* пусто */ }
 if (flatUlGray) delete flatUlGray.walls;                       // пересчитать стены
-if (flatWallsView) { flatWallsView = null; setTimeout(flatWallsToggle, 0); }
+flatWallsView = null;                                        // подсветка устарела — включится заново после образца
 }
 
 // «Что сайт считает стенами»: стены чертежа — полупрозрачной заливкой поверх подложки (вкл/выкл)
@@ -1738,8 +1757,9 @@ if (!bins.size) { renderFlatPlan(); alert('Здесь на чертеже пус
 const top = [...bins.values()].sort((a, b) => b.w - a.w)[0];
 const c = [top.r / top.w, top.g / top.w, top.b / top.w].map(Math.round);
 // толщина: по горизонтали и вертикали через палец — сколько подряд «того же цвета» (разрывы до 3 см — штриховка)
-const same = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= H) return false; const j = (y * W + x) * 4; const dr = d[j] - c[0], dg = d[j + 1] - c[1], db = d[j + 2] - c[2]; return dr * dr + dg * dg + db * db < 4900; };
-const gap = Math.max(2, Math.round(0.03 * ppm));
+const like = flatColorLike(c);
+const same = (x, y) => { if (x < 0 || y < 0 || x >= W || y >= H) return false; const j = (y * W + x) * 4; return like(d[j], d[j + 1], d[j + 2]); };
+const gap = Math.max(2, Math.round(0.05 * ppm));             // разрывы штриховки до 5 см
 const run = (dx, dy) => {
 let lo = 0, hi = 0;
 for (let s = 1, miss = 0; s < R * 3 && miss <= gap; s++) { if (same(cx - dx * s, cy - dy * s)) { lo = s; miss = 0; } else miss++; }
@@ -1747,12 +1767,14 @@ for (let s = 1, miss = 0; s < R * 3 && miss <= gap; s++) { if (same(cx + dx * s,
 return lo + hi + 1;
 };
 const T = Math.min(run(1, 0), run(0, 1)) / ppm;                // м: поперёк стены — меньшая
-const r = Math.max(0.02, Math.min(0.12, T / 2 + 0.02));
-const list = flatWallSamples().filter(sm => Math.hypot(sm.c[0] - c[0], sm.c[1] - c[1], sm.c[2] - c[2]) > 25);
+const r = Math.max(0.06, Math.min(0.12, T / 2 + 0.03));       // хватит закрыть перегородку 12 см, нажали хоть на край линии
+const likeNew = flatColorLike(c);
+const list = flatWallSamples().filter(sm => !likeNew(...sm.c));   // тот же цвет — заменяем, не копим
 list.push({ c, r });
 flatWallSamplesSet(list);
-renderFlatPlan();
-showAddToast(`Запомнил: такие линии на этом чертеже — стены (образцов: ${list.length}, толщина ≈ ${Math.round(T * 100)} см). Теперь «Обвести по чертежу» или в проёмах «По подложке»`);
+flatWallsView = null;
+await flatWallsToggle();                                     // сразу показать, что теперь считается стенами
+showAddToast(`Запомнил: такие линии на этом чертеже — стены (образцов: ${list.length}). Синим — что теперь считается стенами. Дальше — «Обвести по чертежу»`);
 }
 
 function flatWallSamplesClear() {
