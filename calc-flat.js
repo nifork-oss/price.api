@@ -360,7 +360,8 @@ let flatOpsMode = false;   // ставим и убираем двери и пр�
 let flatOpsDraft = null;   // { orig, undo } — проёмы до правки и шаги назад; в облако — только по «Сохранить»
 let flatMergeFrom = null;  // id комнаты, к которой присоединяем соседнюю
 let flatSplitFrom = null;  // id комнаты, которую режем на две (ждём нажатия на её стену)
-let flatTapMode = false;   // «Комнаты с чертежа»: нажатие внутрь комнаты на подложке — новое помещение
+let flatTapMode = false;
+let flatTapPick = false;   // в «Комнатах с чертежа» следующее нажатие — образец стены   // «Комнаты с чертежа»: нажатие внутрь комнаты на подложке — новое помещение
 let flatHMode = false;     // высоты стен, окон и дверей: всем сразу или по одной нажатием
 
 function objectHasFlat(obj) {
@@ -424,8 +425,8 @@ ${getUnderlay(flatUlId()) ? '<button type="button" class="mp-head-btn" onclick="
 </div>
 <div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>${getUnderlay(flatUlId()) ? ' («По подложке» — все сразу встанут на разрывы в стенах чертежа)' : ''}, а нажатием — поменять ширину, сделать из двери проход без двери (и обратно) или убрать. В облако — только по «Сохранить». Дверь между комнатами — сразу у обеих.</div>`
 : flatTapMode
-? `<div class="flat-tools"><button type="button" class="mp-btn mp-btn-primary" onclick="flatTapMode = false; renderFlatPlan()">Готово</button></div>
-<div class="ai-hint"><b>Комнаты с чертежа.</b> Нажмите внутрь комнаты на подложке — сайт зальёт её пол до стен и создаст помещение (без нейросети). Двигать план — пальцем, приближать — двумя. Масштаб потом — «Ещё» → «Масштаб по стене».</div>`
+? `<div class="flat-tools"><button type="button" class="mp-head-btn${flatTapPick ? ' on' : ''}" onclick="flatTapPick = !flatTapPick; renderFlatPlan()">${flatTapPick ? 'Нажмите на стену… ✕' : 'Показать стену'}</button><button type="button" class="mp-btn mp-btn-primary" onclick="flatTapMode = false; flatTapPick = false; renderFlatPlan()">Готово</button></div>
+<div class="ai-hint"><b>Комнаты с чертежа.</b> Нажмите внутрь комнаты на подложке — сайт зальёт её пол до стен и создаст помещение (без нейросети). Двигать план — пальцем, приближать — двумя. Стены нарисованы тонко или цветом — «Показать стену» и нажмите на такую стену. Масштаб потом — «Ещё» → «Масштаб по стене».</div>`
 : flatSplitFrom
 ? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatSplitFrom = null; renderFlatPlan()">Отмена</button></div>
 <div class="ai-hint"><b>Разделить «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatSplitFrom) || {}))}».</b> Нажмите на её стену (выделены жёлтым) в том месте, откуда провести разрез — он пойдёт поперёк этой стены через всю комнату.</div>`
@@ -469,7 +470,7 @@ flatBindJoy();
 if (ed) flatBindEdit();
 else if (flatUlAdjust) flatBindUnderlay();
 else if (flatOpsMode) flatBindOps();
-else if (flatTapMode) { const sv = document.querySelector('#flatWrap svg'); if (sv) sv.addEventListener('click', (ev) => { ev.stopPropagation(); const pt = flatEventPoint(ev); if (pt) flatTapRoomAt(pt); }, true); }
+else if (flatTapMode) { const sv = document.querySelector('#flatWrap svg'); if (sv) sv.addEventListener('click', (ev) => { ev.stopPropagation(); const pt = flatEventPoint(ev); if (!pt) return; if (flatTapPick) { flatTapPick = false; flatWallPickAt(pt); } else flatTapRoomAt(pt); }, true); }
 else if (flatHMode) flatBindHeights();
 if (!flatUlAdjust) flatBindPanZoom();
 }
@@ -1945,7 +1946,9 @@ if (g.labels) return g.labels;
 const walls = flatUlWalls(mp), W = mp.gray.w, H = mp.gray.h, N = W * H;
 // двери и проёмы: разрыв в линии стены (до 2 м), где стена продолжается по обе стороны дальше 35 см, —
 // для деления на комнаты закрываем (только в толщине стены, комната в проём не выпирает)
-const G = Math.round(2.0 * mp.ppm), C = Math.round(0.35 * mp.ppm);
+const G = Math.round(2.0 * mp.ppm), C = Math.round(0.35 * mp.ppm), G2 = Math.round(6 * mp.ppm);
+// окно — разрыв, по которому вдоль стены идут тонкие линии рамы: закрываем при любой ширине (до 6 м)
+const raw = mp.gray.g, dark = (i) => raw[i] < 200;
 const up = new Uint16Array(N), dn = new Uint16Array(N), lf = new Uint16Array(N), rt = new Uint16Array(N);
 for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; if (walls[i]) { up[i] = y ? Math.min(65000, up[i - W] + 1) : 1; lf[i] = x ? Math.min(65000, lf[i - 1] + 1) : 1; } }
 for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) { const i = y * W + x; if (walls[i]) { dn[i] = y < H - 1 ? Math.min(65000, dn[i + W] + 1) : 1; rt[i] = x < W - 1 ? Math.min(65000, rt[i + 1] + 1) : 1; } }
@@ -1954,14 +1957,22 @@ for (let x = 0; x < W; x++) for (let y = 0; y < H;) {
 if (walls[y * W + x]) { y++; continue; }
 let e = y;
 while (e < H && !walls[e * W + x]) e++;
-if (y > 0 && e < H && e - y <= G && up[(y - 1) * W + x] >= C && dn[e * W + x] >= C) for (let k = y; k < e; k++) v[k * W + x] = 1;
+if (y > 0 && e < H && e - y <= G2 && up[(y - 1) * W + x] >= C && dn[e * W + x] >= C) {
+let dk = 0;
+if (e - y > G) for (let k = y; k < e; k++) dk += dark(k * W + x);
+if (e - y <= G || dk >= (e - y) * 0.5) for (let k = y; k < e; k++) v[k * W + x] = 1;
+}
 y = e;
 }
 for (let y = 0; y < H; y++) for (let x = 0; x < W;) {
 if (walls[y * W + x]) { x++; continue; }
 let e = x;
 while (e < W && !walls[y * W + e]) e++;
-if (x > 0 && e < W && e - x <= G && lf[y * W + x - 1] >= C && rt[y * W + e] >= C) for (let k = x; k < e; k++) v[y * W + k] = 1;
+if (x > 0 && e < W && e - x <= G2 && lf[y * W + x - 1] >= C && rt[y * W + e] >= C) {
+let dk = 0;
+if (e - x > G) for (let k = x; k < e; k++) dk += dark(y * W + k);
+if (e - x <= G || dk >= (e - x) * 0.5) for (let k = x; k < e; k++) v[y * W + k] = 1;
+}
 x = e;
 }
 // комнаты — связные куски пола
@@ -2007,7 +2018,19 @@ if (!L) { alert('Здесь не нашёл пола между стенами. 
 let xa = W, xb = 0, ya = H, yb = 0, cnt = 0;
 for (let i = 0; i < W * H; i++) if (lab[i] === L) { const x = i % W, y = (i - x) / W; cnt++; if (x < xa) xa = x; if (x > xb) xb = x; if (y < ya) ya = y; if (y > yb) yb = y; }
 const area = cnt / (ppm * ppm);
-if (xa <= 1 || ya <= 1 || xb >= W - 2 || yb >= H - 2 || area > 150) { alert('Эта область не замкнута стенами (выходит за край чертежа или слишком большая). Нажмите внутрь комнаты или покажите стены («Показать стену»).'); return; }
+if (xa <= 1 || ya <= 1 || xb >= W - 2 || yb >= H - 2 || area > 150) {
+// показать, куда утекла заливка: оранжевым поверх подложки
+const c = document.createElement('canvas');
+c.width = W; c.height = H;
+const ctx = c.getContext('2d'), img = ctx.createImageData(W, H);
+for (let i = 0, j = 0; i < W * H; i++, j += 4) if (lab[i] === L) { img.data[j] = 255; img.data[j + 1] = 140; img.data[j + 2] = 0; img.data[j + 3] = 110; }
+ctx.putImageData(img, 0, 0);
+flatWallsView = { src: mp.u.src, url: c.toDataURL('image/png') };
+renderFlatPlan();
+alert('Комната не замкнута: заливка пола ушла наружу — оранжевым видно куда. Найдите на чертеже место, где оранжевое выходит из комнаты (широкий проём, окно без рамы, тонкая перегородка): покажите там стену (кнопка «Показать стену» вверху) или нажмите в другую комнату. Подсветка уберётся при следующем нажатии.');
+return;
+}
+if (flatWallsView) { flatWallsView = null; renderFlatPlan(); }
 if (area < 0.3) { alert('Слишком маленькая область — нажмите в середину комнаты.'); return; }
 // кусок с запасом, чистка мелких щелей и выступов (~8 см) — как в «Обвести по чертежу»
 const kr = Math.max(1, Math.round(0.04 * ppm)), mg = kr * 2 + 3;      // запас шире сглаживания — иначе край расползается
@@ -2074,7 +2097,7 @@ renderFlatPlan();
 }
 
 async function flatWallPickAt(pt) {
-flatEdit.pick = false;
+if (flatEdit) flatEdit.pick = false;
 const mp = await flatUlMapping();
 if (!mp || !mp.gray.rgba) { renderFlatPlan(); return; }
 const { gray, toPx, ppm } = mp, d = gray.rgba, W = gray.w, H = gray.h;
