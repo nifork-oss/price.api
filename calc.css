@@ -1055,7 +1055,8 @@ body.assistant-open .add-toast { z-index: 99; }
 .flat-main-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
 .flat-main-btns .measure-open-btn { margin: 0; }
 .flat-main-btns .measure-open-btn:last-child { grid-column: 1 / -1; }
-.flat-joy { position: absolute; z-index: 3; left: 12px; bottom: 34px; width: 84px; height: 84px; border-radius: 50%; background: rgba(20, 24, 31, 0.10); border: 2px solid rgba(20, 24, 31, 0.25); touch-action: none; display: flex; align-items: center; justify-content: center; }
-.flat-joy > div { width: 36px; height: 36px; border-radius: 50%; background: rgba(20, 24, 31, 0.45); pointer-events: none; }
+.flat-joy-row { display: flex; justify-content: center; margin: 12px 0 4px; }
+.flat-joy { position: relative; width: 120px; height: 120px; border-radius: 50%; background: rgba(20, 24, 31, 0.10); border: 2px solid rgba(20, 24, 31, 0.25); touch-action: none; display: flex; align-items: center; justify-content: center; }
+.flat-joy > div { width: 48px; height: 48px; border-radius: 50%; background: rgba(20, 24, 31, 0.45); pointer-events: none; }
 .flat-joy.on { background: rgba(232, 169, 0, 0.18); border-color: #e8a900; }
 .flat-joy.on > div { background: #e8a900; }

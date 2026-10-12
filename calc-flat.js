@@ -134,7 +134,7 @@ return { id, name, pts, closed: g.closed, openings: measure.openings || [], h: m
 function flatSvg(items, opt = {}) {
 if (typeof opt === 'string') opt = { onTap: opt };
 const all = items.flatMap(r => r.pts);
-if (!all.length) return '';
+if (!all.length && !opt.view) return '';
 let v = opt.view;
 if (!v) {
 const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
@@ -360,6 +360,7 @@ let flatOpsMode = false;   // ставим и убираем двери и пр�
 let flatOpsDraft = null;   // { orig, undo } — проёмы до правки и шаги назад; в облако — только по «Сохранить»
 let flatMergeFrom = null;  // id комнаты, к которой присоединяем соседнюю
 let flatSplitFrom = null;  // id комнаты, которую режем на две (ждём нажатия на её стену)
+let flatTapMode = false;   // «Комнаты с чертежа»: нажатие внутрь комнаты на подложке — новое помещение
 let flatHMode = false;     // высоты стен, окон и дверей: всем сразу или по одной нажатием
 
 function objectHasFlat(obj) {
@@ -377,7 +378,7 @@ return objectRooms(flatObj()).filter(r => r.plan && r.measure);
 function openFlatPlan(objectId) {
 flatObjectId = objectId;
 flatOpsDraft = null;
-flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatHMode = false;
+flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatTapMode = false; flatHMode = false;
 flatUlAdjust = null;
 flatZoom = 1;
 flatEdit = null;
@@ -422,11 +423,14 @@ ${getUnderlay(flatUlId()) ? '<button type="button" class="mp-head-btn" onclick="
 <button type="button" class="mp-btn mp-btn-primary" onclick="flatOpsSave()">Сохранить</button>
 </div>
 <div class="ai-hint"><b>Двери и проёмы.</b> Нажмите на стену (выделены жёлтым) — добавите дверь, проход, окно или балконный блок в это место. Проём можно <b>тянуть пальцем вдоль стены</b>${getUnderlay(flatUlId()) ? ' («По подложке» — все сразу встанут на разрывы в стенах чертежа)' : ''}, а нажатием — поменять ширину, сделать из двери проход без двери (и обратно) или убрать. В облако — только по «Сохранить». Дверь между комнатами — сразу у обеих.</div>`
+: flatTapMode
+? `<div class="flat-tools"><button type="button" class="mp-btn mp-btn-primary" onclick="flatTapMode = false; renderFlatPlan()">Готово</button></div>
+<div class="ai-hint"><b>Комнаты с чертежа.</b> Нажмите внутрь комнаты на подложке — сайт зальёт её пол до стен и создаст помещение (без нейросети). Двигать план — пальцем, приближать — двумя. Масштаб потом — «Ещё» → «Масштаб по стене».</div>`
 : flatSplitFrom
 ? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatSplitFrom = null; renderFlatPlan()">Отмена</button></div>
 <div class="ai-hint"><b>Разделить «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatSplitFrom) || {}))}».</b> Нажмите на её стену (выделены жёлтым) в том месте, откуда провести разрез — он пойдёт поперёк этой стены через всю комнату.</div>`
 : flatMergeFrom
-? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatMergeFrom = null; flatSplitFrom = null; renderFlatPlan()">Отмена</button></div>
+? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatMergeFrom = null; flatSplitFrom = null; flatTapMode = false; renderFlatPlan()">Отмена</button></div>
 <div class="ai-hint"><b>Объединить.</b> Нажмите на соседнюю комнату — она станет частью «${escapeHtml(roomName(objectRooms(flatObj()).find(r => r.id === flatMergeFrom) || {}))}» вместе со стеной между ними.</div>`
 : flatScaleMode
 ? `<div class="flat-tools"><button type="button" class="mp-head-btn" onclick="flatScaleMode = false; renderFlatPlan()">Отмена</button></div>
@@ -439,6 +443,7 @@ ${ed.pick ? '<button type="button" class="mp-head-btn on" onclick="flatWallPickS
 <button type="button" class="mp-btn mp-btn-primary" onclick="flatEditSave()">Сохранить</button>
 </div>
 <div class="ai-hint">${ed.pick ? '<b>Нажмите на перегородку на чертеже</b> (на её линию или штриховку) — сайт запомнит, как стены нарисованы в этом проекте.' : ed.sel ? 'Тяните <b>угол</b> (кружок) или <b>стену</b> (квадратик), внутри комнаты — двигается вся комната. Нажмите на квадратик — длина, сдвиг, колонна или ниша; на кружок — колонна в углу. «Подгонка» — по соседям и по чертежу.' : 'Нажмите на комнату, чтобы её править. «Подгонка» — по соседям и по чертежу.'}</div>`
+: !items.length ? `<div class="ai-hint"><b>Плана пока нет.</b> Добавьте подложку — страницу проекта (PDF или фото) — кнопками ниже, потом «Ещё» → «Комнаты с чертежа» и нажимайте внутрь комнат. Без нейросети и бесплатно.</div>${getUnderlay(flatUlId()) ? '<button type="button" class="measure-open-btn" onclick="flatTapStart()">Комнаты с чертежа</button>' : ''}`
 : `<div class="ai-hint">Нажмите на помещение — откроется его замер. После правки план обновится.${rest ? ` Помещений без места на плане: ${rest} (добавлены вручную).` : ''}</div>
 ${isCurrentClient() || flatUlAdjust ? '' : '<div class="flat-main-btns"><button type="button" class="measure-open-btn" onclick="flatEditStart()">Править на плане</button><button type="button" class="measure-open-btn" onclick="flatOpsStart()">Двери и проёмы</button><button type="button" class="measure-open-btn" onclick="flatMainMore()">Ещё ▾</button></div>' + flatHistBtnHtml()}`;
 const oldWrap = document.getElementById('flatWrap');
@@ -449,10 +454,12 @@ ${top}
 <div class="flat-viewbox"><div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, { zoom: flatZoom, ...(ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatHMode ? { pickWalls: 'flatHWall', pickOps: true, onTap: 'flatHRoom', heights: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatOpsMode ? { pickWalls: 'flatOpsWall', pickOps: 'flatOpsRemove', underlay: flatUlOpt(), view: flatViewOf(items) }
+: flatTapMode ? { underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatSplitFrom ? { pickWalls: 'flatSplitWall', pickRoom: flatSplitFrom, underlay: flatUlOpt(), view: flatViewOf(items) }
 : { onTap: flatMergeFrom ? 'flatMergeTap' : 'flatOpenRoom', sel: flatMergeFrom || undefined, underlay: flatUlOpt(), view: flatViewOf(items) }) })}</div></div>
-<div class="flat-bar flat-bar-x" id="flatBarX"><div></div></div><div class="flat-bar flat-bar-y" id="flatBarY"><div></div></div>${ed || flatOpsMode || flatHMode ? '<div class="flat-joy" id="flatJoy"><div></div></div>' : ''}</div>
-${ed || flatScaleMode || flatOpsMode || flatHMode || flatMergeFrom || flatSplitFrom ? '' : flatUlBarHtml()}
+<div class="flat-bar flat-bar-x" id="flatBarX"><div></div></div><div class="flat-bar flat-bar-y" id="flatBarY"><div></div></div></div>
+${ed || flatOpsMode || flatHMode ? '<div class="flat-joy-row"><div class="flat-joy" id="flatJoy"><div></div></div></div>' : ''}
+${ed || flatScaleMode || flatOpsMode || flatHMode || flatMergeFrom || flatSplitFrom || flatTapMode ? '' : flatUlBarHtml()}
 </div>`;
 flatSizeInner();
 const wrap = document.getElementById('flatWrap');
@@ -462,6 +469,7 @@ flatBindJoy();
 if (ed) flatBindEdit();
 else if (flatUlAdjust) flatBindUnderlay();
 else if (flatOpsMode) flatBindOps();
+else if (flatTapMode) { const sv = document.querySelector('#flatWrap svg'); if (sv) sv.addEventListener('click', (ev) => { ev.stopPropagation(); const pt = flatEventPoint(ev); if (pt) flatTapRoomAt(pt); }, true); }
 else if (flatHMode) flatBindHeights();
 if (!flatUlAdjust) flatBindPanZoom();
 }
@@ -740,6 +748,7 @@ return `<div class="rl-ul-panel">
 <button type="button" class="rl-tool" onclick="flatUlAction('rotate')">↻ 90°</button>
 <button type="button" class="rl-tool" onclick="flatUlAction('lighter')">Светлее</button>
 <button type="button" class="rl-tool" onclick="flatUlAction('darker')">Темнее</button>
+${flatItems().length ? '<button type="button" class="rl-tool" onclick="flatUlAutoAlign()">Совместить автоматически</button>' : ''}
 <button type="button" class="rl-tool" onclick="flatUlPick('pdf')">Другая страница</button>
 <button type="button" class="rl-tool rl-tool-del" onclick="flatUlAction('remove')">Убрать</button>
 <button type="button" class="rl-tool rl-tool-close" onclick="flatUlAction('done')">🔒 Закрепить</button>
@@ -768,7 +777,9 @@ ulCache[id] = img.dataUrl;
 // по умолчанию — по центру плана; лист проекта обычно вдвое шире самого плана
 const all = flatItems().flatMap(r => r.pts);
 const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
-const bw = Math.max(...xs) - Math.min(...xs) || 8, cx = (Math.max(...xs) + Math.min(...xs)) / 2 || 0, cy = (Math.max(...ys) + Math.min(...ys)) / 2 || 0;
+// плана ещё нет (комнаты — с чертежа) — примерно 16 м шириной, масштаб потом — «Масштаб по стене»
+const bw = all.length ? Math.max(...xs) - Math.min(...xs) || 8 : 8;
+const cx = all.length ? (Math.max(...xs) + Math.min(...xs)) / 2 : 0, cy = all.length ? (Math.max(...ys) + Math.min(...ys)) / 2 : 0;
 const ar = img.h / img.w, w = bw * 2;
 saveUnderlayView(id, { x: cx - w / 2, y: cy - w * ar / 2, w, ar, rot: 0, op: 0.5, hidden: false });
 flatUlStartAdjust();
@@ -928,7 +939,7 @@ renderFlatPlan();
 }
 
 function flatOpsStart() {
-flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatMergeFrom = null; flatSplitFrom = null;
+flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatMergeFrom = null; flatSplitFrom = null; flatTapMode = false;
 flatHMode = false;
 flatOpsMode = true;
 let full = null;
@@ -1196,7 +1207,7 @@ if (changed && typeof renderInvoice === 'function') renderInvoice();
 /* ---------- высоты: стены (потолок), окна, двери — всем сразу или по одной ---------- */
 
 function flatHStart() {
-flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null;
+flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatTapMode = false;
 flatHMode = true;
 renderFlatPlan();
 }
@@ -1463,7 +1474,7 @@ height_m: mNum(o.h) || null, door_width_m: mNum(o.dw) || null, door_height_m: mN
 const conv = flatPtsToMeasure({ name: ia.name, height_m: mNum(ra.measure.height) || null, pts, openings: ops }, obj.id);
 ra.measure = { ...conv.measure, id: ra.measure.id, objectId: ra.measure.objectId };
 ra.plan = conv.plan;
-flatMergeFrom = null; flatSplitFrom = null;
+flatMergeFrom = null; flatSplitFrom = null; flatTapMode = false;
 await removeObjectRooms(obj, [bId]);                              // сохранит и уберёт из счёта
 renderFlatPlan();
 showAddToast(`Объединено: «${ia.name}»`);
@@ -1568,7 +1579,7 @@ if ((await saveCloudData()) !== false) showAddToast(`Разделено: «${roo
 // соотношении: стены, проёмы, места помещений и подложка. Дальше правится по одной стене
 
 function flatScaleStart() {
-flatEdit = null; flatUlAdjust = null; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatHMode = false;
+flatEdit = null; flatUlAdjust = null; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatTapMode = false; flatHMode = false;
 flatScaleMode = true;
 renderFlatPlan();
 }
@@ -1609,7 +1620,7 @@ showAddToast('Масштаб плана изменён — проверьте р
 }
 
 function flatEditStart() {
-flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatHMode = false;
+flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatTapMode = false; flatHMode = false;
 flatUlAdjust = null;
 const items = flatItems();
 const all = items.flatMap(r => r.pts);
@@ -1816,7 +1827,7 @@ try { const v = JSON.parse(localStorage.getItem(flatWallSamplesKey()) || '[]'); 
 }
 function flatWallSamplesSet(list) {
 try { localStorage.setItem(flatWallSamplesKey(), JSON.stringify(list)); } catch (e) { /* пусто */ }
-if (flatUlGray) delete flatUlGray.walls;                       // пересчитать стены
+if (flatUlGray) { delete flatUlGray.walls; delete flatUlGray.dist; delete flatUlGray.labels; }   // пересчитать стены
 flatWallsView = null;                                        // подсветка устарела — включится заново после образца
 }
 
@@ -1836,6 +1847,197 @@ ctx.putImageData(img, 0, 0);
 flatWallsView = { src: mp.u.src, url: c.toDataURL('image/png') };
 renderFlatPlan();
 showAddToast('Синим — что сайт считает стенами. Чего нет синим — того «Обвести» не увидит: покажите такую стену («Показать стену»)');
+}
+
+// Расстояние до ближайшей стены чертежа, в точках (×3 — «шахматная» мера 3/4), на всю подложку
+function flatUlDist(mp) {
+const g = flatUlGray;
+if (g.dist) return g.dist;
+const walls = flatUlWalls(mp), W = mp.gray.w, H = mp.gray.h;
+const d = new Uint16Array(W * H);
+for (let i = 0; i < W * H; i++) d[i] = walls[i] ? 0 : 65000;
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+const i = y * W + x;
+let v = d[i];
+if (x > 0) v = Math.min(v, d[i - 1] + 3);
+if (y > 0) { v = Math.min(v, d[i - W] + 3); if (x > 0) v = Math.min(v, d[i - W - 1] + 4); if (x < W - 1) v = Math.min(v, d[i - W + 1] + 4); }
+d[i] = v;
+}
+for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) {
+const i = y * W + x;
+let v = d[i];
+if (x < W - 1) v = Math.min(v, d[i + 1] + 3);
+if (y < H - 1) { v = Math.min(v, d[i + W] + 3); if (x < W - 1) v = Math.min(v, d[i + W + 1] + 4); if (x > 0) v = Math.min(v, d[i + W - 1] + 4); }
+d[i] = v;
+}
+g.dist = d;
+return d;
+}
+
+// «Совместить автоматически»: подбираем сдвиг (до 1 м) и масштаб (±8%) подложки так, чтобы
+// сразу за краями комнат на чертеже были стены. Поворот — как есть
+async function flatUlAutoAlign() {
+const mp = await flatUlMapping();
+if (!mp) return;
+const u = getUnderlay(flatUlId()), { gray } = mp, W = gray.w, H = gray.h;
+const dist = flatUlDist(mp), walls = flatUlWalls(mp);
+// точки по краям комнат: 2 см наружу и 3 см внутрь, не больше ~1500 пар
+const items = flatItems().filter(r => r.closed);
+let per = 0;
+items.forEach(r => r.pts.forEach((a, i) => { const b = r.pts[(i + 1) % r.pts.length]; per += Math.hypot(b[0] - a[0], b[1] - a[1]); }));
+if (!per) return;
+const step = Math.max(0.05, per / 1500), S = [];
+items.forEach(r => r.pts.forEach((a, i) => {
+const b = r.pts[(i + 1) % r.pts.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+if (L < 0.2) return;
+const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L;
+for (let t = 0.1; t < L - 0.1; t += step) S.push([a[0] + ux * t + uy * 0.02, a[1] + uy * t - ux * 0.02, a[0] + ux * t - uy * 0.03, a[1] + uy * t + ux * 0.03]);
+}));
+const all = items.flatMap(r => r.pts), pc = [(Math.min(...all.map(p => p[0])) + Math.max(...all.map(p => p[0]))) / 2, (Math.min(...all.map(p => p[1])) + Math.max(...all.map(p => p[1]))) / 2];
+const a = (u.rot || 0) * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+const cost = (x, y, w) => {
+const uh = w * u.ar, cx = x + w / 2, cy = y + uh / 2, kx = W / w, ky = H / uh, cap = 0.3 * W / w * 3;
+let c = 0;
+const px2 = (px, py) => { const dx = px - cx, dy = py - cy; return [Math.round((cx + dx * cs + dy * sn - x) * kx), Math.round((cy - dx * sn + dy * cs - y) * ky)]; };
+for (const [ox, oy, inx, iny] of S) {
+// сразу снаружи края — стена (ближе — лучше), сразу внутри — пол
+const [ix, iy] = px2(ox, oy);
+c += ix < 0 || iy < 0 || ix >= W || iy >= H ? cap : Math.min(cap, dist[iy * W + ix]);
+const [jx, jy] = px2(inx, iny);
+if (jx >= 0 && jy >= 0 && jx < W && jy < H && walls[jy * W + jx]) c += cap * 0.5;
+}
+return c / cap;
+};
+const at = (sc, dx, dy) => [pc[0] + (u.x - pc[0]) * sc + dx, pc[1] + (u.y - pc[1]) * sc + dy, u.w * sc];
+const c0 = cost(u.x, u.y, u.w);
+let best = { c: c0, sc: 1, dx: 0, dy: 0 };
+showAddToast('Совмещаю…');
+await new Promise(r => setTimeout(r, 30));
+for (let sc = 0.92; sc <= 1.0801; sc += 0.01) for (let dx = -1; dx <= 1.0001; dx += 0.05) for (let dy = -1; dy <= 1.0001; dy += 0.05) {
+const c = cost(...at(sc, dx, dy));
+if (c < best.c) best = { c, sc, dx, dy };
+}
+const b0 = { ...best };
+for (let sc = b0.sc - 0.01; sc <= b0.sc + 0.0101; sc += 0.002) for (let dx = b0.dx - 0.06; dx <= b0.dx + 0.0601; dx += 0.01) for (let dy = b0.dy - 0.06; dy <= b0.dy + 0.0601; dy += 0.01) {
+const c = cost(...at(sc, dx, dy));
+if (c < best.c) best = { c, sc, dx, dy };
+}
+if (best.c > c0 * 0.97) { showAddToast('Лучше не совместить — подложка уже на месте или слишком далеко (дальше 1 м). Подвиньте ближе и попробуйте снова'); return; }
+const [x, y, w] = at(best.sc, best.dx, best.dy);
+saveUnderlayView(flatUlId(), { ...u, x, y, w });
+flatWallsView = null;
+renderFlatPlan();
+showAddToast(`Совмещено: сдвиг ${Math.round(Math.hypot(best.dx, best.dy) * 100)} см, масштаб ${best.sc > 1 ? '+' : ''}${Math.round((best.sc - 1) * 1000) / 10}%. Проверьте и «Закрепить»`);
+}
+
+// «Комнаты с чертежа» без нейросети: каждая комната на подложке — своя область пола, отделённая
+// стенами; через двери (до ~90 см) соседние комнаты не сливаются: середины комнат (где до стен
+// дальше 45 см) — отдельные «ядра», а остальной пол делится между ядрами по близости
+function flatTapStart() {
+flatEdit = null; flatUlAdjust = null; flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatHMode = false;
+flatTapMode = true;
+renderFlatPlan();
+}
+
+function flatUlRoomLabels(mp) {
+const g = flatUlGray;
+if (g.labels) return g.labels;
+const walls = flatUlWalls(mp), W = mp.gray.w, H = mp.gray.h, N = W * H;
+// двери и проёмы: разрыв в линии стены (до 2 м), где стена продолжается по обе стороны дальше 35 см, —
+// для деления на комнаты закрываем (только в толщине стены, комната в проём не выпирает)
+const G = Math.round(2.0 * mp.ppm), C = Math.round(0.35 * mp.ppm);
+const up = new Uint16Array(N), dn = new Uint16Array(N), lf = new Uint16Array(N), rt = new Uint16Array(N);
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; if (walls[i]) { up[i] = y ? Math.min(65000, up[i - W] + 1) : 1; lf[i] = x ? Math.min(65000, lf[i - 1] + 1) : 1; } }
+for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) { const i = y * W + x; if (walls[i]) { dn[i] = y < H - 1 ? Math.min(65000, dn[i + W] + 1) : 1; rt[i] = x < W - 1 ? Math.min(65000, rt[i + 1] + 1) : 1; } }
+const v = walls.slice();
+for (let x = 0; x < W; x++) for (let y = 0; y < H;) {
+if (walls[y * W + x]) { y++; continue; }
+let e = y;
+while (e < H && !walls[e * W + x]) e++;
+if (y > 0 && e < H && e - y <= G && up[(y - 1) * W + x] >= C && dn[e * W + x] >= C) for (let k = y; k < e; k++) v[k * W + x] = 1;
+y = e;
+}
+for (let y = 0; y < H; y++) for (let x = 0; x < W;) {
+if (walls[y * W + x]) { x++; continue; }
+let e = x;
+while (e < W && !walls[y * W + e]) e++;
+if (x > 0 && e < W && e - x <= G && lf[y * W + x - 1] >= C && rt[y * W + e] >= C) for (let k = x; k < e; k++) v[y * W + k] = 1;
+x = e;
+}
+// комнаты — связные куски пола
+const lab = new Int32Array(N);
+let n = 0;
+for (let s0 = 0; s0 < N; s0++) {
+if (lab[s0] || v[s0]) continue;
+n++;
+const st = [s0];
+lab[s0] = n;
+while (st.length) {
+const i = st.pop(), x = i % W;
+if (x > 0 && !lab[i - 1] && !v[i - 1]) { lab[i - 1] = n; st.push(i - 1); }
+if (x < W - 1 && !lab[i + 1] && !v[i + 1]) { lab[i + 1] = n; st.push(i + 1); }
+if (i >= W && !lab[i - W] && !v[i - W]) { lab[i - W] = n; st.push(i - W); }
+if (i + W < N && !lab[i + W] && !v[i + W]) { lab[i + W] = n; st.push(i + W); }
+}
+}
+g.labels = lab;
+return lab;
+}
+
+async function flatTapRoomAt(pt) {
+const obj = flatObj();
+if (!obj) return;
+const inside = flatItems().find(r => r.closed && flatPointIn(r.pts, pt));
+if (inside) { showAddToast(`Здесь уже есть «${inside.name}»`); return; }
+const mp = await flatUlMapping();
+if (!mp) return;
+const { gray, toPx, toM, ppm } = mp, W = gray.w, H = gray.h;
+showAddToast('Обвожу комнату…');
+await new Promise(r => setTimeout(r, 30));
+const lab = flatUlRoomLabels(mp);
+let [sx, sy] = toPx(pt).map(Math.round);
+if (sx < 0 || sy < 0 || sx >= W || sy >= H) { alert('Это вне подложки.'); return; }
+// нажали на стену или надпись — ближайший пол
+let L = lab[sy * W + sx];
+for (let r = 1; !L && r < 0.15 * ppm; r++) for (let dy = -r; dy <= r && !L; dy++) for (let dx = -r; dx <= r && !L; dx++) {
+const x = sx + dx, y = sy + dy;
+if (x >= 0 && y >= 0 && x < W && y < H && lab[y * W + x]) L = lab[y * W + x];
+}
+if (!L) { alert('Здесь не нашёл пола между стенами. Нажмите в середину комнаты.'); return; }
+let xa = W, xb = 0, ya = H, yb = 0, cnt = 0;
+for (let i = 0; i < W * H; i++) if (lab[i] === L) { const x = i % W, y = (i - x) / W; cnt++; if (x < xa) xa = x; if (x > xb) xb = x; if (y < ya) ya = y; if (y > yb) yb = y; }
+const area = cnt / (ppm * ppm);
+if (xa <= 1 || ya <= 1 || xb >= W - 2 || yb >= H - 2 || area > 150) { alert('Эта область не замкнута стенами (выходит за край чертежа или слишком большая). Нажмите внутрь комнаты или покажите стены («Показать стену»).'); return; }
+if (area < 0.3) { alert('Слишком маленькая область — нажмите в середину комнаты.'); return; }
+// кусок с запасом, чистка мелких щелей и выступов (~8 см) — как в «Обвести по чертежу»
+const kr = Math.max(1, Math.round(0.04 * ppm)), mg = kr * 2 + 3;      // запас шире сглаживания — иначе край расползается
+const x0 = Math.max(0, xa - mg), y0 = Math.max(0, ya - mg), Wc = Math.min(W, xb + mg + 1) - x0, Hc = Math.min(H, yb + mg + 1) - y0;
+let reg = new Uint8Array(Wc * Hc);
+for (let y = 0; y < Hc; y++) for (let x = 0; x < Wc; x++) reg[y * Wc + x] = lab[(y + y0) * W + x + x0] === L ? 1 : 0;
+const { dil, ero } = flatUlMorph(Wc, Hc);
+reg = dil(ero(ero(dil(reg, kr), kr), kr), kr);
+const pts = flatRegionPolygon(reg, Wc, Hc, x0, y0, toM, ppm);
+if (!pts || pts.length < 4) { alert('Не получилось обвести эту комнату.'); return; }
+const a1 = flatPolyArea(pts);
+const name = prompt(`Комната ${mFmt(a1)} м². Название:`, `Помещение ${objectRooms(obj).length + 1}`);
+if (name == null) return;
+flatHistMark('Комната с чертежа');
+const conv = flatPtsToMeasure({ name: name.trim().slice(0, 80) || 'Помещение', height_m: null, pts: pts.map(p => p.map(v => Math.round(v * 1000))), openings: [] }, obj.id);
+obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: conv.measure, plan: conv.plan });
+if (typeof syncCartWithRooms === 'function') syncCartWithRooms();
+if (typeof renderInvoice === 'function') renderInvoice();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === flatObjectId && typeof renderObjectDetail === 'function') renderObjectDetail();
+renderFlatPlan();
+if ((await saveCloudData()) !== false) showAddToast(`Добавлено «${conv.measure.room}» ${mFmt(a1)} м². Следующая — нажмите в другую комнату`);
+}
+
+function flatPointIn(P, [x, y]) {
+let c = false;
+for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+const [xi, yi] = P[i], [xj, yj] = P[j];
+if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+}
+return c;
 }
 
 // Меню «Подгонка» в правке и «Ещё» на плане — чтобы не было стены из кнопок
@@ -1860,6 +2062,7 @@ openSheet('План квартиры', [
 { icon: '🧲', label: 'Подогнать стены и двери', onClick: () => { flatEditStart(); flatFit(); } },
 { icon: '📏', label: 'Масштаб по стене', onClick: () => flatScaleStart() },
 { icon: '↕️', label: 'Высоты стен, окон и дверей', onClick: () => flatHStart() },
+...(getUnderlay(flatUlId()) ? [{ icon: '👆', label: 'Комнаты с чертежа (без ИИ)', onClick: () => flatTapStart() }] : []),
 ]);
 }
 
@@ -2003,6 +2206,65 @@ done.add(o2);
 if (!moved) { flatOpsDraft.undo.pop(); showAddToast(total ? 'Проёмы уже стоят по чертежу (или разрывы в стенах не найдены)' : 'На плане нет проёмов'); return; }
 renderFlatPlan();
 showAddToast(`Подогнано по чертежу проёмов: ${moved} из ${total}. Проверьте — лишнее «Шаг назад» — и «Сохранить»`);
+}
+
+// Залитая область (маска reg размером W×H, левый верх — точка x0, y0 картинки) → контур комнаты
+// в метрах: внешний край по часовой, прямые стены (близкие до 6 см — одна), без лишних точек. Не вышло — null
+function flatRegionPolygon(reg, W, H, x0, y0, toM, ppm) {
+// касания уголками — закрываем, чтобы край был одной линией
+const on = (x, y) => x >= 0 && y >= 0 && x < W && y < H && reg[y * W + x] === 1;
+for (let changed = true, guard = 0; changed && guard < 5; guard++) {
+changed = false;
+for (let y = 0; y < H - 1; y++) for (let x = 0; x < W - 1; x++) {
+const a = on(x, y), b = on(x + 1, y), c = on(x, y + 1), d = on(x + 1, y + 1);
+if (a && d && !b && !c) { reg[y * W + x + 1] = 1; changed = true; }
+else if (b && c && !a && !d) { reg[y * W + x] = 1; changed = true; }
+}
+}
+// внешний край — по часовой (y вниз: заливка справа от направления)
+const edges = new Map();
+let sx = -1, sy = -1;
+for (let y = 0; y < H && sx < 0; y++) for (let x = 0; x < W; x++) if (on(x, y)) { sx = x; sy = y; break; }
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+if (!on(x, y)) continue;
+if (!on(x, y - 1)) edges.set(`${x},${y}`, [x + 1, y]);
+if (!on(x + 1, y)) edges.set(`${x + 1},${y}`, [x + 1, y + 1]);
+if (!on(x, y + 1)) edges.set(`${x + 1},${y + 1}`, [x, y + 1]);
+if (!on(x - 1, y)) edges.set(`${x},${y + 1}`, [x, y]);
+}
+let ring = [[sx, sy]];
+for (let cur = edges.get(`${sx},${sy}`), n = 0; cur && (cur[0] !== sx || cur[1] !== sy) && n < 200000; n++) { ring.push(cur); cur = edges.get(cur.join(',')); }
+// прямые стены: близкие (до 6 см) положения стен — одно, средневзвешенное по длине
+const tol = 0.06 * ppm;
+const snap = (axis) => {
+const list = [];
+ring.forEach((p, i) => { const q = ring[(i + 1) % ring.length]; if (p[axis] === q[axis]) list.push([p[axis], Math.abs(q[1 - axis] - p[1 - axis])]); });
+list.sort((a, b) => a[0] - b[0]);
+const map = new Map();
+for (let i = 0; i < list.length;) {
+let j = i, sw = 0, sv = 0;
+while (j < list.length && list[j][0] - list[i][0] <= tol) { sw += list[j][1]; sv += list[j][0] * list[j][1]; j++; }
+for (let m = i; m < j; m++) map.set(list[m][0], sw ? sv / sw : list[i][0]);
+i = j;
+}
+return map;
+};
+const mx = snap(0), my = snap(1);
+ring = ring.map(([x, y]) => [mx.has(x) ? mx.get(x) : x, my.has(y) ? my.get(y) : y]);
+// убрать повторы и точки посреди прямой (в том числе «шипы» туда-обратно)
+for (let again = true; again && ring.length > 3;) {
+again = false;
+const n = ring.length;
+for (let i = 0; i < n; i++) {
+const q = ring[(i - 1 + n) % n], p = ring[i], r = ring[(i + 1) % n];
+const same = Math.abs(p[0] - r[0]) < 1e-6 && Math.abs(p[1] - r[1]) < 1e-6;
+if (same || (Math.abs(q[0] - p[0]) < 1e-6 && Math.abs(p[0] - r[0]) < 1e-6) || (Math.abs(q[1] - p[1]) < 1e-6 && Math.abs(p[1] - r[1]) < 1e-6)) {
+ring.splice(i, 1); again = true; break;
+}
+}
+}
+if (ring.length < 4) return null;
+return ring.map(([x, y]) => toM([x + x0, y + y0]).map(v => Math.round(v * 1000) / 1000));
 }
 
 async function flatTraceUnderlay() {
@@ -2167,60 +2429,9 @@ if (clean[j] && !reg[j]) { reg[j] = 1; st.push(j); }
 });
 }
 }
-// касания уголками — закрываем, чтобы край был одной линией
-const on = (x, y) => x >= 0 && y >= 0 && x < W && y < H && reg[y * W + x] === 1;
-for (let changed = true, guard = 0; changed && guard < 5; guard++) {
-changed = false;
-for (let y = 0; y < H - 1; y++) for (let x = 0; x < W - 1; x++) {
-const a = on(x, y), b = on(x + 1, y), c = on(x, y + 1), d = on(x + 1, y + 1);
-if (a && d && !b && !c) { reg[y * W + x + 1] = 1; changed = true; }
-else if (b && c && !a && !d) { reg[y * W + x] = 1; changed = true; }
-}
-}
-// внешний край — по часовой (y вниз: заливка справа от направления)
-const edges = new Map();
-let sx = -1, sy = -1;
-for (let y = 0; y < H && sx < 0; y++) for (let x = 0; x < W; x++) if (on(x, y)) { sx = x; sy = y; break; }
-for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-if (!on(x, y)) continue;
-if (!on(x, y - 1)) edges.set(`${x},${y}`, [x + 1, y]);
-if (!on(x + 1, y)) edges.set(`${x + 1},${y}`, [x + 1, y + 1]);
-if (!on(x, y + 1)) edges.set(`${x + 1},${y + 1}`, [x, y + 1]);
-if (!on(x - 1, y)) edges.set(`${x},${y + 1}`, [x, y]);
-}
-let ring = [[sx, sy]];
-for (let cur = edges.get(`${sx},${sy}`), n = 0; cur && (cur[0] !== sx || cur[1] !== sy) && n < 200000; n++) { ring.push(cur); cur = edges.get(cur.join(',')); }
-// прямые стены: близкие (до 6 см) положения стен — одно, средневзвешенное по длине
-const tol = 0.06 * ppm;
-const snap = (axis) => {
-const list = [];
-ring.forEach((p, i) => { const q = ring[(i + 1) % ring.length]; if (p[axis] === q[axis]) list.push([p[axis], Math.abs(q[1 - axis] - p[1 - axis])]); });
-list.sort((a, b) => a[0] - b[0]);
-const map = new Map();
-for (let i = 0; i < list.length;) {
-let j = i, sw = 0, sv = 0;
-while (j < list.length && list[j][0] - list[i][0] <= tol) { sw += list[j][1]; sv += list[j][0] * list[j][1]; j++; }
-for (let m = i; m < j; m++) map.set(list[m][0], sw ? sv / sw : list[i][0]);
-i = j;
-}
-return map;
-};
-const mx = snap(0), my = snap(1);
-ring = ring.map(([x, y]) => [mx.has(x) ? mx.get(x) : x, my.has(y) ? my.get(y) : y]);
-// убрать повторы и точки посреди прямой (в том числе «шипы» туда-обратно)
-for (let again = true; again && ring.length > 3;) {
-again = false;
-const n = ring.length;
-for (let i = 0; i < n; i++) {
-const q = ring[(i - 1 + n) % n], p = ring[i], r = ring[(i + 1) % n];
-const same = Math.abs(p[0] - r[0]) < 1e-6 && Math.abs(p[1] - r[1]) < 1e-6;
-if (same || (Math.abs(q[0] - p[0]) < 1e-6 && Math.abs(p[0] - r[0]) < 1e-6) || (Math.abs(q[1] - p[1]) < 1e-6 && Math.abs(p[1] - r[1]) < 1e-6)) {
-ring.splice(i, 1); again = true; break;
-}
-}
-}
-if (ring.length < 4) { alert('Не получилось обвести эту комнату по чертежу.'); return; }
-let pts = ring.map(([x, y]) => toM([x + x0, y + y0]).map(v => Math.round(v * 1000) / 1000));
+let pts = flatRegionPolygon(reg, W, H, x0, y0, toM, ppm);
+if (!pts) { alert('Не получилось обвести эту комнату по чертежу.'); return; }
+
 const a0 = flatPolyArea(it.pts), a1 = flatPolyArea(pts);
 if (!(a1 > a0 * 0.5 && a1 < a0 * 1.6)) { alert(`По чертежу вышло ${mFmt(a1)} м² вместо ${mFmt(a0)} м² — похоже, заливка ушла не туда. Подгоните подложку или комнату ближе и попробуйте снова.`); return; }
 // тот же обход, что был, и начало — ближе к прежнему первому углу

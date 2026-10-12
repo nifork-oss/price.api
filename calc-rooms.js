@@ -644,6 +644,7 @@ return `<h2 style="margin-top:18px;">Помещения${rooms.length ? ` (${roo
 ${list}
 ${canEdit ? `<button type="button" class="measure-open-btn" onclick="addRoom('${obj.id}')">+ Помещение</button>` : ''}
 ${typeof objectHasFlat === 'function' && objectHasFlat(obj) ? `<button type="button" class="btn btn-primary plan-btn" onclick="openFlatPlan('${obj.id}')">План квартиры</button>` : ''}
+${canEdit && typeof objectHasFlat === 'function' && !objectHasFlat(obj) ? `<button type="button" class="measure-open-btn" onclick="openFlatPlan('${obj.id}')">План с чертежа без ИИ (бесплатно)</button>` : ''}
 ${rooms.length ? `<button type="button" class="btn btn-primary plan-btn" onclick="openPlanActions('${obj.id}')">Обмерный план (PDF)</button>` : ''}
 ${canEdit ? `<button type="button" class="measure-open-btn ai-btn" onclick="startPlanRecognition('${obj.id}')">Распознать план по фото или PDF (платно)</button>` : ''}
 ${canEdit ? `<button type="button" class="measure-open-btn" onclick="openPlanFile('${obj.id}')">План в файле (.json): сохранить или загрузить</button>` : ''}
