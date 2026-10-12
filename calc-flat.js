@@ -1386,7 +1386,24 @@ flatMergeRooms(a, roomId);
 // Нельзя (косые стены, не соседи, получится с дыркой) — null
 function flatUnion(A, B, gap = 0.7) {
 const mm = p => [Math.round(p[0] * 1000), Math.round(p[1] * 1000)];
-const a = A.map(mm), b = B.map(mm);
+let a = A.map(mm), b = B.map(mm);
+// почти ровные стены (угол сдвинули пальцем, сайт обвёл с погрешностью): близкие до 3 см
+// координаты — одна линия
+const snap = (k) => {
+const v = [...new Set(a.concat(b).map(p => p[k]))].sort((u, w) => u - w), to = new Map();
+for (let i = 0; i < v.length;) {
+let j = i;
+while (j + 1 < v.length && v[j + 1] - v[j] <= 30) j++;
+const m = Math.round(v.slice(i, j + 1).reduce((s, x) => s + x, 0) / (j - i + 1));
+for (let t = i; t <= j; t++) to.set(v[t], m);
+i = j + 1;
+}
+const f = p => { const q = p.slice(); q[k] = to.get(p[k]); return q; };
+a = a.map(f); b = b.map(f);
+};
+snap(0); snap(1);
+const dedup = P => P.filter((p, i) => { const q = P[(i + 1) % P.length]; return p[0] !== q[0] || p[1] !== q[1]; });
+a = dedup(a); b = dedup(b);
 const axisOnly = (p) => p.every((q, i) => { const r = p[(i + 1) % p.length]; return q[0] === r[0] || q[1] === r[1]; });
 if (!axisOnly(a) || !axisOnly(b)) return null;
 const xs = [...new Set(a.concat(b).map(p => p[0]))].sort((u, v) => u - v);
@@ -1423,19 +1440,48 @@ if (cell[k][i]) break;
 }
 }
 if (!cell.some(row => row.includes(3))) return null;              // не соседи
+// маленькие замкнутые дырки между комнатами (кусок стены, щель до 0,5 м²) — тоже в общее помещение
+const seen = cell.map(row => row.map(() => 0));
+for (let j0 = 0; j0 < ny; j0++) for (let i0 = 0; i0 < nx; i0++) {
+if (cell[j0][i0] || seen[j0][i0]) continue;
+const comp = [[i0, j0]], st = [[i0, j0]];
+seen[j0][i0] = 1;
+let edge = false, area = 0;
+while (st.length) {
+const [i, j] = st.pop();
+area += (xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j]);
+if (i === 0 || j === 0 || i === nx - 1 || j === ny - 1) edge = true;
+for (const [u, w] of [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]]) {
+if (u < 0 || w < 0 || u >= nx || w >= ny || cell[w][u] || seen[w][u]) continue;
+seen[w][u] = 1; comp.push([u, w]); st.push([u, w]);
+}
+}
+if (!edge && area <= 0.5e6) comp.forEach(([i, j]) => { cell[j][i] = 3; });
+}
 const on = (i, j) => i >= 0 && j >= 0 && i < nx && j < ny && cell[j][i] > 0;
 // края области — по часовой (y вниз: внутри справа от направления)
-const edges = new Map();
-let total = 0;
-const add = (p, q) => { edges.set(p.join(','), q); total++; };
+let edges, total;
+for (let pass = 0; ; pass++) {
+edges = new Map(); total = 0;
+const pinch = [];
+const add = (p, q, i, j) => { const k = p.join(','); if (edges.has(k)) pinch.push([i, j]); edges.set(k, q); total++; };
 for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
 if (!on(i, j)) continue;
-if (!on(i, j - 1)) add([xs[i], ys[j]], [xs[i + 1], ys[j]]);
-if (!on(i + 1, j)) add([xs[i + 1], ys[j]], [xs[i + 1], ys[j + 1]]);
-if (!on(i, j + 1)) add([xs[i + 1], ys[j + 1]], [xs[i], ys[j + 1]]);
-if (!on(i - 1, j)) add([xs[i], ys[j + 1]], [xs[i], ys[j]]);
+if (!on(i, j - 1)) add([xs[i], ys[j]], [xs[i + 1], ys[j]], i, j);
+if (!on(i + 1, j)) add([xs[i + 1], ys[j]], [xs[i + 1], ys[j + 1]], i + 1, j);
+if (!on(i, j + 1)) add([xs[i + 1], ys[j + 1]], [xs[i], ys[j + 1]], i + 1, j + 1);
+if (!on(i - 1, j)) add([xs[i], ys[j + 1]], [xs[i], ys[j]], i, j + 1);
 }
-if (edges.size !== total) return null;                            // касание углами — не одна область
+if (!pinch.length) break;
+// касание углами: в точке касания заделываем узкую (до gap) пустую клетку — как кусок стены
+if (pass >= 5) return null;
+let fixed = false;
+pinch.forEach(([vi, vj]) => [[vi - 1, vj - 1], [vi, vj - 1], [vi - 1, vj], [vi, vj]].forEach(([i, j]) => {
+if (i < 0 || j < 0 || i >= nx || j >= ny || cell[j][i]) return;
+if (Math.min(xs[i + 1] - xs[i], ys[j + 1] - ys[j]) <= G) { cell[j][i] = 3; fixed = true; }
+}));
+if (!fixed) return null;
+}
 const start = edges.keys().next().value.split(',').map(Number);
 const pts = [start];
 let cur = edges.get(start.join(',')), steps = 1;
