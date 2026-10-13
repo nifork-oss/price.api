@@ -37,6 +37,11 @@ const SURFACES = [
 { key: 'tileWalls', tab: 'tileWalls', label: 'Плитка: стены' },
 { key: 'tileFloor', tab: 'tileFloor', label: 'Плитка: пол' },
 { key: 'tileAll', tab: 'tileAll', label: 'Плитка: всего' },
+{ key: 'stairSide', tab: 'stairSide', label: 'Лестница: торец' },
+{ key: 'stairUnder', tab: 'stairUnder', label: 'Лестница: низ марша' },
+{ key: 'stairPlinth', tab: 'stairPlinth', label: 'Лестница: плинтус на ступенях' },
+{ key: 'stairTile', tab: 'stairTile', label: 'Лестница: плитка на ступени' },
+{ key: 'stairSteps', tab: 'stairSteps', label: 'Лестница: ступени' },
 { key: 'mask', tab: 'mask', label: 'Укрывка: всё вместе' },
 { key: 'maskArea', tab: 'maskArea', label: 'Укрывка: всё вместе, м²' },
 { key: 'maskWindows', tab: 'maskWindows', label: 'Укрывка: окна', sub: true },
@@ -111,6 +116,11 @@ molWall: 'Молдинг на стенах',
 tileWalls: 'Плитка: стены',
 tileFloor: 'Плитка: пол',
 tileAll: 'Плитка',
+stairSide: 'Торец лестницы',
+stairUnder: 'Низ марша',
+stairPlinth: 'Плинтус на ступенях',
+stairTile: 'Плитка на ступени',
+stairSteps: 'Ступени',
 mask: 'Укрывка: всё вместе',
 maskArea: 'Укрывка: всё вместе, м²',
 maskWindows: 'Укрывка: окна',
@@ -430,6 +440,16 @@ if (srv.unit === 'м²') return has('maskArea') ? 'maskArea' : 'mask';
 // по виду укрывки в названии: теневые профили, окна, двери, мебель, стены, потолок, пол
 const kind = [[/тенев/, 'maskShadow'], [/окн|окон/, 'maskWindows'], [/двер/, 'maskDoors'], [/мебел|шкаф|кухн|гарнитур/, 'maskCovers'], [/стен/, 'maskWalls'], [/потол/, 'maskCeiling'], [/(^|[^а-яё])пол([аеуы]|ом)?([^а-яё]|$)/, 'maskFloor']].find(([re, k]) => re.test(n) && has(k));
 return kind ? kind[1] : has('mask') ? 'mask' : 'maskArea';
+}
+// лестница: плинтус на ступенях, плитка на ступени, торец и низ марша, работа «за ступень»
+if (/лестн|ступен|марш/.test(n) && ['stairSide', 'stairUnder', 'stairPlinth', 'stairTile', 'stairSteps'].some(has)) {
+if (/плинтус/.test(n) && has('stairPlinth')) return 'stairPlinth';
+if (srv.unit === 'шт.' && has('stairSteps')) return 'stairSteps';
+if (/плит|кафел|керамогранит|облиц/.test(n) && has('stairTile')) return 'stairTile';
+if (/торц|торец|бок/.test(n) && has('stairSide')) return 'stairSide';
+if (/низ|обратн|снизу|подшив/.test(n) && has('stairUnder')) return 'stairUnder';
+if (srv.unit === 'пог. м' && has('stairPlinth')) return 'stairPlinth';
+if (has('stairSide')) return 'stairSide';
 }
 // лепнина: потолочный плинтус — это карниз; «закарнизная ниша» (под карниз для штор) — не лепнина
 if (/(^|[^а-яё])карниз|галтел|потолочн\S* плинтус/.test(n) && !/закарниз|штор|гардин|тюл/.test(n) && has('molCornice')) return 'molCornice';
