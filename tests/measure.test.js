@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const vm = require('vm');
 const { loadCalc } = require('./load.js');
 
-const FILES = ['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-import.js'];
+const FILES = ['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-stairs.js', 'calc-import.js'];
 
 // Новая песочница на каждую проверку: замер — глобальная переменная страницы
 function setup(m) {
@@ -245,4 +245,33 @@ test('укрывка: встроенный шкаф до потолка — ск
   // теневой профиль у потолка на всех стенах тоже идёт по фасаду: столько же, сколько потолок
   run('measure.mask = { shadowCeil: [0, 1, 2, 3] }');
   near(run('maskCompute(measure)').kinds.maskShadow.len, 16);
+});
+
+test('лестница: ступени подбираются сами, торец, низ, плинтус и плитка', () => {
+  // прямая, 2,89 м от пола до пола, ширина 1 м, одна сторона открыта
+  const { run } = setup({ shape: 'rect', height: '2,7', walls: ['5', '3', '5', '3'],
+    stairs: [{ type: 'straight', H: '2,89', w: '1', open: 1 }] });
+  let k = run('stairsCompute(measure)');
+  const e = k.list[0];
+  assert.strictEqual(e.n, 17);                          // по 170 мм
+  near(e.h, 0.17); near(e.b, 0.29);                     // 2 × 170 + 290 = 630
+  const slope = Math.hypot(16 * 0.29, 2.89);
+  near(k.side, 16 * 0.29 * 0.17 / 2 + slope * 0.18);    // «пила» + полоса толщины марша
+  near(k.under, slope * 1);
+  near(k.plinth, 17 * 0.17 + 16 * 0.29);                // одна сторона у стены
+  near(k.tile, 16 * 0.29 + 17 * 0.17);
+  assert.strictEqual(k.steps, 17);
+  // в замере — как поверхности для работ
+  near(run('measureValueForTab(computeMeasure(measure), "stairPlinth").value'), 7.53);
+  assert.strictEqual(run('measureValueForTab(computeMeasure(measure), "stairSteps").unit'), 'шт.');
+  // П-образная с площадкой: марши 9 + 8, площадка 1 × 2,1
+  run('measure.stairs[0].type = "U"');
+  k = run('stairsCompute(measure)');
+  near(k.tile, 15 * 0.29 + 2.1 + 17 * 0.17);
+  near(k.plinth, (9 * 0.17 + 8 * 0.29) + (8 * 0.17 + 7 * 0.29) + 2.1 + 2);
+  // между стенами — торца нет, плинтус с двух сторон
+  run('measure.stairs[0].type = "straight"; measure.stairs[0].open = 0');
+  k = run('stairsCompute(measure)');
+  near(k.side, 0);
+  near(k.plinth, 2 * 7.53);
 });

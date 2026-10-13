@@ -991,6 +991,14 @@ r.radFinArea = rn.finArea;
 r.radFinMin = rn.finMin;
 if (rn.list.length) r.lines.radNiches = rn.list.map(e => e.line).join('\n') + (rn.finMin ? MIN_NOTE : '');
 
+// Лестница: торец и низ под покраску, плинтус на ступенях, плитка, ступени
+if (typeof stairsCompute === 'function') {
+const st = stairsCompute(m);
+r.stairsRes = st;
+r.stairSide = st.side; r.stairUnder = st.under; r.stairPlinth = st.plinth; r.stairTile = st.tile; r.stairSteps = st.steps;
+if (st.list.length) r.lines.stairs = st.list.map(e => [e.line, ...e.lines].join('; ')).join('\n');
+}
+
 // Углы: наружные и внутренние, по отмеченным
 const cr = cornersCompute(m, r);
 r.cornerItems = cr.items;
@@ -1070,6 +1078,11 @@ if (tab === 'ceilFin') return { value: r.ceilFin, unit: 'пог. м', label: 'Н
 if (tab === 'ceilFinArea') return { value: r.ceilFinArea, unit: 'м²', label: 'Ниши и короба: обработка, м²', text: (r.ceilEls || []).filter(e => e.finArea > 0).map(e => e.line).join('\n') };
 if (tab === 'radFin') return { value: r.radFin || 0, unit: 'пог. м', label: 'Ниши в стенах: обработка', text: (r.radNiches || []).filter(e => e.finLin > 0).map(e => e.line).join('\n') + (r.radFinMin ? MIN_NOTE : '') };
 if (tab === 'radFinArea') return { value: r.radFinArea || 0, unit: 'м²', label: 'Ниши в стенах: обработка, м²', text: (r.radNiches || []).filter(e => e.finArea > 0).map(e => e.line).join('\n') };
+if (tab === 'stairSide') return { value: r.stairSide || 0, unit: 'м²', label: 'Лестница: торец', text: r.lines.stairs || '' };
+if (tab === 'stairUnder') return { value: r.stairUnder || 0, unit: 'м²', label: 'Лестница: низ марша', text: r.lines.stairs || '' };
+if (tab === 'stairPlinth') return { value: r.stairPlinth || 0, unit: 'пог. м', label: 'Лестница: плинтус на ступенях', text: r.lines.stairs || '' };
+if (tab === 'stairTile') return { value: r.stairTile || 0, unit: 'м²', label: 'Лестница: плитка на ступени', text: r.lines.stairs || '' };
+if (tab === 'stairSteps') return { value: r.stairSteps || 0, unit: 'шт.', label: 'Лестница: ступени', text: r.lines.stairs || '' };
 if (tab === 'slopes') return { value: r.slopesLen, unit: 'пог. м', label: 'Откосы', text: r.lines.slopesLen || '' };
 if (tab === 'narrow') return { value: r.narrow, unit: 'пог. м', label: 'Узкие поверхности', text: [r.lines.narrowWalls, r.lines.narrow, r.lines.openStrips, r.lines.narrowTotal].filter(Boolean).join('\n') };
 return { value: 0, unit: '', label: '', text: '' };
@@ -1353,6 +1366,8 @@ html += typeof moldingTabHtml === 'function' ? moldingTabHtml(m) : '';
 html += typeof tileTabHtml === 'function' ? tileTabHtml(m) : '';
 } else if (measureTab === 'mask') {
 html += typeof maskTabHtml === 'function' ? maskTabHtml(m) : '';
+} else if (measureTab === 'stairs') {
+html += typeof stairsTabHtml === 'function' ? stairsTabHtml(m) : '';
 } else if (measureTab === 'history') {
 html += renderMeasureHistoryHtml();
 }
@@ -1407,6 +1422,7 @@ if (measureTab === 'corners') renderCnViews(r);
 if (measureTab === 'molding' && typeof updateMoldingOutputs === 'function') updateMoldingOutputs(r);
 if (measureTab === 'tile' && typeof updateTileOutputs === 'function') updateTileOutputs(r);
 if (measureTab === 'mask' && typeof updateMaskOutputs === 'function') updateMaskOutputs(r);
+if (measureTab === 'stairs' && typeof updateStairsOutputs === 'function') updateStairsOutputs(r);
 (measure.parts || []).forEach((pt, i) => {
 const e = (r.partsList || []).find(x => x.idx === i);
 set('mpPartArea' + i, e ? `${mFmt(e.area)} м²` : '');
@@ -1459,6 +1475,9 @@ pick = `<div class="mp-pick">${opt('mask', 'Периметр', 'пог. м')}${o
 } else if (measureTab === 'molding' && ['molCornice', 'molPlinth', 'molCeil', 'molWall'].filter(k => r[k] > 0).length > 1 && measureTarget.kind !== 'room') {
 const opt = (key, label) => r[key] > 0 ? `<button type="button" class="${effTab === key ? 'active' : ''}" onclick="setMolPick('${key}')">${label}<br><b>${mFmt(r[key])}</b> пог. м</button>` : '';
 pick = `<div class="mp-pick">${opt('molCornice', 'Карниз')}${opt('molPlinth', 'Плинтус')}${opt('molCeil', 'Потолок')}${opt('molWall', 'Стены')}</div>`;
+} else if (measureTab === 'stairs' && STAIR_KEYS.filter(k => r[k] > 0).length > 1 && measureTarget.kind !== 'room') {
+const opt = (key, label, unit) => r[key] > 0 ? `<button type="button" class="${effTab === key ? 'active' : ''}" onclick="setStairPick('${key}')">${label}<br><b>${mFmt(r[key])}</b> ${unit}</button>` : '';
+pick = `<div class="mp-pick">${opt('stairSide', 'Торец', 'м²')}${opt('stairUnder', 'Низ', 'м²')}${opt('stairPlinth', 'Плинтус', 'пог. м')}${opt('stairTile', 'Плитка', 'м²')}${opt('stairSteps', 'Ступени', 'шт.')}</div>`;
 } else if (measureTab === 'walls') {
 sub = r.wallsGrossMode && r.openingsArea > 0
 ? `Проёмы не вычитаются${r.openStrips > 0 ? ` · у проёмов ${mFmt(r.openStrips)} пог. м (в «Узких»)` : ''}`
@@ -1483,6 +1502,7 @@ btn.textContent = measureTarget.roomId ? 'Сохранить замер' : 'До
 }
 
 let measureWallsPick = 'walls';
+const STAIR_KEYS = ['stairSide', 'stairUnder', 'stairPlinth', 'stairTile', 'stairSteps'];
 // что можно вставить с вкладки «Стены»: стены, участки, обработка ниш в стенах
 function measureWallsPicks(r) {
 return ['walls', ...(r.parts > 0 ? ['parts', 'wallsMinus'] : []), ...(r.partStrips > 0 ? ['partStrips'] : []), ...(r.radFin > 0 ? ['radFin'] : []), ...(r.radFinArea > 0 ? ['radFinArea'] : [])];
@@ -1509,6 +1529,10 @@ return pick === 'maskArea' && r.maskArea > 0 ? 'maskArea' : (r.maskLen > 0 || !(
 if (measureTab === 'molding') {
 const have = ['molCornice', 'molPlinth', 'molCeil', 'molWall'].filter(k => r[k] > 0);
 return have.includes(measureMolPick) ? measureMolPick : (have[0] || 'molCornice');
+}
+if (measureTab === 'stairs') {
+const have = STAIR_KEYS.filter(k => r[k] > 0);
+return typeof measureStairPick === 'string' && have.includes(measureStairPick) ? measureStairPick : (have[0] || 'stairSide');
 }
 return measureTab;
 }
@@ -1655,7 +1679,7 @@ if (measureFocus && measureFocus.kind === kind) measureFocus = null;
 measure[kind].splice(i, 1);
 if (kind === 'openings') remapCeilElOpsAfterRemove(measure, i);
 if (kind === 'walls' && Array.isArray(measure.wallHeights)) measure.wallHeights.splice(i, 1);
-if (kind !== 'openings' && kind !== 'parts' && kind !== 'ceilEls' && kind !== 'radNiches' && kind !== 'covers' && kind !== 'blocks' && measure[kind].length === 0) measure[kind].push(kind === 'ceiling' ? { l: '', w: '' } : '');
+if (kind !== 'openings' && kind !== 'parts' && kind !== 'ceilEls' && kind !== 'radNiches' && kind !== 'covers' && kind !== 'blocks' && kind !== 'stairs' && measure[kind].length === 0) measure[kind].push(kind === 'ceiling' ? { l: '', w: '' } : '');
 saveMeasureDraft();
 renderMeasure();
 }
@@ -2156,7 +2180,7 @@ if (radUnder(el) || !Number.isInteger(el.wall)) return;
 const k = map[el.wall];
 if (Number.isInteger(k) && k >= 0) el.wall = k; else delete el.wall;
 });
-[...(Array.isArray(m.covers) ? m.covers : []), ...(Array.isArray(m.parts) ? m.parts : []), ...(Array.isArray(m.blocks) ? m.blocks : [])].forEach(el => {
+[...(Array.isArray(m.covers) ? m.covers : []), ...(Array.isArray(m.parts) ? m.parts : []), ...(Array.isArray(m.blocks) ? m.blocks : []), ...(Array.isArray(m.stairs) ? m.stairs : [])].forEach(el => {
 if (!Number.isInteger(el.wall)) return;
 const k = map[el.wall];
 if (Number.isInteger(k) && k >= 0) el.wall = k; else delete el.wall;
@@ -2833,7 +2857,7 @@ return list.sort((a, b) => String(b.savedAt || '').localeCompare(String(a.savedA
 
 function measureSummaryLines(m) {
 const r = computeMeasure(m);
-return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.covers, r.lines.wallsCovered, r.lines.parts, r.lines.wallsMinusParts, r.lines.partStrips, r.lines.radNiches, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn, r.lines.mol_cornice, r.lines.mol_plinth, r.lines.mol_ceil, r.lines.mol_wall, r.lines.tile_walls, r.lines.tile_floor].filter(Boolean);
+return [r.lines.walls, r.lines.narrowWalls, r.lines.openings, r.lines.net, r.lines.covers, r.lines.wallsCovered, r.lines.parts, r.lines.wallsMinusParts, r.lines.partStrips, r.lines.radNiches, r.lines.ceiling, r.lines.ceilEls, r.lines.ceilingNet, r.lines.slopesLen, r.lines.narrow, r.lines.openStrips, r.lines.cornersOut, r.lines.cornersIn, r.lines.mol_cornice, r.lines.mol_plinth, r.lines.mol_ceil, r.lines.mol_wall, r.lines.tile_walls, r.lines.tile_floor, r.lines.stairs].filter(Boolean);
 }
 
 function measurePills(m) {
@@ -2843,6 +2867,7 @@ if (r.wallsGross > 0) p.push(`Стены ${mFmt(r.wallsCalc)} м²`);
 if (r.coversArea > 0) p.push(`За мебелью ${mFmt(r.coversArea)} м²`);
 if (r.parts > 0) p.push(`Участки ${mFmt(r.parts)} м²`);
 if ((r.radNiches || []).length) p.push(`Ниши в стенах ${r.radNiches.length} шт.`);
+if (r.stairSteps > 0) p.push(`Лестница ${r.stairSteps} ступ.`);
 if (r.ceiling > 0) p.push(`Потолок ${mFmt(r.ceiling)} м²`);
 if (r.ceilNiche > 0) p.push(`Ниши ${mFmt(r.ceilNiche)} пог. м`);
 if (r.ceilBox > 0) p.push(`Короба ${mFmt(r.ceilBox)} пог. м`);

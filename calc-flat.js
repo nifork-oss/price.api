@@ -125,7 +125,7 @@ return [cx / (3 * a), cy / (3 * a)];
 // Комната для рисунка: углы на плане квартиры, замкнута ли, проёмы
 function flatItem(id, name, measure, plan) {
 const { pts, g } = flatRoomPoints(measure, plan);
-return { id, name, pts, closed: g.closed, openings: measure.openings || [], h: measure.height || '', wh: measure.wallHeights || [] };
+return { id, name, pts, closed: g.closed, openings: measure.openings || [], h: measure.height || '', wh: measure.wallHeights || [], stairs: measure.stairs || [] };
 }
 
 // Весь план: items — [{ id, name, pts, closed, openings }] (flatItem);
@@ -189,6 +189,7 @@ const tap = opt.onTap ? ` onclick="${opt.onTap}('${r.id}')" style="cursor:pointe
 return `<g class="flat-room${sel ? ' sel' : ''}"${tap}>
 <path d="${d}" data-room="${r.id}" fill="${sel ? '#ffe7a3' : r.closed ? '#fff4d1' : '#fde3dc'}"${ul ? ' fill-opacity="0.35"' : ''} stroke="#14181f" stroke-width="${fs * 0.22 * zk}" stroke-linejoin="miter"/>
 ${ops}
+${typeof flatStairsSvg === 'function' ? flatStairsSvg(r, fs * zk) : ''}
 ${opt.pickWalls && (!opt.pickRoom || opt.pickRoom === r.id) ? r.pts.map((p, i) => (!r.closed && i === n - 1) ? '' : `<line x1="${p[0]}" y1="${p[1]}" x2="${r.pts[(i + 1) % n][0]}" y2="${r.pts[(i + 1) % n][1]}" stroke="#e8a900" stroke-opacity=".55" stroke-width="${fs * 0.5}" stroke-linecap="round" onclick="${opt.pickWalls === true ? 'flatScaleWall' : opt.pickWalls}('${r.id}', ${i}, event)" style="cursor:pointer"/>`).join('') : ''}
 ${opt.pickOps ? r.openings.map((o, oi) => { const sg = flatOpeningSeg(r, o); return sg ? `<line x1="${sg.x}" y1="${sg.y}" x2="${sg.x + sg.ux * sg.w}" y2="${sg.y + sg.uy * sg.w}" stroke="#c2361f" stroke-opacity=".01" stroke-width="${fs * 0.9}" data-op-room="${r.id}" data-op="${oi}" style="cursor:grab"/>` : ''; }).join('') : ''}
 <title>${escapeHtml(name)} — ${areaTxt}</title>
