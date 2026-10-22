@@ -2573,7 +2573,7 @@ card.innerHTML = `
 <span class="obj-chevron" aria-hidden="true">›</span>
 </div>
 <div class="obj-line"><span class="meta-k">Заказчик</span> ${escapeHtml(obj.client)}</div>
-${obj.address ? `<div class="obj-line"><span class="meta-k">Адрес</span> ${escapeHtml(obj.address)}</div>` : ''}
+${obj.address || (typeof geoHas === 'function' && geoHas(obj)) ? `<div class="obj-line"><span class="meta-k">Адрес</span> ${escapeHtml(obj.address || 'точка на карте')}${typeof geoRouteUrl === 'function' && geoRouteUrl(obj) ? ` <a class="geo-mini" href="${geoRouteUrl(obj)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" aria-label="Маршрут в Яндекс Картах">🧭 Маршрут</a>` : ''}</div>` : ''}
 ${moneyHtml}
 ${adminInfoHtml}
 `;
@@ -2637,6 +2637,7 @@ ${escapeHtml(obj.client)}
 <div class="object-detail-field">
 <b>Адрес</b>
 ${obj.address ? escapeHtml(obj.address) : '<span style="color:#8d97a5;">не указан</span>'}
+${typeof geoButtonsHtml === 'function' ? geoButtonsHtml(obj, !isCurrentClient()) : ''}
 </div>
 <div class="object-detail-field">
 <b>Доступ на объект</b>

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261013-1. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261022-1. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=1d465c36">
+<link rel="stylesheet" href="calc.css?v=e903900b">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -197,6 +197,24 @@
 <input type="file" id="aiAttachFile" accept="image/*" style="display:none" onchange="handleAiAttach(this)">
 <input type="file" id="aiAttachPdf" accept="application/pdf,.pdf" style="display:none" onchange="handleAiAttach(this)">
 <input type="file" id="ulFilePdf" accept="application/pdf,.pdf" style="display:none" onchange="handleUnderlayFile(this)">
+<div class="measure-panel" id="geoPanel" role="dialog" aria-modal="true" aria-label="Объект на карте">
+<div class="mp-head"><div class="mp-head-inner">
+<div class="mp-head-row">
+<div class="mp-title">Объект на карте</div>
+<button type="button" class="mp-head-btn mp-close" onclick="geoClose()" aria-label="Закрыть">✕</button>
+</div>
+</div></div>
+<div class="mp-body"><div class="mp-body-inner">
+<div class="geo-search"><input type="text" id="geoAddr" class="mp-in" placeholder="Город, улица, дом" onkeydown="if (event.key === 'Enter') geoFind()"><button type="button" class="hc-btn" onclick="geoFind()">Найти</button></div>
+<div class="geo-map" id="geoMap"></div>
+<div class="mp-hint" id="geoHint"></div>
+<div class="geo-actions">
+<button type="button" class="hc-btn" onclick="geoHere()">📍 Я на объекте</button>
+<button type="button" class="hc-btn" id="geoClearBtn" onclick="geoClear()">Убрать точку</button>
+<button type="button" class="mp-btn mp-btn-primary" id="geoSave" onclick="geoSave()" disabled>Сохранить точку</button>
+</div>
+</div></div>
+</div>
 <div class="measure-panel" id="flatPanel" role="dialog" aria-modal="true" aria-label="План квартиры">
 <div class="mp-head"><div class="mp-head-inner">
 <div class="mp-head-row">
@@ -625,7 +643,8 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=ed64f7f2"></script>
+<script src="calc-app.js?v=93e41ecb"></script>
+<script src="calc-geo.js?v=763bd404"></script>
 
 <script src="calc-measure.js?v=b19af441"></script>
 
