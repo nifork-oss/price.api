@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261022-5. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261022-6. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=1631e0ea">
+<link rel="stylesheet" href="calc.css?v=61fc7b72">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -439,6 +439,15 @@
 <input type="text" id="newObjAddress" placeholder="ул. Ленина, д. 1, кв. 5">
 </div>
 <div class="form-group">
+<label>Прораб</label>
+<div class="contact-row"><input type="text" id="newObjForemanName" placeholder="Имя"><input type="tel" id="newObjForemanPhone" placeholder="+7 900 000-00-00" inputmode="tel"></div>
+</div>
+<div class="form-group">
+<label>Дизайнер</label>
+<div class="contact-row"><input type="text" id="newObjDesignerName" placeholder="Имя"><input type="tel" id="newObjDesignerPhone" placeholder="+7 900 000-00-00" inputmode="tel"></div>
+</div>
+
+<div class="form-group">
 <label>Доступ на объект</label>
 <textarea id="newObjAccess" placeholder="Например: код домофона, у кого ключи, время доступа"></textarea>
 </div>
@@ -646,8 +655,8 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=341b0a09"></script>
-<script src="calc-geo.js?v=7c14dd1f"></script>
+<script src="calc-app.js?v=836d7732"></script>
+<script src="calc-geo.js?v=7519180b"></script>
 
 <script src="calc-measure.js?v=b19af441"></script>
 
