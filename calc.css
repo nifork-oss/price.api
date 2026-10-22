@@ -1063,9 +1063,8 @@ body.assistant-open .add-toast { z-index: 99; }
 
 /* Объект на карте: кнопки маршрута и окно выбора точки — как остальные кнопки карточки */
 .geo-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
-.geo-btns .geo-btn { flex: none; min-width: 0; min-height: 42px; padding: 6px 2px; gap: 4px; font-size: 13px; letter-spacing: -0.1px; text-decoration: none; white-space: nowrap; color: #33404f; }
-.geo-btns .geo-btn svg.ic { width: 16px; height: 16px; vertical-align: 0; }
-@media (max-width: 350px) { .geo-btns .geo-btn svg.ic { display: none; } }
+.geo-btns .geo-btn { flex: none; min-width: 0; min-height: 52px; padding: 6px 2px; flex-direction: column; gap: 3px; font-size: 12.5px; line-height: 1.15; text-decoration: none; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #33404f; }
+.geo-btns .geo-btn svg.ic { width: 18px; height: 18px; vertical-align: 0; }
 .geo-pick { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .geo-note { font-size: 12px; color: #8d97a5; margin-top: 6px; }
 .geo-mini { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-size: 12px; font-weight: 700; color: #14181f; text-decoration: none; white-space: nowrap; border-bottom: 2px solid #ffc83d; line-height: 1.3; }

@@ -22,8 +22,8 @@ if (!route && !canEdit) return '';
 const ic = id => `<svg class="ic"><use href="#i-${id}"/></svg>`;
 return `${route ? `<div class="geo-btns">
 <a class="hc-btn geo-btn" href="${route}" target="_blank" rel="noopener">${ic('route')}Маршрут</a>
-<a class="hc-btn geo-btn" href="${map}" target="_blank" rel="noopener">${ic('map')}На карте</a>
-<button type="button" class="hc-btn geo-btn" onclick="geoShare('${obj.id}')">${ic('send')}Поделиться</button>
+<a class="hc-btn geo-btn" href="${map}" target="_blank" rel="noopener">${ic('map')}Карта</a>
+<button type="button" class="hc-btn geo-btn" onclick="geoShare('${obj.id}')">${ic('send')}Отправить</button>
 </div>` : ''}
 ${canEdit ? `<span class="link-text geo-pick" onclick="geoPickOpen('${obj.id}')">${geoHas(obj) ? 'Поправить точку на карте' : 'Указать точку на карте'}</span>` : ''}
 ${!geoHas(obj) && route ? '<div class="geo-note">Маршрут — по тексту адреса. Точнее — с точкой на карте.</div>' : ''}`;
