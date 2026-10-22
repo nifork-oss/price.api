@@ -35,7 +35,7 @@ async function geoShare(objId) {
 const obj = (cloudData.objects || []).find(o => o.id === objId);
 const url = obj && geoRouteUrl(obj);
 if (!url) return;
-const text = [obj.name, obj.address ? 'Адрес: ' + obj.address : '', obj.access ? 'Доступ на объект: ' + obj.access : '', 'Маршрут в Яндекс Картах:'].filter(Boolean).join('\n');
+const text = [obj.name, obj.address ? 'Адрес: ' + obj.address : '', obj.access ? 'Доступ на объект: ' + obj.access : '', obj.foreman || obj.foremanPhone ? 'Прораб: ' + [obj.foreman, obj.foremanPhone].filter(Boolean).join(', ') : '', obj.designer || obj.designerPhone ? 'Дизайнер: ' + [obj.designer, obj.designerPhone].filter(Boolean).join(', ') : '', 'Маршрут в Яндекс Картах:'].filter(Boolean).join('\n');
 if (navigator.share) {
 try { await navigator.share({ title: obj.name || 'Объект', text, url }); return; }
 catch (e) { if (e && e.name === 'AbortError') return; }

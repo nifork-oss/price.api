@@ -1077,3 +1077,8 @@ body.assistant-open .add-toast { z-index: 99; }
 .geo-actions .hc-btn { flex: none; padding: 8px 12px; white-space: nowrap; }
 #geoHint { margin-top: 8px; }
 .geo-actions .mp-btn { margin-left: auto; }
+
+/* Прораб и дизайнер объекта: имя и телефон в одну строку */
+.contact-row { display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; }
+.contact-row input { min-width: 0; }
+.contact-tel { color: #14181f; font-weight: 600; text-decoration: none; border-bottom: 2px solid #ffc83d; white-space: nowrap; }

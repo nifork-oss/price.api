@@ -2480,7 +2480,7 @@ renderObjects();
 showAddToast(`Объект «${newObj.name}» создан`);
 }
 
-async function createObject({ name, client, address = '', access = '', materials = '' }) {
+async function createObject({ name, client, address = '', access = '', materials = '', foreman = '', foremanPhone = '', designer = '', designerPhone = '' }) {
 const newObj = {
 id: 'obj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
 name,
@@ -2488,6 +2488,8 @@ client,
 address,
 access,
 materials,
+...(foreman ? { foreman } : {}), ...(foremanPhone ? { foremanPhone } : {}),
+...(designer ? { designer } : {}), ...(designerPhone ? { designerPhone } : {}),
 author: currentUser || 'admin',
 visibleTo: [currentUser || 'admin'],
 createdAt: new Date().toLocaleString('ru-RU')
@@ -2498,22 +2500,46 @@ await saveCloudData();
 return newObj;
 }
 
+// Прораб и дизайнер объекта: имя и телефон (поля формы pre + ForemanName и т. п.)
+function objContactsFromForm(pre) {
+const v = k => { const el = document.getElementById(pre + k); return el ? el.value.trim() : ''; };
+return { foreman: v('ForemanName'), foremanPhone: v('ForemanPhone'), designer: v('DesignerName'), designerPhone: v('DesignerPhone') };
+}
+// Телефон для ссылки «позвонить»: только цифры и плюс; 8XXXXXXXXXX → +7XXXXXXXXXX
+function telHref(phone) {
+let d = String(phone || '').replace(/[^\d+]/g, '');
+if (/^8\d{10}$/.test(d)) d = '+7' + d.slice(1);
+return d.replace(/\D/g, '').length >= 5 ? 'tel:' + d : '';
+}
+function objContactFieldHtml(label, name, phone) {
+const tel = telHref(phone);
+const body = name || phone
+? `${name ? escapeHtml(name) : ''}${phone ? `${name ? ' · ' : ''}${tel ? `<a class="contact-tel" href="${tel}">${escapeHtml(phone)}</a>` : escapeHtml(phone)}` : ''}`
+: '<span style="color:#8d97a5;">не указан</span>';
+return `<div class="object-detail-field">
+<b>${label}</b>
+${body}
+</div>`;
+}
+
 async function addNewObject() {
 const name = document.getElementById('newObjName').value.trim();
 const client = document.getElementById('newObjClient').value.trim();
 const address = document.getElementById('newObjAddress').value.trim();
 const access = document.getElementById('newObjAccess').value.trim();
 const materials = document.getElementById('newObjMaterials').value.trim();
+const contacts = objContactsFromForm('newObj');
 if (!name || !client) {
 alert('Укажите как минимум название объекта и имя заказчика!');
 return;
 }
-await createObject({ name, client, address, access, materials });
+await createObject({ name, client, address, access, materials, ...contacts });
 document.getElementById('newObjName').value = '';
 document.getElementById('newObjClient').value = '';
 document.getElementById('newObjAddress').value = '';
 document.getElementById('newObjAccess').value = '';
 document.getElementById('newObjMaterials').value = '';
+['ForemanName', 'ForemanPhone', 'DesignerName', 'DesignerPhone'].forEach(k => { document.getElementById('newObj' + k).value = ''; });
 const card = document.getElementById('newObjectCard');
 if (card) card.classList.remove('open');
 populateObjectSelect();
@@ -2533,7 +2559,7 @@ return;
 }
 const query = (searchEl ? searchEl.value : '').trim().toLowerCase();
 const shown = query
-? objects.filter(o => [o.name, o.client, o.address].filter(Boolean).join(' ').toLowerCase().includes(query))
+? objects.filter(o => [o.name, o.client, o.address, o.foreman, o.designer].filter(Boolean).join(' ').toLowerCase().includes(query))
 : objects;
 if (shown.length === 0) {
 container.innerHTML = '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">Ничего не найдено</div>';
@@ -2639,6 +2665,8 @@ ${escapeHtml(obj.client)}
 ${obj.address ? escapeHtml(obj.address) : '<span style="color:#8d97a5;">не указан</span>'}
 ${typeof geoButtonsHtml === 'function' ? geoButtonsHtml(obj, !isCurrentClient()) : ''}
 </div>
+${objContactFieldHtml('Прораб', obj.foreman, obj.foremanPhone)}
+${objContactFieldHtml('Дизайнер', obj.designer, obj.designerPhone)}
 <div class="object-detail-field">
 <b>Доступ на объект</b>
 ${obj.access ? escapeHtml(obj.access).replace(/\n/g, '<br>') : '<span style="color:#8d97a5;">не указан</span>'}
@@ -2725,6 +2753,15 @@ container.innerHTML = `
 <input type="text" id="editObjAddress" value="${escapeHtml(obj.address || '')}" placeholder="ул. Ленина, д. 1, кв. 5">
 </div>
 <div class="form-group">
+<label>Прораб</label>
+<div class="contact-row"><input type="text" id="editObjForemanName" value="${escapeHtml(obj.foreman || '')}" placeholder="Имя"><input type="tel" id="editObjForemanPhone" value="${escapeHtml(obj.foremanPhone || '')}" placeholder="+7 900 000-00-00" inputmode="tel"></div>
+</div>
+<div class="form-group">
+<label>Дизайнер</label>
+<div class="contact-row"><input type="text" id="editObjDesignerName" value="${escapeHtml(obj.designer || '')}" placeholder="Имя"><input type="tel" id="editObjDesignerPhone" value="${escapeHtml(obj.designerPhone || '')}" placeholder="+7 900 000-00-00" inputmode="tel"></div>
+</div>
+
+<div class="form-group">
 <label>Доступ на объект</label>
 <textarea id="editObjAccess">${escapeHtml(obj.access || '')}</textarea>
 </div>
@@ -2752,6 +2789,8 @@ obj.client = client;
 obj.address = document.getElementById('editObjAddress').value.trim();
 obj.access = document.getElementById('editObjAccess').value.trim();
 obj.materials = document.getElementById('editObjMaterials').value.trim();
+const contacts = objContactsFromForm('editObj');
+['foreman', 'foremanPhone', 'designer', 'designerPhone'].forEach(k => { if (contacts[k]) obj[k] = contacts[k]; else delete obj[k]; });
 if (isCurrentAdmin()) {
 obj.visibleTo = Array.from(document.querySelectorAll('.editObjVisibleCheckbox:checked')).map(cb => cb.value);
 }
