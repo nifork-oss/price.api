@@ -28,13 +28,13 @@ ${canEdit ? `<button type="button" class="hc-btn geo-btn" onclick="geoPickOpen('
 ${geoHas(obj) ? '' : route ? '<div class="geo-note">Маршрут — по тексту адреса. Точнее — укажите точку на карте.</div>' : ''}`;
 }
 
-// Поделиться адресом: системное меню телефона (мессенджеры, почта), иначе — скопировать текст.
+// Поделиться адресом и доступом на объект: системное меню телефона (мессенджеры, почта), иначе — скопировать текст.
 // Ссылка — маршрут в Яндекс Картах: у получателя он построится от того места, где он сейчас
 async function geoShare(objId) {
 const obj = (cloudData.objects || []).find(o => o.id === objId);
 const url = obj && geoRouteUrl(obj);
 if (!url) return;
-const text = [obj.name, obj.address ? 'Адрес: ' + obj.address : '', 'Маршрут в Яндекс Картах:'].filter(Boolean).join('\n');
+const text = [obj.name, obj.address ? 'Адрес: ' + obj.address : '', obj.access ? 'Доступ на объект: ' + obj.access : '', 'Маршрут в Яндекс Картах:'].filter(Boolean).join('\n');
 if (navigator.share) {
 try { await navigator.share({ title: obj.name || 'Объект', text, url }); return; }
 catch (e) { if (e && e.name === 'AbortError') return; }
