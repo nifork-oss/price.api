@@ -19,13 +19,14 @@ const geoHas = obj => !!(obj && obj.geo && isFinite(obj.geo.lat) && isFinite(obj
 function geoButtonsHtml(obj, canEdit) {
 const route = geoRouteUrl(obj), map = geoMapUrl(obj);
 if (!route && !canEdit) return '';
-return `<div class="geo-btns">
-${route ? `<a class="hc-btn geo-btn" href="${route}" target="_blank" rel="noopener">🧭 Маршрут</a>` : ''}
-${map ? `<a class="hc-btn geo-btn" href="${map}" target="_blank" rel="noopener">🗺️ На карте</a>` : ''}
-${route ? `<button type="button" class="hc-btn geo-btn" onclick="geoShare('${obj.id}')">📤 Поделиться</button>` : ''}
-${canEdit ? `<button type="button" class="hc-btn geo-btn" onclick="geoPickOpen('${obj.id}')">📍 ${geoHas(obj) ? 'Поправить точку' : 'Указать на карте'}</button>` : ''}
-</div>
-${geoHas(obj) ? '' : route ? '<div class="geo-note">Маршрут — по тексту адреса. Точнее — укажите точку на карте.</div>' : ''}`;
+const ic = id => `<svg class="ic"><use href="#i-${id}"/></svg>`;
+return `${route ? `<div class="geo-btns">
+<a class="hc-btn geo-btn" href="${route}" target="_blank" rel="noopener">${ic('route')}Маршрут</a>
+<a class="hc-btn geo-btn" href="${map}" target="_blank" rel="noopener">${ic('map')}На карте</a>
+<button type="button" class="hc-btn geo-btn" onclick="geoShare('${obj.id}')">${ic('send')}Поделиться</button>
+</div>` : ''}
+${canEdit ? `<span class="link-text geo-pick" onclick="geoPickOpen('${obj.id}')">${geoHas(obj) ? 'Поправить точку на карте' : 'Указать точку на карте'}</span>` : ''}
+${!geoHas(obj) && route ? '<div class="geo-note">Маршрут — по тексту адреса. Точнее — с точкой на карте.</div>' : ''}`;
 }
 
 // Поделиться адресом и доступом на объект: системное меню телефона (мессенджеры, почта), иначе — скопировать текст.
