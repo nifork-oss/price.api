@@ -1061,13 +1061,20 @@ body.assistant-open .add-toast { z-index: 99; }
 .flat-joy.on { background: rgba(232, 169, 0, 0.18); border-color: #e8a900; }
 .flat-joy.on > div { background: #e8a900; }
 
-/* Объект на карте: кнопки маршрута и окно выбора точки */
-.geo-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.geo-btns .geo-btn { flex: 1 1 auto; text-decoration: none; white-space: nowrap; min-height: 38px; font-size: 13px; padding: 6px 10px; }
-.geo-note { font-size: 12px; color: #8d97a5; margin-top: 4px; }
-.geo-mini { margin-left: 6px; font-size: 12px; font-weight: 700; color: #1f6fd1; text-decoration: none; white-space: nowrap; }
+/* Объект на карте: кнопки маршрута и окно выбора точки — как остальные кнопки карточки */
+.geo-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+.geo-btns .geo-btn { flex: none; min-width: 0; min-height: 42px; padding: 6px 2px; gap: 4px; font-size: 13px; letter-spacing: -0.1px; text-decoration: none; white-space: nowrap; color: #33404f; }
+.geo-btns .geo-btn svg.ic { width: 16px; height: 16px; vertical-align: 0; }
+@media (max-width: 350px) { .geo-btns .geo-btn svg.ic { display: none; } }
+.geo-pick { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.geo-note { font-size: 12px; color: #8d97a5; margin-top: 6px; }
+.geo-mini { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; font-size: 12px; font-weight: 700; color: #14181f; text-decoration: none; white-space: nowrap; border-bottom: 2px solid #ffc83d; line-height: 1.3; }
+.geo-mini svg.ic { width: 13px; height: 13px; vertical-align: 0; }
 .geo-search { display: flex; gap: 6px; margin-bottom: 8px; }
 .geo-search .mp-in { flex: 1; text-align: left; }
+.geo-search .hc-btn { flex: none; padding: 8px 16px; }
 .geo-map { height: 58vh; min-height: 280px; border-radius: 12px; overflow: hidden; background: #eef1f5; border: 1px solid #d9dee5; }
 .geo-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+.geo-actions .hc-btn { flex: none; padding: 8px 12px; white-space: nowrap; }
+#geoHint { margin-top: 8px; }
 .geo-actions .mp-btn { margin-left: auto; }
