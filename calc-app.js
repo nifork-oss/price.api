@@ -1941,6 +1941,7 @@ document.getElementById('priceFileNote').textContent = isCompanyMode()
 document.getElementById('sharePriceFileBtn').style.display = canShareFiles() ? 'inline-flex' : 'none';
 document.getElementById('publicPriceToggle').checked = !!self.publicPriceEnabled;
 updatePublicPriceLinkBox();
+if (typeof renderApiKeys === 'function') renderApiKeys();
 }
 
 async function updateProfile() {
@@ -2691,6 +2692,7 @@ ${!isCurrentClient() ? `<button type="button" class="btn btn-primary" style="mar
 <button type="button" class="hc-btn hc-btn-more" onclick="openObjectActions('${obj.id}')" aria-label="Другие действия">⋯</button>
 </div>` : ''}
 
+${typeof agentPlansHtml === 'function' ? agentPlansHtml(obj) : ''}
 ${renderObjectRoomsHtml(obj)}
 ${(obj.measurements || []).length ? `<details style="margin:8px 0;"><summary style="cursor:pointer; font-weight:700; color:#485566; padding:6px 0;">История замеров (${obj.measurements.length})</summary>${renderMeasureHistoryHtml(obj.id)}</details>` : ''}
 
