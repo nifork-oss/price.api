@@ -505,8 +505,17 @@ const inner = wrap && wrap.firstElementChild;
 const svg = inner && inner.querySelector('svg');
 if (!svg) return;
 const vb = svg.viewBox.baseVal;
-// окно не выше рисунка: широкий план на телефоне — без пустого места снизу
-const maxH = Math.round((window.visualViewport ? window.visualViewport.height : window.innerHeight) * 0.68);
+// окно не выше рисунка: широкий план на телефоне — без пустого места снизу;
+// и не ниже края экрана: под кнопками сверху остаётся меньше 68% высоты, а при
+// масштабе 1 план должен быть виден целиком, без прокрутки страницы
+const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+const body = wrap.closest('.mp-body');
+// место от верха окна плана (страница прокручена в начало) до низа видимой части панели
+const bottom = body ? Math.min(vh, body.getBoundingClientRect().bottom) : vh;
+const room = Math.round(bottom - (wrap.getBoundingClientRect().top + (body ? body.scrollTop : 0)) - 12);
+// (в правке, дверях и высотах под планом ещё джойстик — там как раньше)
+const fit = !flatEdit && !flatOpsMode && !flatHMode && room >= 240;
+const maxH = fit ? Math.min(room, Math.round(vh * 0.85)) : Math.round(vh * 0.68);
 wrap.style.height = Math.max(200, Math.min(maxH, Math.ceil((wrap.clientWidth - 12) * vb.height / vb.width) + 14)) + 'px';
 const W = wrap.clientWidth - 12, H = wrap.clientHeight - 12;
 const base = Math.max(100, Math.min(W, H * vb.width / vb.height));
