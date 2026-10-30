@@ -1082,16 +1082,3 @@ body.assistant-open .add-toast { z-index: 99; }
 .contact-row { display: grid; grid-template-columns: 1fr 1.3fr; gap: 8px; }
 .contact-row input { min-width: 0; }
 .contact-tel { color: #14181f; font-weight: 600; text-decoration: none; border-bottom: 2px solid #ffc83d; white-space: nowrap; }
-
-/* ===== API-ключи (профиль) и замеры от ИИ-агента (объект) ===== */
-.api-key-row, .agent-plan { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--s-line); }
-.api-key-info, .agent-plan-info { min-width: 0; flex: 1 1 200px; }
-.api-key-info b, .agent-plan-info b { display: block; font-size: 13px; overflow-wrap: anywhere; }
-.api-key-info small, .agent-plan-info small { color: var(--s-ink3); font-size: 11px; }
-.api-key-empty { color: var(--s-ink3); font-size: 12px; padding: 4px 0; }
-.api-key-fresh { margin-top: 12px; padding: 10px; border: 1px solid var(--tape-d); background: var(--tape-l); border-radius: 8px; }
-.api-key-fresh-title { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
-.api-key-fresh input { width: 100%; box-sizing: border-box; font-family: monospace; font-size: 12px; padding: 8px; }
-.api-key-fresh p { font-size: 11px; color: var(--s-ink2); margin: 6px 0 8px; }
-.agent-plans { margin: 12px 0; padding: 4px 10px; border: 1px solid var(--tape-d); background: var(--tape-l); border-radius: 8px; }
-.agent-plans .agent-plan:last-child { border-bottom: none; }

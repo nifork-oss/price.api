@@ -978,8 +978,6 @@ const plan = aiTarget.plans && aiTarget.plans[i];
 if (old) { aiUpdateMeasure(old.measure, m); if (plan) old.plan = plan; updated++; }
 else { obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: m, ...(plan ? { plan } : {}) }); added++; }
 });
-// замеры от ИИ-агента добавлены — у объекта они больше не ждут (calc-apikeys.js)
-if (aiTarget.agentPlanId && Array.isArray(obj.agentPlans)) obj.agentPlans = obj.agentPlans.filter(p => p.id !== aiTarget.agentPlanId);
 const lastPlan = [...aiTarget.runs].reverse().find(r => r.plan);
 const ul = lastPlan && lastPlan.plan.underlay;
 if (ul && aiTarget.preview && aiTarget.preview.startsWith('data:image/')) {
