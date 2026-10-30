@@ -5,7 +5,7 @@
   "start_url": "./calc.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "background_color": "#ffffff",
   "theme_color": "#14181f",
   "icons": [
