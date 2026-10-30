@@ -140,18 +140,47 @@ return { obj, plan };
 }
 
 // Экран проверки — как у плана из файла; после «Добавить» замер у объекта
-// убирается (applyAiRooms смотрит на aiTarget.agentPlanId)
-function reviewAgentPlan(objectId, planId) {
+// убирается (applyAiRooms смотрит на aiTarget.agentPlanId). Подложка от агента
+// встаёт под план квартиры так же, как картинка после распознавания
+async function reviewAgentPlan(objectId, planId) {
 const { plan } = findAgentPlan(objectId, planId);
 if (!plan) return;
-showPlanImport(objectId, JSON.stringify({ rooms: plan.rooms, warnings: plan.warnings || [] }), `От ИИ-агента «${plan.from || ''}»`);
-if (aiTarget && aiTarget.objectId === objectId) aiTarget.agentPlanId = planId;
+let ul = null;
+if (plan.underlay) {
+showAddToast('Загружаю подложку…');
+try {
+const res = await fetch(`${WORKER_URL}/agent-plan-image?id=${encodeURIComponent(planId)}`, { headers: { 'Authorization': 'Bearer ' + authToken } });
+const data = await res.json().catch(() => null);
+if (res.ok && data && data.image) {
+const img = new Image();
+await new Promise((ok, fail) => { img.onload = ok; img.onerror = fail; img.src = data.image; });
+ul = { image: data.image, view: { x: plan.underlay.x, y: plan.underlay.y, w: plan.underlay.w, ar: img.naturalHeight / img.naturalWidth } };
+}
+} catch (e) { ul = null; }
+if (!ul) showAddToast('Подложку загрузить не удалось — замеры без неё');
+}
+const rooms = JSON.stringify({ rooms: plan.rooms, warnings: plan.warnings || [] });
+showPlanImport(objectId, rooms, `От ИИ-агента «${plan.from || ''}»`);
+if (!aiTarget || aiTarget.objectId !== objectId) return;
+aiTarget.agentPlanId = planId;
+if (ul) {
+const run = aiTarget.runs[0];
+run.plan = { ...run.result, underlay: ul.view };
+aiTarget.preview = ul.image;
+}
+}
+
+// Картинка подложки на сервере больше не нужна — замеры добавлены или убраны
+function dropAgentPlanImage(planId) {
+fetch(`${WORKER_URL}/agent-plan-image?id=${encodeURIComponent(planId)}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + authToken } }).catch(() => {});
 }
 
 async function dropAgentPlan(objectId, planId) {
 const { obj } = findAgentPlan(objectId, planId);
 if (!obj || !confirm('Убрать эти замеры, не добавляя их в объект?')) return;
+const had = obj.agentPlans.find(p => p.id === planId);
 obj.agentPlans = obj.agentPlans.filter(p => p.id !== planId);
 await saveCloudData();
+if (had && had.underlay) dropAgentPlanImage(planId);
 renderObjectDetail();
 }

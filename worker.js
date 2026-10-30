@@ -670,6 +670,27 @@ const handler = {
       const auth = await getAuthUser(request, env);
       if (!auth) return json({ error: "Требуется вход" }, 401);
 
+      // Подложка к замерам от ИИ-агента: страница берёт её при проверке замеров
+      // и удаляет, когда замеры добавлены или убраны
+      if (path === "/agent-plan-image" && (request.method === "GET" || request.method === "DELETE")) {
+        if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
+        if (!env.STORAGE) return json({ error: "Подложка недоступна" }, 501);
+        const id = url.searchParams.get("id") || "";
+        const key = AGENT_IMG_PREFIX + id;
+        if (request.method === "DELETE") {
+          if (/^ap_[0-9a-z_]+$/.test(id)) await env.STORAGE.delete([key]);
+          return json({ ok: true });
+        }
+        const record = await readBin(env);
+        const objects = auth.role !== "client" && auth.mode === "company"
+          ? ((record.companyData[auth.login] || {}).objects || [])
+          : record.objects;
+        const mine = (objects || []).some((o) => o && Array.isArray(o.agentPlans) && o.agentPlans.some((p) => p && p.id === id));
+        const image = mine ? await env.STORAGE.get(key) : null;
+        if (!image) return json({ error: "Подложка не найдена" }, 404);
+        return json({ image });
+      }
+
       // API-ключи мастера: список, создание (ключ показывается один раз), отзыв
       if (path === "/api-keys") {
         if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
@@ -2071,6 +2092,10 @@ function apiCorsHeaders() {
 
 const API_PLANS_MAX = 10;
 const API_PLAN_ROOMS_MAX = 60;
+// Подложка к замерам (картинка чертежа под планом): хранится отдельным ключом
+// хранилища, пока мастер не проверит замеры, — в данные объекта не попадает
+const API_UNDERLAY_MAX = 2000000; // символов data:URL, ~1,5 МБ картинки
+const AGENT_IMG_PREFIX = "agentimg:";
 
 // Инструкция для ИИ-агента: мастер копирует её вместе с ключом и отдаёт
 // своему агенту (ChatGPT, Claude и т. п.). Её же отдаёт GET /api/v1/help.
@@ -2114,6 +2139,11 @@ function apiGuide(base, key) {
   height_mm — высота проёма; для balcony ещё door_width_mm и door_height_mm.
   Дверь между помещениями укажи у обоих помещений.
 - Если чего-то не знаешь — не выдумывай: спроси мастера или напиши в warnings.
+- Подложка (по желанию) — картинка чертежа под планом, мастеру так проще сверять:
+  "underlay":{"image":"data:image/jpeg;base64,...","x_mm":-500,"y_mm":-800,"width_mm":12000}
+  image — PNG, JPEG или WEBP до 1,5 МБ (PDF — одну страницу, переведённую в картинку);
+  x_mm, y_mm — где на плане левый верхний угол картинки, width_mm — ширина картинки в мм плана
+  (высота — по пропорциям картинки). Совмести так, чтобы стены на картинке легли на контуры помещений.
 
 Как работать
 1. Спроси мастера, что нужно: какой объект, какие помещения и размеры, какие работы.
@@ -2140,7 +2170,19 @@ function apiPlan(body) {
     if (!hasPts && !hasWalls && !hasMeasure) return { error: `Помещение ${i + 1}: нужны углы pts (не меньше трёх точек)` };
   }
   const warnings = Array.isArray(body.warnings) ? body.warnings.map((w) => String(w).slice(0, 300)).slice(0, 30) : [];
-  return { plan: { rooms, warnings } };
+  let underlay = null;
+  const u = !Array.isArray(body) && body.underlay;
+  if (u) {
+    if (typeof u !== "object") return { error: "underlay: ожидается объект" };
+    const image = typeof u.image === "string" ? u.image : "";
+    if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image)) return { error: "underlay.image: нужна картинка data:image/png, jpeg или webp в base64" };
+    if (image.length > API_UNDERLAY_MAX) return { error: "underlay.image: картинка больше 1,5 МБ — уменьшите её" };
+    const num = (v) => (typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 1e6 ? v : null);
+    const x = num(u.x_mm), y = num(u.y_mm), w = num(u.width_mm);
+    if (x === null || y === null || !(w > 0)) return { error: "underlay: нужны x_mm, y_mm и width_mm (больше нуля) — в мм плана" };
+    underlay = { image, x: x / 1000, y: y / 1000, w: w / 1000 };
+  }
+  return { plan: { rooms, warnings }, underlay };
 }
 
 function apiObjectView(o) {
@@ -2261,7 +2303,7 @@ async function handleApi(request, env, url) {
     const id = decodeURIComponent(planPath[1]);
     const obj = (Array.isArray(space.data.objects) ? space.data.objects : []).find((o) => o && o.id === id);
     if (!obj) return apiJson({ error: "Объект не найден" }, 404);
-    const read = await readApiBody(request, 300000);
+    const read = await readApiBody(request, 300000 + API_UNDERLAY_MAX);
     if (read.error) return apiJson({ error: read.error }, read.status);
     const parsed = apiPlan(read.body);
     if (parsed.error) return apiJson({ error: parsed.error }, 400);
@@ -2274,6 +2316,12 @@ async function handleApi(request, env, url) {
       title: str(read.body && read.body.title, 100),
       ...parsed.plan,
     };
+    if (parsed.underlay) {
+      if (!env.STORAGE) return apiJson({ error: "Подложка сейчас недоступна" }, 501);
+      const { image, ...pos } = parsed.underlay;
+      await env.STORAGE.put(AGENT_IMG_PREFIX + plan.id, image);
+      plan.underlay = pos;
+    }
     obj.agentPlans = [...plans, plan];
     bumpRev(record, space.key, ["objects"]);
     touch();

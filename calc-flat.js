@@ -512,7 +512,12 @@ const vh = window.visualViewport ? window.visualViewport.height : window.innerHe
 const body = wrap.closest('.mp-body');
 // место от верха окна плана (страница прокручена в начало) до низа видимой части панели
 const bottom = body ? Math.min(vh, body.getBoundingClientRect().bottom) : vh;
-const room = Math.round(bottom - (wrap.getBoundingClientRect().top + (body ? body.scrollTop : 0)) - 12);
+// и под окном — подсказка и кнопки подложки: если они невысокие, им тоже место на экране
+const box = wrap.closest('.flat-viewbox');
+let below = 0;
+for (let el = box && box.nextElementSibling; el; el = el.nextElementSibling) below += el.offsetHeight + 8;
+let room = Math.round(bottom - (wrap.getBoundingClientRect().top + (body ? body.scrollTop : 0)) - 12);
+if (below && below <= 160 && room - below >= 240) room -= below;
 // (в правке, дверях и высотах под планом ещё джойстик — там как раньше)
 const fit = !flatEdit && !flatOpsMode && !flatHMode && room >= 240;
 const maxH = fit ? Math.min(room, Math.round(vh * 0.85)) : Math.round(vh * 0.68);

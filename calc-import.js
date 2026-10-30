@@ -979,7 +979,8 @@ if (old) { aiUpdateMeasure(old.measure, m); if (plan) old.plan = plan; updated++
 else { obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: m, ...(plan ? { plan } : {}) }); added++; }
 });
 // замеры от ИИ-агента добавлены — у объекта они больше не ждут (calc-apikeys.js)
-if (aiTarget.agentPlanId && Array.isArray(obj.agentPlans)) obj.agentPlans = obj.agentPlans.filter(p => p.id !== aiTarget.agentPlanId);
+const agentPlanId = aiTarget.agentPlanId;
+if (agentPlanId && Array.isArray(obj.agentPlans)) obj.agentPlans = obj.agentPlans.filter(p => p.id !== agentPlanId);
 const lastPlan = [...aiTarget.runs].reverse().find(r => r.plan);
 const ul = lastPlan && lastPlan.plan.underlay;
 if (ul && aiTarget.preview && aiTarget.preview.startsWith('data:image/')) {
@@ -993,6 +994,7 @@ saveUnderlayView(id, { ...ul, rot: 0, op: 0.5, hidden: false, locked: true });
 }
 closeAiReview();
 await saveCloudData();
+if (agentPlanId && typeof dropAgentPlanImage === 'function') dropAgentPlanImage(agentPlanId);
 renderInvoice();
 if (typeof currentObjectId !== 'undefined' && currentObjectId === obj.id) renderObjectDetail();
 showAddToast([updated ? `обновлено: ${updated}` : '', added ? `добавлено: ${added}` : ''].filter(Boolean).join(', ').replace(/^./, c => c.toUpperCase()) + ' — проверьте замеры');
