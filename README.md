@@ -42,8 +42,8 @@
 На сервере хранится только SHA-256 ключа; изменения — не больше 10 в минуту на ключ.
 
 ## Сервер через VPS
-У части провайдеров в России `*.workers.dev` заблокирован, поэтому страницы ходят к воркеру через nginx
-на VPS: `https://moysite.duckdns.org/price-api/…` → `https://price-api.nifork.workers.dev/…`.
+У части провайдеров в России `*.workers.dev` заблокирован, поэтому страницы на moysite.duckdns.org ходят к воркеру через nginx
+этого же VPS (на github.io — напрямую): `https://moysite.duckdns.org/price-api/…` → `https://price-api.nifork.workers.dev/…`.
 Кусок конфига nginx (в `server` для moysite.duckdns.org):
 
 ```nginx
