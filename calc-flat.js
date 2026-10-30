@@ -517,10 +517,12 @@ const box = wrap.closest('.flat-viewbox');
 let below = 0;
 for (let el = box && box.nextElementSibling; el; el = el.nextElementSibling) below += el.offsetHeight + 8;
 let room = Math.round(bottom - (wrap.getBoundingClientRect().top + (body ? body.scrollTop : 0)) - 12);
-if (below && below <= 160 && room - below >= 240) room -= below;
+// повёрнутый телефон: план сразу под шапкой и до низа экрана, всё остальное — ниже, прокруткой
+const wide = flatWideScreen();
+if (!wide && below && below <= 160 && room - below >= 240) room -= below;
 // (в правке, дверях и высотах под планом ещё джойстик — там как раньше)
-const fit = !flatEdit && !flatOpsMode && !flatHMode && room >= 240;
-const maxH = fit ? Math.min(room, Math.round(vh * 0.85)) : Math.round(vh * 0.68);
+const fit = wide ? room >= 150 : !flatEdit && !flatOpsMode && !flatHMode && room >= 240;
+const maxH = fit ? (wide ? room : Math.min(room, Math.round(vh * 0.85))) : Math.round(vh * 0.68);
 wrap.style.height = Math.max(200, Math.min(maxH, Math.ceil((wrap.clientWidth - 12) * vb.height / vb.width) + 14)) + 'px';
 const W = wrap.clientWidth - 12, H = wrap.clientHeight - 12;
 const base = Math.max(100, Math.min(W, H * vb.width / vb.height));
@@ -528,6 +530,17 @@ inner.style.width = Math.round(base * flatZoom) + 'px';
 inner.style.margin = '0 auto';
 flatBarsUpdate();
 }
+
+function flatWideScreen() {
+return !!(window.matchMedia && window.matchMedia('(orientation: landscape) and (max-height: 540px)').matches);
+}
+
+// Повернули телефон — окно плана под новый размер экрана
+let flatResizeTimer = null;
+window.addEventListener('resize', () => {
+clearTimeout(flatResizeTimer);
+flatResizeTimer = setTimeout(() => { if (flatObjectId) flatSizeInner(); }, 150);
+});
 
 // Полосы прокрутки снизу и справа: тянуть план целиком, когда он приближен
 // (пальцем по плану в правке двигаются комнаты, а не план)
@@ -790,9 +803,7 @@ if (!pick) return;
 showAddToast('Готовлю подложку…');
 const img = await fileToJpeg(file, 2000, pick.page);
 const id = flatUlId();
-try { localStorage.setItem(ulImgKey(id), img.dataUrl); }
-catch (e) { alert('Не хватает места на телефоне для подложки. Уберите подложки у комнат.'); return; }
-ulCache[id] = img.dataUrl;
+storeUnderlayImage(id, img.dataUrl);
 // по умолчанию — по центру плана; лист проекта обычно вдвое шире самого плана
 const all = flatItems().flatMap(r => r.pts);
 const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
@@ -2341,7 +2352,64 @@ openSheet('План квартиры', [
 { icon: '📏', label: 'Масштаб по стене', onClick: () => flatScaleStart() },
 { icon: '↕️', label: 'Высоты стен, окон и дверей', onClick: () => flatHStart() },
 ...(getUnderlay(flatUlId()) ? [{ icon: '👆', label: 'Комнаты с чертежа (без ИИ)', onClick: () => flatTapStart() }] : []),
+null,
+{ icon: '📤', label: flatPdfUnderlay() ? 'Отправить план в PDF (с подложкой)' : 'Отправить план в PDF', onClick: () => flatPlanPdf('share') },
+{ icon: '⬇️', label: flatPdfUnderlay() ? 'Скачать план в PDF (с подложкой)' : 'Скачать план в PDF', onClick: () => flatPlanPdf('download') },
 ]);
+}
+
+/* ---------- план квартиры в PDF ---------- */
+// Весь план одним листом A4 — как на экране, с подложкой, если она показана
+// (скрытая подложка в PDF не попадает). Лист ложится по форме плана:
+// широкий план — альбомный, высокий — книжный.
+function flatPdfUnderlay() {
+const u = getUnderlay(flatUlId());
+return u && !u.hidden ? u : null;
+}
+
+async function flatPlanPdf(mode) {
+const obj = flatObj();
+const items = flatItems();
+if (!obj || !items.length) { showAddToast('На плане пока нет помещений'); return; }
+showAddToast('Готовлю PDF плана…');
+try {
+const u = flatPdfUnderlay();
+const ul = u ? { ...u, href: u.src } : null;
+const v = flatViewOf(items);
+const land = v.w > v.h;
+const W = land ? 297 : 210, H = land ? 210 : 297, M = 10, head = 18;
+const total = items.reduce((a, r) => a + flatPolyArea(r.pts), 0);
+const info = plObjectInfo(obj);
+const line1 = [info.object, info.address].filter(Boolean).join(' · ') || 'План квартиры';
+const line2 = [`Площадь ${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²`, info.client ? `заказчик ${info.client}` : '', info.company, info.date].filter(Boolean).join(' · ');
+const plan = flatSvg(items, { view: v, underlay: ul }).replace('<svg class="flat-svg"', `<svg x="${M}" y="${M + head}" width="${W - 2 * M}" height="${H - 2 * M - head}" preserveAspectRatio="xMidYMid meet"`);
+const dpi = 200, wPx = Math.round(W / 25.4 * dpi), hPx = Math.round(H / 25.4 * dpi);
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${wPx}" height="${hPx}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#fff"/>
+<text x="${M}" y="${M + 6}" font-size="6" font-family="Arial, sans-serif" font-weight="700" fill="#14181f">${escapeHtml(line1)}</text>
+<text x="${M}" y="${M + 13}" font-size="4" font-family="Arial, sans-serif" fill="#5a6470">${escapeHtml(line2)}</text>
+${plan}</svg>`;
+const img = new Image();
+img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+await img.decode();
+const canvas = document.createElement('canvas');
+canvas.width = wPx; canvas.height = hPx;
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, wPx, hPx);
+ctx.drawImage(img, 0, 0, wPx, hPx);
+const { jsPDF } = window.jspdf;
+const pdf = new jsPDF(land ? 'l' : 'p', 'mm', 'a4');
+pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, W, H, undefined, 'FAST');
+const safe = String(obj.name || 'kvartira').replace(/[^\wа-яё\- ]+/gi, '').trim().replace(/\s+/g, '_');
+const fileName = `Plan_${safe || 'kvartira'}.pdf`;
+const pdfBlob = pdf.output('blob');
+const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
+if (mode === 'share' && navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ title: 'План квартиры', files: [file] });
+else triggerFileDownload(pdfBlob, fileName);
+} catch (err) {
+if (err && err.name === 'AbortError') return;
+console.error('План в PDF:', err);
+alert('Не удалось собрать PDF плана: ' + (err && err.message ? err.message : err));
+}
 }
 
 // «Показать стену»: следующее нажатие на чертеже — образец стены

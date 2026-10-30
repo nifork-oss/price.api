@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261030-5. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261030-6. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=d3c2f769">
+<link rel="stylesheet" href="calc.css?v=db12d19e">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -62,7 +62,7 @@
 </div>
 <div class="form-group">
 <label>Пароль</label>
-<input type="password" id="passInput" placeholder="••••••••" autocomplete="current-password">
+<input type="password" id="passInput" placeholder="••••••••" autocomplete="current-password" onkeydown="if (event.key === 'Enter') handleLogin(document.getElementById('loginBtn'))">
 </div>
 <div class="form-group">
 <label>Войти как</label>
@@ -71,7 +71,7 @@
 <button type="button" id="loginModeCompanyBtn" class="role-toggle-btn" onclick="setLoginMode('company')">Своя компания</button>
 </div>
 </div>
-<button type="button" class="btn btn-primary" onclick="handleLogin()">Войти</button>
+<button type="button" class="btn btn-primary" id="loginBtn" onclick="handleLogin(this)">Войти</button>
 <div id="authError" style="color:#b23a26; font-size:12px; margin-top:10px; display:none; font-weight: 500;">Неверный логин/email или пароль</div>
 <div style="display: flex; justify-content: space-between; margin-top: 12px; gap: 8px;">
 <span class="link-text" onclick="switchAuthMode('recovery')">Забыли пароль?</span>
@@ -101,7 +101,7 @@
 <label>Пароль</label>
 <input type="password" id="regPassInput" placeholder="••••••••">
 </div>
-<button type="button" class="btn btn-success" onclick="handleRegister()">Зарегистрироваться</button>
+<button type="button" class="btn btn-success" onclick="handleRegister(this)">Зарегистрироваться</button>
 <div id="regError" style="color:#b23a26; font-size:12px; margin-top:10px; display:none; font-weight: 500;"></div>
 <div>
 <span class="link-text" onclick="switchAuthMode('login')">← Уже есть аккаунт? Войти</span>
@@ -665,12 +665,12 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=a964aa81"></script>
+<script src="calc-app.js?v=e3dc2bf6"></script>
 <script src="calc-geo.js?v=7519180b"></script>
 
 <script src="calc-measure.js?v=b19af441"></script>
 
-<script src="calc-rooms.js?v=e3ed2e59"></script>
+<script src="calc-rooms.js?v=b4301ec4"></script>
 <script src="calc-wpview.js?v=ec762275"></script>
 
 <script src="calc-ruler.js?v=39bf04eb"></script>
@@ -699,11 +699,11 @@
 
 <script src="calc-plan.js?v=52b816b0"></script>
 
-<script src="calc-flat.js?v=2f9b1c97"></script>
+<script src="calc-flat.js?v=2c28b018"></script>
 <script src="calc-plangeo.js?v=805ef3a4"></script>
-<script src="calc-import.js?v=f107e5c0"></script>
+<script src="calc-import.js?v=952c6c73"></script>
 <script src="calc-planfile.js?v=a5486996"></script>
-<script src="calc-apikeys.js?v=39070634"></script>
+<script src="calc-apikeys.js?v=ad74b417"></script>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
 <div class="update-banner-text">Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>

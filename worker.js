@@ -691,6 +691,46 @@ const handler = {
         return json({ image });
       }
 
+      // Подложки планов (картинка и положение) — в облаке, чтобы были на любом
+      // устройстве мастера. Отдельно от данных кабинета: картинки большие,
+      // а двигают подложку часто — версию данных это не трогает.
+      if (path === "/underlay" && ["GET", "PUT", "DELETE"].includes(request.method)) {
+        if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
+        if (!env.STORAGE) return json({ error: "Подложки в облаке недоступны" }, 501);
+        const id = url.searchParams.get("id") || "";
+        if (!/^[\w-]{1,100}$/.test(id)) return json({ error: "Неверный id" }, 400);
+        const space = auth.mode === "company" ? COMPANY_PREFIX + auth.login : "main";
+        const metaKey = UNDERLAY_PREFIX + space + ":" + id;
+        const imgKey = UNDERLAY_IMG_PREFIX + space + ":" + id;
+        if (request.method === "DELETE") {
+          await env.STORAGE.delete([metaKey, imgKey]);
+          return json({ ok: true });
+        }
+        if (request.method === "GET") {
+          const meta = await env.STORAGE.get(metaKey);
+          if (!meta) return json({ view: null });
+          if (url.searchParams.get("img") === "1") return json({ image: (await env.STORAGE.get(imgKey)) || null });
+          return json(meta);
+        }
+        const raw = await request.text();
+        if (raw.length > UNDERLAY_MAX + 20000) return json({ error: "Подложка слишком большая" }, 413);
+        let body;
+        try { body = JSON.parse(raw); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        const view = body && body.view;
+        if (!view || typeof view !== "object" || Array.isArray(view) || JSON.stringify(view).length > 2000) return json({ error: "Неверное положение подложки" }, 400);
+        const old = await env.STORAGE.get(metaKey);
+        const image = body.image;
+        if (image !== undefined && !(typeof image === "string" && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image) && image.length <= UNDERLAY_MAX)) {
+          return json({ error: "Подложка: нужна картинка PNG, JPEG или WEBP до 1,4 МБ" }, 400);
+        }
+        if (!image && !old) return json({ error: "Сначала нужна картинка подложки" }, 400);
+        const at = Number(body.at) > 0 ? Number(body.at) : Date.now();
+        const meta = { view, at, imgAt: image ? Date.now() : old.imgAt };
+        if (image) await env.STORAGE.put(imgKey, image);
+        await env.STORAGE.put(metaKey, meta);
+        return json(meta);
+      }
+
       // API-ключи мастера: список, создание (ключ показывается один раз), отзыв
       if (path === "/api-keys") {
         if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
@@ -698,7 +738,8 @@ const handler = {
         const user = record.users.find((u) => u.login === auth.login);
         if (!user) return json({ error: "Пользователь не найден" }, 404);
         const list = () => (Array.isArray(user.apiKeys) ? user.apiKeys : []).map(apiKeyView);
-        if (request.method === "GET") return json({ keys: list() });
+        // guide — инструкция без ключа: страница подставит ключ, если мастер его сохранил
+        if (request.method === "GET") return json({ keys: list(), guide: apiGuide(url.origin) });
         if (request.method === "POST") {
           let body;
           try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
@@ -2030,7 +2071,35 @@ function apiServices(services) {
 // Позиции сметы из запроса. Позицию можно взять из прайса (service —
 // точное название услуги; цену и название подставит сервер) или задать
 // целиком: name, price. Количество qty обязательно, unit — по желанию.
-function apiItems(rawItems, services) {
+// Объём по помещениям объекта: страница при сохранении пишет в каждое
+// помещение посчитанные поверхности (room.surfaces), их и суммируем
+function apiRoomQty(it, n, rooms, unitOf) {
+  const surface = typeof it.surface === "string" ? it.surface.trim() : "";
+  const ids = Array.isArray(it.room_ids) ? it.room_ids.map(String) : [];
+  if (!surface && !ids.length) return null;
+  if (!surface || !ids.length) return { error: `Пункт ${n}: для объёма по помещениям нужны и surface, и room_ids` };
+  if (!rooms) return { error: `Пункт ${n}: объём по помещениям — только для сметы с objectId` };
+  const parts = [];
+  let unit = "";
+  for (const id of ids.slice(0, 60)) {
+    const room = rooms.find((r) => r && r.id === id);
+    if (!room) return { error: `Пункт ${n}: в объекте нет помещения ${id.slice(0, 60)}` };
+    const sf = room.surfaces && room.surfaces[surface];
+    if (!sf || !(Number(sf.v) > 0)) return { error: `Пункт ${n}: у помещения «${apiRoomName(room)}» нет поверхности ${surface.slice(0, 40)} (смотрите surfaces в GET /objects/<id>)` };
+    unit = sf.u || unit;
+    let qty = Math.round(Number(sf.v) * 1000) / 1000;
+    if (unit === "пог. м") qty = Math.max(1, qty);
+    parts.push({ roomId: room.id, name: apiRoomName(room), qty });
+  }
+  const qty = Math.round(parts.reduce((a, p) => a + p.qty, 0) * 1000) / 1000;
+  return { qty, unit: unitOf || unit, surface, rooms: parts, location: parts.map((p) => p.name).join(", ") };
+}
+
+function apiRoomName(room) {
+  return String((room && room.measure && room.measure.room) || "Помещение");
+}
+
+function apiItems(rawItems, services, rooms) {
   if (!Array.isArray(rawItems) || rawItems.length === 0) return { error: "Нужен хотя бы один пункт в items" };
   if (rawItems.length > API_ITEMS_MAX) return { error: `Не больше ${API_ITEMS_MAX} пунктов в смете` };
   const priceList = apiServices(services);
@@ -2051,11 +2120,13 @@ function apiItems(rawItems, services) {
     if (!name) return { error: `Пункт ${n}: укажите name или service` };
     price = Number(price);
     if (!Number.isFinite(price) || price < 0 || price > 1e9) return { error: `Пункт ${n}: неверная цена price` };
-    const qty = Number(it.qty);
+    const byRooms = apiRoomQty(it, n, rooms, typeof it.unit === "string" && it.unit.trim() ? it.unit.trim().slice(0, 20) : "");
+    if (byRooms && byRooms.error) return { error: byRooms.error };
+    const qty = byRooms ? byRooms.qty : Number(it.qty);
     if (!Number.isFinite(qty) || qty <= 0 || qty > 1e7) return { error: `Пункт ${n}: неверное количество qty` };
-    const unit = typeof it.unit === "string" && it.unit.trim() ? it.unit.trim().slice(0, 20) : API_DEFAULT_UNIT;
-    const location = typeof it.location === "string" ? it.location.trim().slice(0, 200) : "";
-    items.push({ name: name.slice(0, 300), price, qty, unit, location });
+    const unit = byRooms && byRooms.unit ? byRooms.unit : typeof it.unit === "string" && it.unit.trim() ? it.unit.trim().slice(0, 20) : API_DEFAULT_UNIT;
+    const location = typeof it.location === "string" && it.location.trim() ? it.location.trim().slice(0, 200) : byRooms ? byRooms.location.slice(0, 200) : "";
+    items.push({ name: name.slice(0, 300), price, qty, unit, location, ...(byRooms ? { surface: byRooms.surface, rooms: byRooms.rooms } : {}) });
   }
   return { items };
 }
@@ -2069,7 +2140,10 @@ function apiRecordView(rec, site) {
     address: rec.address || "",
     note: rec.note || "",
     total: Number(rec.total) || 0,
-    items: (rec.items || []).map((i) => ({ name: i.name, price: i.price, qty: i.qty, unit: i.unit, location: i.location || "" })),
+    items: (rec.items || []).map((i) => ({ name: i.name, price: i.price, qty: i.qty, unit: i.unit, location: i.location || "",
+      ...(i.surface && Array.isArray(i.rooms) ? { surface: i.surface, room_ids: i.rooms.map((r) => r.roomId) } : {}) })),
+    objectId: rec.objectId || "",
+    editable: rec.source === "api",
     url: site && !rec.shareDisabled ? `${site}view.html?id=${encodeURIComponent(rec.id)}` : null,
   };
 }
@@ -2085,7 +2159,7 @@ function apiJson(data, status = 200) {
 function apiCorsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, X-API-Key",
   };
 }
@@ -2096,6 +2170,10 @@ const API_PLAN_ROOMS_MAX = 60;
 // хранилища, пока мастер не проверит замеры, — в данные объекта не попадает
 const API_UNDERLAY_MAX = 2000000; // символов data:URL, ~1,5 МБ картинки
 const AGENT_IMG_PREFIX = "agentimg:";
+// Подложки планов мастера: положение (ul:) и картинка (ulimg:) по пространству и id плана
+const UNDERLAY_PREFIX = "ul:";
+const UNDERLAY_IMG_PREFIX = "ulimg:";
+const UNDERLAY_MAX = 1900000; // символов data:URL
 
 // Инструкция для ИИ-агента: мастер копирует её вместе с ключом и отдаёт
 // своему агенту (ChatGPT, Claude и т. п.). Её же отдаёт GET /api/v1/help.
@@ -2111,7 +2189,14 @@ function apiGuide(base, key) {
 Что можно делать
 - GET /api/v1/services — прайс мастера: [{name, price, category}].
 - GET /api/v1/objects — объекты: [{id, name, client, address, rooms:[{id, name}], pendingPlans}].
+- GET /api/v1/objects/<id> — объект подробно: rooms:[{id, name, height_m, surfaces}] — surfaces это уже
+  посчитанные калькулятором объёмы помещения: {"walls":{"value":37.3,"unit":"м²","label":"Стены"},
+  "ceiling":{...}, "slopes":{...}, ...}; pendingPlans — присланные замеры, которые мастер ещё не проверил.
+  Если у помещения surfaces пустой — попроси мастера открыть объект на сайте и сохранить замер.
 - POST /api/v1/objects — создать объект: {"name":"Квартира на Ленина 5","client":"Иван","address":"..."} → {id, ...}.
+- PATCH /api/v1/objects/<id> — поправить name, client, address, access, materials (только у объектов, созданных через API).
+- DELETE /api/v1/objects/<id> — удалить свой объект, пока в нём нет помещений и смет.
+- DELETE /api/v1/objects/<id>/plans/<planId> — забрать присланные замеры, пока мастер их не проверил.
 - POST /api/v1/objects/<id>/plans — прислать замеры помещений объекта (формат ниже). Мастер увидит их
   у объекта («План от ИИ-агента»), проверит на экране проверки и добавит в замеры. Сразу в замеры они не попадают.
 - GET /api/v1/estimates[?docType=estimate|invoice] — последние 50 смет и счетов.
@@ -2123,7 +2208,14 @@ function apiGuide(base, key) {
             {"name":"Вынос мусора","price":3000,"qty":1,"unit":"усл."}]}
   service — точное название услуги из прайса (цену подставит сервер); или name + price для своей позиции.
   unit — одно из: м², пог. м, шт., компл., час, усл. (по умолчанию м²). docType "invoice" — счёт вместо сметы.
+  Объём можно не считать самому, а взять из помещений объекта (нужен objectId):
+   {"service":"Шпаклёвка стен","surface":"walls","room_ids":["<id помещения>","<id помещения>"]}
+   — qty и unit подставит сервер (сумма surfaces.walls этих помещений), location — названия помещений.
   Ответ: {id, total, url} — url это ссылка на смету для заказчика.
+- PATCH /api/v1/estimates/<id> — изменить смету, созданную через API: любые из client, address, note,
+  docType, objectId, items (items заменяются целиком). Ответ — смета с новым total.
+- DELETE /api/v1/estimates/<id> — удалить смету, созданную через API.
+  Сметы, которые мастер сделал на сайте, через API только читаются (editable: false).
 
 Формат замеров (POST /api/v1/objects/<id>/plans)
 Все помещения — в одной системе координат, в миллиметрах, целыми числами: (0,0) — верхний левый угол
@@ -2148,9 +2240,10 @@ function apiGuide(base, key) {
 Как работать
 1. Спроси мастера, что нужно: какой объект, какие помещения и размеры, какие работы.
 2. Найди объект (GET /objects) или создай новый; замеры пришли в /objects/<id>/plans.
-3. Работы бери из прайса (GET /services). Объём считай по замерам (площадь стен за вычетом проёмов,
-   потолка, периметр и т. п.) и покажи мастеру расчёт, прежде чем создавать смету.
-4. Создай смету (POST /estimates) и отдай мастеру ссылку url.
+3. Работы бери из прайса (GET /services). Объём бери из surfaces помещений (GET /objects/<id>), а если
+   помещений ещё нет — считай по замерам. Покажи мастеру расчёт, прежде чем создавать смету.
+4. Создай смету (POST /estimates) и отдай мастеру ссылку url. Мастер просит поправить — PATCH той же сметы,
+   а не новая смета.
 Ошибки приходят как {"error":"..."} с понятным текстом — исправь запрос по нему.`;
 }
 
@@ -2183,6 +2276,32 @@ function apiPlan(body) {
     underlay = { image, x: x / 1000, y: y / 1000, w: w / 1000 };
   }
   return { plan: { rooms, warnings }, underlay };
+}
+
+// Объект подробно: помещения с посчитанными поверхностями и ждущие проверки замеры
+function apiObjectDetail(o) {
+  const surfaces = (r) => {
+    const out = {};
+    Object.entries(r.surfaces && typeof r.surfaces === "object" ? r.surfaces : {}).forEach(([k, v]) => {
+      if (v && Number(v.v) > 0) out[k] = { value: Number(v.v), unit: v.u || "", label: v.l || k };
+    });
+    return out;
+  };
+  return {
+    ...apiObjectView(o),
+    access: o.access || "",
+    materials: o.materials || "",
+    editable: o.source === "api",
+    rooms: (Array.isArray(o.rooms) ? o.rooms : []).filter((r) => r && r.measure).map((r) => ({
+      id: r.id,
+      name: apiRoomName(r),
+      height_m: Number(String(r.measure.height || "").replace(",", ".")) || null,
+      surfaces: surfaces(r),
+    })),
+    pendingPlans: (Array.isArray(o.agentPlans) ? o.agentPlans : []).map((p) => ({
+      id: p.id, title: p.title || "", from: p.from || "", at: p.at, rooms: (p.rooms || []).map((r) => (r && r.name) || "Помещение"),
+    })),
+  };
 }
 
 function apiObjectView(o) {
@@ -2251,15 +2370,26 @@ async function handleApi(request, env, url) {
     return apiJson(apiRecordView(rec, entry.site));
   }
 
+  // В общем кабинете мастер видит только свои объекты (как на сайте)
+  const visibleObjects = () => {
+    const space = apiSpace(record, user, entry, false);
+    const objects = (Array.isArray(space.data.objects) ? space.data.objects : []).filter(Boolean);
+    if (space.key !== "main" || user.role === "admin" || user.login === "admin") return objects;
+    return objects.filter((o) => Array.isArray(o.visibleTo) && o.visibleTo.includes(user.login));
+  };
+  const findObject = (id) => visibleObjects().find((o) => o.id === id) || null;
+
   if (path === "/api/v1/objects" && request.method === "GET") {
     await touchIfOld();
-    const space = apiSpace(record, user, entry, false);
-    let objects = Array.isArray(space.data.objects) ? space.data.objects : [];
-    // В общем кабинете мастер видит только свои объекты (как на сайте)
-    if (space.key === "main" && user.role !== "admin" && user.login !== "admin") {
-      objects = objects.filter((o) => o && Array.isArray(o.visibleTo) && o.visibleTo.includes(user.login));
-    }
-    return apiJson({ objects: objects.filter(Boolean).map(apiObjectView) });
+    return apiJson({ objects: visibleObjects().map(apiObjectView) });
+  }
+
+  const objPath = path.match(/^\/api\/v1\/objects\/([^/]+)$/);
+  if (objPath && request.method === "GET") {
+    await touchIfOld();
+    const obj = findObject(decodeURIComponent(objPath[1]));
+    if (!obj) return apiJson({ error: "Объект не найден" }, 404);
+    return apiJson(apiObjectDetail(obj));
   }
 
   // Изменения через API: не чаще 10 в минуту на ключ. Каждое повышает версию
@@ -2300,8 +2430,7 @@ async function handleApi(request, env, url) {
   if (planPath && request.method === "POST") {
     if (await limited()) return apiJson({ error: "Не больше 10 изменений в минуту на один ключ" }, 429);
     const space = apiSpace(record, user, entry, false);
-    const id = decodeURIComponent(planPath[1]);
-    const obj = (Array.isArray(space.data.objects) ? space.data.objects : []).find((o) => o && o.id === id);
+    const obj = findObject(decodeURIComponent(planPath[1]));
     if (!obj) return apiJson({ error: "Объект не найден" }, 404);
     const read = await readApiBody(request, 300000 + API_UNDERLAY_MAX);
     if (read.error) return apiJson({ error: read.error }, read.status);
@@ -2336,11 +2465,11 @@ async function handleApi(request, env, url) {
     const body = read.body;
     if (!body || typeof body !== "object") return apiJson({ error: "Тело запроса — не JSON" }, 400);
     const space = apiSpace(record, user, entry, true);
-    const parsed = apiItems(body.items, space.data.services);
-    if (parsed.error) return apiJson({ error: parsed.error }, 400);
-    const objects = Array.isArray(space.data.objects) ? space.data.objects : [];
     const objectId = str(body.objectId, 100);
-    if (objectId && !objects.some((o) => o && o.id === objectId)) return apiJson({ error: "Объект objectId не найден" }, 400);
+    const estObj = objectId ? findObject(objectId) : null;
+    if (objectId && !estObj) return apiJson({ error: "Объект objectId не найден" }, 400);
+    const parsed = apiItems(body.items, space.data.services, estObj ? estObj.rooms || [] : null);
+    if (parsed.error) return apiJson({ error: parsed.error }, 400);
     const total = Math.round(parsed.items.reduce((s, i) => s + i.qty * i.price, 0) * 100) / 100;
     const rec = {
       id: "inv_" + Date.now() + "_" + randomHex(6),
@@ -2363,6 +2492,95 @@ async function handleApi(request, env, url) {
     touch();
     await writeBin(env, record);
     return apiJson(apiRecordView(rec, entry.site), 201);
+  }
+
+  // Править и удалять агент может только то, что создано через API:
+  // сметы и объекты мастера, сделанные на сайте, ему только для чтения
+  const notOwn = "Через API можно менять только то, что создано через API — остальное мастер правит на сайте";
+
+  const estPath = path.match(/^\/api\/v1\/estimates\/([^/]+)$/);
+  if (estPath && (request.method === "PATCH" || request.method === "DELETE")) {
+    if (await limited()) return apiJson({ error: "Не больше 10 изменений в минуту на один ключ" }, 429);
+    const space = apiSpace(record, user, entry, false);
+    const history = Array.isArray(space.data.history) ? space.data.history : [];
+    const id = decodeURIComponent(estPath[1]);
+    const rec = history.find((r) => r && String(r.id) === id);
+    if (!rec) return apiJson({ error: "Смета не найдена" }, 404);
+    if (rec.source !== "api") return apiJson({ error: notOwn }, 403);
+    if (request.method === "DELETE") {
+      space.data.history = history.filter((r) => r !== rec);
+    } else {
+      const read = await readApiBody(request, 200000);
+      if (read.error) return apiJson({ error: read.error }, read.status);
+      const body = read.body;
+      if (!body || typeof body !== "object") return apiJson({ error: "Тело запроса — не JSON" }, 400);
+      if ("objectId" in body) {
+        const objectId = str(body.objectId, 100);
+        if (objectId && !findObject(objectId)) return apiJson({ error: "Объект objectId не найден" }, 400);
+        rec.objectId = objectId;
+      }
+      if ("items" in body) {
+        const estObj = rec.objectId ? findObject(rec.objectId) : null;
+        const parsed = apiItems(body.items, space.data.services, estObj ? estObj.rooms || [] : null);
+        if (parsed.error) return apiJson({ error: parsed.error }, 400);
+        rec.items = parsed.items;
+        rec.total = Math.round(parsed.items.reduce((a, i) => a + i.qty * i.price, 0) * 100) / 100;
+      }
+      ["client", "address"].forEach((k) => { if (k in body) rec[k] = str(body[k], k === "address" ? 300 : 200); });
+      if ("note" in body) rec.note = str(body.note, 2000);
+      if (body.docType === "invoice" || body.docType === "estimate") rec.docType = body.docType;
+    }
+    bumpRev(record, space.key, ["history"]);
+    touch();
+    await writeBin(env, record);
+    return request.method === "DELETE" ? apiJson({ ok: true }) : apiJson(apiRecordView(rec, entry.site));
+  }
+
+  if (objPath && (request.method === "PATCH" || request.method === "DELETE")) {
+    if (await limited()) return apiJson({ error: "Не больше 10 изменений в минуту на один ключ" }, 429);
+    const space = apiSpace(record, user, entry, false);
+    const obj = findObject(decodeURIComponent(objPath[1]));
+    if (!obj) return apiJson({ error: "Объект не найден" }, 404);
+    if (obj.source !== "api") return apiJson({ error: notOwn }, 403);
+    if (request.method === "DELETE") {
+      // Объект с помещениями или сметами мастер уже начал вести — удаляет только он
+      const used = (Array.isArray(obj.rooms) && obj.rooms.length) || (space.data.history || []).some((r) => r && r.objectId === obj.id);
+      if (used) return apiJson({ error: "У объекта уже есть помещения или сметы — удалить его может только мастер на сайте" }, 409);
+      const images = (obj.agentPlans || []).filter((p) => p && p.underlay).map((p) => AGENT_IMG_PREFIX + p.id);
+      if (images.length && env.STORAGE) await env.STORAGE.delete(images);
+      space.data.objects = space.data.objects.filter((o) => o !== obj);
+    } else {
+      const read = await readApiBody(request, 20000);
+      if (read.error) return apiJson({ error: read.error }, read.status);
+      const body = read.body || {};
+      if ("name" in body) {
+        const name = str(body.name, 200);
+        if (!name) return apiJson({ error: "Название объекта name не может быть пустым" }, 400);
+        obj.name = name;
+      }
+      [["client", 200], ["address", 300], ["access", 1000], ["materials", 3000]].forEach(([k, max]) => { if (k in body) obj[k] = str(body[k], max); });
+    }
+    bumpRev(record, space.key, ["objects"]);
+    touch();
+    await writeBin(env, record);
+    return request.method === "DELETE" ? apiJson({ ok: true }) : apiJson(apiObjectDetail(obj));
+  }
+
+  const onePlan = path.match(/^\/api\/v1\/objects\/([^/]+)\/plans\/([^/]+)$/);
+  if (onePlan && request.method === "DELETE") {
+    if (await limited()) return apiJson({ error: "Не больше 10 изменений в минуту на один ключ" }, 429);
+    const space = apiSpace(record, user, entry, false);
+    const obj = findObject(decodeURIComponent(onePlan[1]));
+    if (!obj) return apiJson({ error: "Объект не найден" }, 404);
+    const id = decodeURIComponent(onePlan[2]);
+    const plan = (obj.agentPlans || []).find((p) => p && p.id === id);
+    if (!plan) return apiJson({ error: "Замеры не найдены — возможно, мастер их уже проверил" }, 404);
+    obj.agentPlans = obj.agentPlans.filter((p) => p !== plan);
+    if (plan.underlay && env.STORAGE) await env.STORAGE.delete(AGENT_IMG_PREFIX + plan.id);
+    bumpRev(record, space.key, ["objects"]);
+    touch();
+    await writeBin(env, record);
+    return apiJson({ ok: true });
   }
 
   return apiJson({ error: "Not found" }, 404);
