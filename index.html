@@ -462,7 +462,9 @@ body.price-unsaved #saveCloudBtn { box-shadow: 0 0 0 3px var(--s-ink); }
 </div>
 
 <script>
-const WORKER_URL = "https://price-api.nifork.workers.dev";
+// Сервер — через VPS (moysite.duckdns.org/price-api/ → price-api.nifork.workers.dev):
+// у части провайдеров в России адрес workers.dev заблокирован
+const WORKER_URL = "https://moysite.duckdns.org/price-api";
 // Версия данных с сервера — защищает от перезаписи чужих изменений.
 let cloudRev = null;
 

@@ -249,7 +249,9 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 <script src="calc-mask.js?v=5a581f09"></script>
 <script src="calc-wpview.js?v=ec762275"></script>
 <script>
-const WORKER_URL = "https://price-api.nifork.workers.dev";
+// Сервер — через VPS (moysite.duckdns.org/price-api/ → price-api.nifork.workers.dev):
+// у части провайдеров в России адрес workers.dev заблокирован
+const WORKER_URL = "https://moysite.duckdns.org/price-api";
 
 function escapeHtml(str) {
 return String(str ?? '')

@@ -41,6 +41,25 @@
 `POST /objects/<id>/plans` (замеры — ждут проверки мастером), `GET|POST /estimates`, `GET /estimates/<id>`.
 На сервере хранится только SHA-256 ключа; изменения — не больше 10 в минуту на ключ.
 
+## Сервер через VPS
+У части провайдеров в России `*.workers.dev` заблокирован, поэтому страницы ходят к воркеру через nginx
+на VPS: `https://moysite.duckdns.org/price-api/…` → `https://price-api.nifork.workers.dev/…`.
+Кусок конфига nginx (в `server` для moysite.duckdns.org):
+
+```nginx
+location /price-api/ {
+    proxy_pass https://price-api.nifork.workers.dev/;
+    proxy_ssl_server_name on;
+    proxy_set_header Host price-api.nifork.workers.dev;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_buffering off;          # ответы нейросети идут потоком
+    proxy_read_timeout 300s;
+    client_max_body_size 25m;     # фото отчётов и планы
+}
+```
+
+Воркер верит `X-Real-IP` только от адреса VPS (`TRUSTED_PROXY_IPS` в `worker.js`) — для ограничения попыток входа.
+
 ## Проверки
 - `tests/` — автопроверки расчётов замера (площади, чертёж, подправка плана, подиумы и короба) и помощника.
   Запуск из корня: `node --test`. На GitHub они идут сами при каждом PR.
