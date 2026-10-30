@@ -20,7 +20,7 @@ function memoryStorage(initial) {
     async get(k) { return Array.isArray(k) ? new Map(k.map(x => [x, copy(map.get(x))])) : copy(map.get(k)); },
     async put(k, v) { const obj = typeof k === 'string' ? { [k]: v } : k; for (const [key, val] of Object.entries(obj)) map.set(key, copy(val)); },
     async list({ prefix }) { return new Map([...map].filter(([k]) => k.startsWith(prefix)).map(([k, v]) => [k, copy(v)])); },
-    async delete(keys) { for (const k of keys) map.delete(k); },
+    async delete(keys) { for (const k of [].concat(keys)) map.delete(k); },
   };
 }
 
@@ -152,4 +152,27 @@ test('API открыт для любых сайтов (CORS), инструкци
   // остальной сайт — по-прежнему только свои адреса
   const other = await call('GET', '/public', { origin: 'https://example.com' });
   assert.notStrictEqual(other.headers.get('Access-Control-Allow-Origin'), '*');
+});
+
+test('подложка к замерам: хранится отдельно, отдаётся только своему мастеру и удаляется', async () => {
+  const { env, call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const obj = await call('POST', '/api/v1/objects', { key, body: { name: 'Квартира' } });
+  const rooms = [{ name: 'Кухня', pts: [[0, 0], [3000, 0], [3000, 2500], [0, 2500]] }];
+  const bad = await call('POST', `/api/v1/objects/${obj.data.id}/plans`, { key, body: { rooms, underlay: { image: 'http://x/1.png', x_mm: 0, y_mm: 0, width_mm: 5000 } } });
+  assert.strictEqual(bad.status, 400);
+  const noPos = await call('POST', `/api/v1/objects/${obj.data.id}/plans`, { key, body: { rooms, underlay: { image: 'data:image/png;base64,AAAA', width_mm: 5000 } } });
+  assert.strictEqual(noPos.status, 400);
+  const plan = await call('POST', `/api/v1/objects/${obj.data.id}/plans`, { key, body: { rooms, underlay: { image: 'data:image/png;base64,AAAA', x_mm: -500, y_mm: 250, width_mm: 5000 } } });
+  assert.strictEqual(plan.status, 201);
+  const page = await call('GET', '/appdata', { token });
+  const saved = page.data.data.objects[0].agentPlans[0];
+  assert.deepStrictEqual(saved.underlay, { x: -0.5, y: 0.25, w: 5 });
+  assert.ok(!JSON.stringify(page.data).includes('AAAA'), 'картинка не лежит в данных объекта');
+  const img = await call('GET', '/agent-plan-image?id=' + plan.data.id, { token });
+  assert.strictEqual(img.data.image, 'data:image/png;base64,AAAA');
+  const other = await call('POST', '/register', { body: { login: 'petr', email: 'p@x.ru', password: 'pw', mode: 'company' } });
+  assert.strictEqual((await call('GET', '/agent-plan-image?id=' + plan.data.id, { token: other.data.token })).status, 404);
+  await call('DELETE', '/agent-plan-image?id=' + plan.data.id, { token });
+  assert.strictEqual(env.STORAGE.map.has('agentimg:' + plan.data.id), false);
 });
