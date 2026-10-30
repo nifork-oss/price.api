@@ -189,8 +189,16 @@ async function isRateLimited(limiter, key) {
   }
 }
 
+// Сайт ходит к воркеру через nginx на VPS (workers.dev у части провайдеров
+// заблокирован), поэтому для запросов с адреса VPS настоящий адрес
+// человека берём из X-Real-IP, который ставит nginx. Подделать его извне
+// нельзя: CF-Connecting-IP задаёт сам Cloudflare.
+const TRUSTED_PROXY_IPS = ["163.5.215.195"];
+
 function clientIp(request) {
-  return request.headers.get("CF-Connecting-IP") || "unknown";
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const real = (request.headers.get("X-Real-IP") || "").trim();
+  return TRUSTED_PROXY_IPS.includes(ip) && real ? real : ip;
 }
 
 function tooManyRequests() {

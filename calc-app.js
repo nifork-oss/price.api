@@ -1,7 +1,9 @@
 // Кабинет мастера — основное: вход, калькулятор, счета, объекты, история, PDF счёта.
 // Подключается из calc.html; порядок подключения важен.
 
-const WORKER_URL = "https://price-api.nifork.workers.dev";
+// Сервер — через VPS (moysite.duckdns.org/price-api/ → price-api.nifork.workers.dev):
+// у части провайдеров в России адрес workers.dev заблокирован
+const WORKER_URL = "https://moysite.duckdns.org/price-api";
 const DEFAULT_UNITS = ['м²', 'пог. м', 'шт.', 'компл.', 'час', 'усл.'];
 (function initCustomItemUnitSelect() {
 const sel = document.getElementById('customItemUnit');

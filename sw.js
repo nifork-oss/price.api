@@ -5,7 +5,7 @@
 //
 // При каждом заметном обновлении сайта меняйте номер версии ниже —
 // старый кэш удалится, и у всех подтянутся новые файлы.
-const CACHE_NAME = 'prise-shell-v93';
+const CACHE_NAME = 'prise-shell-v94';
 const SHELL_FILES = [
   './calc.html',
   './calc.css',
@@ -64,8 +64,8 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
 
-  // Запросы к API (workers.dev) — всегда только из сети, никогда не кэшируем.
-  if (url.hostname.includes('workers.dev')) return;
+  // Запросы к API (workers.dev или через VPS /price-api/) — всегда только из сети, никогда не кэшируем.
+  if (url.hostname.includes('workers.dev') || url.pathname.startsWith('/price-api/')) return;
 
   // Страницы сайта: всегда спрашиваем сервер о свежей версии (в обход
   // 10-минутного кэша GitHub Pages), без сети — отдаём сохранённую копию.
