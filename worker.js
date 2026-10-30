@@ -446,10 +446,13 @@ const handler = {
     const path = url.pathname;
 
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders() });
+      return new Response(null, { headers: path.startsWith("/api/") ? apiCorsHeaders() : corsHeaders() });
     }
 
     try {
+      // API для других сайтов и программ — вход по ключу X-API-Key
+      if (path.startsWith("/api/")) return await handleApi(request, env, url);
+
       // Публичный прайс-лист (без входа) — для index.html
       if (path === "/public" && request.method === "GET") {
         const record = await readBin(env);
@@ -658,6 +661,32 @@ const handler = {
       // Всё, что ниже, требует действительного токена входа
       const auth = await getAuthUser(request, env);
       if (!auth) return json({ error: "Требуется вход" }, 401);
+
+      // API-ключи мастера: список, создание (ключ показывается один раз), отзыв
+      if (path === "/api-keys") {
+        if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
+        const record = await readBin(env);
+        const user = record.users.find((u) => u.login === auth.login);
+        if (!user) return json({ error: "Пользователь не найден" }, 404);
+        const list = () => (Array.isArray(user.apiKeys) ? user.apiKeys : []).map(apiKeyView);
+        if (request.method === "GET") return json({ keys: list() });
+        if (request.method === "POST") {
+          let body;
+          try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+          const made = await createApiKey(user, auth, body);
+          if (made.error) return json({ error: made.error }, 400);
+          await writeUsers(env, record);
+          return json({ key: made.key, keys: list(), guide: apiGuide(url.origin, made.key) });
+        }
+        if (request.method === "DELETE") {
+          const id = url.searchParams.get("id") || "";
+          const keys = Array.isArray(user.apiKeys) ? user.apiKeys : [];
+          if (!keys.some((k) => k.id === id)) return json({ error: "Ключ не найден" }, 404);
+          user.apiKeys = keys.filter((k) => k.id !== id);
+          await writeUsers(env, record);
+          return json({ keys: list() });
+        }
+      }
 
       // Платные функции: хватает ли денег на балансе и запись расхода (через хранилище)
       if (path === "/ai-quota" && request.method === "POST") {
@@ -1888,6 +1917,401 @@ function parseAssistantReply(data) {
   return { text, items };
 }
 
+/* ============== API-ключи: сметы с других сайтов и программ ============== */
+
+// Мастер создаёт в профиле именованный ключ. Кто знает ключ, может через
+// API посмотреть прайс и создать смету (или счёт) — она появляется в
+// кабинете этого мастера, в том режиме («сотрудник» или «своя компания»),
+// в котором ключ создан. Сам ключ показывается один раз; на сервере
+// хранится только его SHA-256 (ключ длинный и случайный, медленный хэш
+// здесь не нужен). Отозванный ключ перестаёт работать сразу.
+const API_KEY_PREFIX = "sk_";
+const API_KEYS_MAX = 10;
+const API_ITEMS_MAX = 200;
+const API_DEFAULT_UNIT = "м²";
+
+function apiKeyView(k) {
+  return { id: k.id, name: k.name, mode: k.mode, tail: k.tail, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt || null };
+}
+
+// Адрес страниц сайта, с которого создан ключ, — для ссылки на смету.
+// Только с разрешённых адресов сайта, иначе ссылку не даём.
+function apiSiteBase(value) {
+  try {
+    const u = new URL(String(value || ""));
+    if (!ALLOWED_ORIGINS.includes(u.origin)) return "";
+    return u.origin + u.pathname.replace(/[^/]*$/, "");
+  } catch (e) {
+    return "";
+  }
+}
+
+async function createApiKey(user, auth, body) {
+  const name = String((body && body.name) || "").trim().slice(0, 60);
+  if (!name) return { error: "Назовите ключ — например, по сайту, где он будет работать" };
+  const keys = Array.isArray(user.apiKeys) ? user.apiKeys : [];
+  if (keys.length >= API_KEYS_MAX) return { error: `Не больше ${API_KEYS_MAX} ключей — отзовите ненужный` };
+  const key = API_KEY_PREFIX + randomHex(24);
+  const entry = {
+    id: randomHex(6),
+    name,
+    mode: auth.mode === "company" ? "company" : "employee",
+    hash: await sha256Hex(key),
+    tail: key.slice(-4),
+    site: apiSiteBase(body && body.site),
+    createdAt: Date.now(),
+  };
+  user.apiKeys = [...keys, entry];
+  return { key, entry };
+}
+
+// Ищет ключ из заголовка X-API-Key среди ключей всех мастеров.
+async function findApiKey(record, request) {
+  const key = (request.headers.get("X-API-Key") || "").trim();
+  if (!key.startsWith(API_KEY_PREFIX) || key.length > 100) return null;
+  const hash = await sha256Hex(key);
+  for (const user of record.users) {
+    const entry = (Array.isArray(user.apiKeys) ? user.apiKeys : []).find((k) => k && safeEqual(k.hash, hash));
+    if (!entry) continue;
+    // Заказчик ключей не создаёт; если роль поменяли — ключ не действует
+    if (user.role === "client") return null;
+    return { user, entry };
+  }
+  return null;
+}
+
+// Пространство данных ключа: общий кабинет или «своя компания» мастера
+function apiSpace(record, user, entry, create) {
+  if (entry.mode !== "company") return { key: "main", data: record };
+  if (!record.companyData[user.login] && create) record.companyData[user.login] = { services: [], objects: [], history: [] };
+  return { key: COMPANY_PREFIX + user.login, data: record.companyData[user.login] || { services: [], objects: [], history: [] } };
+}
+
+function apiServices(services) {
+  const out = [];
+  let category = "";
+  for (const s of Array.isArray(services) ? services : []) {
+    if (!s || typeof s !== "object") continue;
+    if (s.isCategory) { category = String(s.name || ""); continue; }
+    out.push({ name: String(s.name || ""), price: Number(s.price) || 0, category });
+  }
+  return out;
+}
+
+// Позиции сметы из запроса. Позицию можно взять из прайса (service —
+// точное название услуги; цену и название подставит сервер) или задать
+// целиком: name, price. Количество qty обязательно, unit — по желанию.
+function apiItems(rawItems, services) {
+  if (!Array.isArray(rawItems) || rawItems.length === 0) return { error: "Нужен хотя бы один пункт в items" };
+  if (rawItems.length > API_ITEMS_MAX) return { error: `Не больше ${API_ITEMS_MAX} пунктов в смете` };
+  const priceList = apiServices(services);
+  const items = [];
+  for (let i = 0; i < rawItems.length; i++) {
+    const it = rawItems[i];
+    const n = i + 1;
+    if (!it || typeof it !== "object") return { error: `Пункт ${n}: ожидается объект` };
+    let name = typeof it.name === "string" ? it.name.trim() : "";
+    let price = it.price;
+    if (typeof it.service === "string" && it.service.trim()) {
+      const wanted = it.service.trim().toLowerCase();
+      const srv = priceList.find((s) => s.name.trim().toLowerCase() === wanted);
+      if (!srv) return { error: `Пункт ${n}: в прайсе нет услуги «${it.service.trim().slice(0, 100)}»` };
+      if (!name) name = srv.name;
+      if (price === undefined || price === null) price = srv.price;
+    }
+    if (!name) return { error: `Пункт ${n}: укажите name или service` };
+    price = Number(price);
+    if (!Number.isFinite(price) || price < 0 || price > 1e9) return { error: `Пункт ${n}: неверная цена price` };
+    const qty = Number(it.qty);
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 1e7) return { error: `Пункт ${n}: неверное количество qty` };
+    const unit = typeof it.unit === "string" && it.unit.trim() ? it.unit.trim().slice(0, 20) : API_DEFAULT_UNIT;
+    const location = typeof it.location === "string" ? it.location.trim().slice(0, 200) : "";
+    items.push({ name: name.slice(0, 300), price, qty, unit, location });
+  }
+  return { items };
+}
+
+function apiRecordView(rec, site) {
+  return {
+    id: rec.id,
+    docType: rec.docType || "invoice",
+    date: rec.date,
+    client: rec.client || "",
+    address: rec.address || "",
+    note: rec.note || "",
+    total: Number(rec.total) || 0,
+    items: (rec.items || []).map((i) => ({ name: i.name, price: i.price, qty: i.qty, unit: i.unit, location: i.location || "" })),
+    url: site && !rec.shareDisabled ? `${site}view.html?id=${encodeURIComponent(rec.id)}` : null,
+  };
+}
+
+function apiJson(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json", ...apiCorsHeaders() },
+  });
+}
+
+// API зовут с любых сайтов — разрешаем любой адрес (защита — сам ключ)
+function apiCorsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, X-API-Key",
+  };
+}
+
+const API_PLANS_MAX = 10;
+const API_PLAN_ROOMS_MAX = 60;
+
+// Инструкция для ИИ-агента: мастер копирует её вместе с ключом и отдаёт
+// своему агенту (ChatGPT, Claude и т. п.). Её же отдаёт GET /api/v1/help.
+function apiGuide(base, key) {
+  return `Ты помогаешь мастеру по отделке вести объекты в «Кабинете мастера» (калькулятор смет).
+У тебя есть доступ к его кабинету через HTTP API.
+
+Адрес API: ${base}/api/v1
+Ключ: ${key || "<ключ мастера>"}
+Каждый запрос — с заголовком X-API-Key: <ключ>. Тела запросов и ответы — JSON (Content-Type: application/json).
+Ключ секретный: не показывай его посторонним и не вставляй в код страниц сайта.
+
+Что можно делать
+- GET /api/v1/services — прайс мастера: [{name, price, category}].
+- GET /api/v1/objects — объекты: [{id, name, client, address, rooms:[{id, name}], pendingPlans}].
+- POST /api/v1/objects — создать объект: {"name":"Квартира на Ленина 5","client":"Иван","address":"..."} → {id, ...}.
+- POST /api/v1/objects/<id>/plans — прислать замеры помещений объекта (формат ниже). Мастер увидит их
+  у объекта («План от ИИ-агента»), проверит на экране проверки и добавит в замеры. Сразу в замеры они не попадают.
+- GET /api/v1/estimates[?docType=estimate|invoice] — последние 50 смет и счетов.
+- GET /api/v1/estimates/<id> — одна смета.
+- POST /api/v1/estimates — создать смету (расчёт для заказчика):
+  {"client":"Иван","address":"...","note":"...","objectId":"<id объекта, необязательно>",
+   "docType":"estimate",
+   "items":[{"service":"Шпаклёвка стен","qty":35.5,"unit":"м²","location":"Гостиная"},
+            {"name":"Вынос мусора","price":3000,"qty":1,"unit":"усл."}]}
+  service — точное название услуги из прайса (цену подставит сервер); или name + price для своей позиции.
+  unit — одно из: м², пог. м, шт., компл., час, усл. (по умолчанию м²). docType "invoice" — счёт вместо сметы.
+  Ответ: {id, total, url} — url это ссылка на смету для заказчика.
+
+Формат замеров (POST /api/v1/objects/<id>/plans)
+Все помещения — в одной системе координат, в миллиметрах, целыми числами: (0,0) — верхний левый угол
+квартиры, x вправо, y вниз. Контур помещения — по внутренним поверхностям стен.
+{"title":"Замер 30.10","rooms":[{"name":"Гостиная","height_mm":2700,
+  "pts":[[0,0],[4600,0],[4600,3200],[0,3200]],
+  "openings":[{"type":"window","at":[[800,0],[2200,0]],"height_mm":1500},
+              {"type":"door","at":[[4600,2200],[4600,3000]],"height_mm":2100}]}],
+ "warnings":["Высота в спальне не указана"]}
+- pts — углы контура по часовой стрелке, начиная с верхнего левого; каждый излом стены (короб, ниша,
+  выступ) — отдельной точкой, не упрощай до прямоугольника.
+- openings: type — "window", "door" или "balcony"; at — два конца проёма на стене помещения;
+  height_mm — высота проёма; для balcony ещё door_width_mm и door_height_mm.
+  Дверь между помещениями укажи у обоих помещений.
+- Если чего-то не знаешь — не выдумывай: спроси мастера или напиши в warnings.
+
+Как работать
+1. Спроси мастера, что нужно: какой объект, какие помещения и размеры, какие работы.
+2. Найди объект (GET /objects) или создай новый; замеры пришли в /objects/<id>/plans.
+3. Работы бери из прайса (GET /services). Объём считай по замерам (площадь стен за вычетом проёмов,
+   потолка, периметр и т. п.) и покажи мастеру расчёт, прежде чем создавать смету.
+4. Создай смету (POST /estimates) и отдай мастеру ссылку url.
+Ошибки приходят как {"error":"..."} с понятным текстом — исправь запрос по нему.`;
+}
+
+// Замеры от агента: проверяем только, что это похоже на план (список
+// помещений), сами помещения разбирает страница на экране проверки
+function apiPlan(body) {
+  if (!body || typeof body !== "object") return { error: "Тело запроса — не JSON" };
+  const rooms = Array.isArray(body) ? body : body.rooms;
+  if (!Array.isArray(rooms) || rooms.length === 0) return { error: "Нужен список помещений rooms" };
+  if (rooms.length > API_PLAN_ROOMS_MAX) return { error: `Не больше ${API_PLAN_ROOMS_MAX} помещений за раз` };
+  for (let i = 0; i < rooms.length; i++) {
+    const r = rooms[i];
+    if (!r || typeof r !== "object") return { error: `Помещение ${i + 1}: ожидается объект` };
+    const hasPts = Array.isArray(r.pts) && r.pts.length >= 3;
+    const hasWalls = Array.isArray(r.walls) && r.walls.length >= 2;
+    const hasMeasure = r.measure && typeof r.measure === "object" && Array.isArray(r.measure.walls);
+    if (!hasPts && !hasWalls && !hasMeasure) return { error: `Помещение ${i + 1}: нужны углы pts (не меньше трёх точек)` };
+  }
+  const warnings = Array.isArray(body.warnings) ? body.warnings.map((w) => String(w).slice(0, 300)).slice(0, 30) : [];
+  return { plan: { rooms, warnings } };
+}
+
+function apiObjectView(o) {
+  return {
+    id: o.id,
+    name: o.name || "",
+    client: o.client || "",
+    address: o.address || "",
+    rooms: (Array.isArray(o.rooms) ? o.rooms : []).filter((r) => r && r.measure).map((r) => ({ id: r.id, name: r.measure.room || "Помещение" })),
+    pendingPlans: Array.isArray(o.agentPlans) ? o.agentPlans.length : 0,
+  };
+}
+
+async function readApiBody(request, max) {
+  const raw = await request.text();
+  if (raw.length > max) return { error: "Слишком большой запрос", status: 413 };
+  try { return { body: JSON.parse(raw) }; } catch (e) { return { error: "Тело запроса — не JSON", status: 400 }; }
+}
+
+async function handleApi(request, env, url) {
+  const path = url.pathname;
+  if ((path === "/api/v1" || path === "/api/v1/help") && request.method === "GET") {
+    return new Response(apiGuide(url.origin), { headers: { "Content-Type": "text/plain; charset=utf-8", ...apiCorsHeaders() } });
+  }
+  const record = await readBin(env);
+  const found = await findApiKey(record, request);
+  if (!found) {
+    if (await isRateLimited(env.AUTH_LIMITER, "apikey-ip:" + clientIp(request))) return apiJson({ error: "Слишком много попыток. Подождите минуту." }, 429);
+    return apiJson({ error: "Нужен действующий ключ в заголовке X-API-Key" }, 401);
+  }
+  const { user, entry } = found;
+
+  // Время последнего использования — на странице ключей видно, работает ли он.
+  // Чтобы не писать в базу на каждый просмотр, обновляем не чаще раза в час.
+  const touch = () => { entry.lastUsedAt = Date.now(); };
+  const touchIfOld = async () => {
+    if (Date.now() - (entry.lastUsedAt || 0) > 60 * 60 * 1000) { touch(); await writeUsers(env, record); }
+  };
+
+  if (path === "/api/v1/me" && request.method === "GET") {
+    await touchIfOld();
+    return apiJson({ login: user.login, companyName: user.companyName || "", key: apiKeyView(entry) });
+  }
+
+  if (path === "/api/v1/services" && request.method === "GET") {
+    await touchIfOld();
+    return apiJson({ services: apiServices(apiSpace(record, user, entry, false).data.services) });
+  }
+
+  if (path === "/api/v1/estimates" && request.method === "GET") {
+    await touchIfOld();
+    const docType = url.searchParams.get("docType");
+    const list = (apiSpace(record, user, entry, false).data.history || [])
+      .filter((r) => r && (!docType || (r.docType || "invoice") === docType))
+      .slice(0, 50)
+      .map((r) => apiRecordView(r, entry.site));
+    return apiJson({ estimates: list });
+  }
+
+  const one = path.match(/^\/api\/v1\/estimates\/([^/]+)$/);
+  if (one && request.method === "GET") {
+    await touchIfOld();
+    const id = decodeURIComponent(one[1]);
+    const rec = (apiSpace(record, user, entry, false).data.history || []).find((r) => r && String(r.id) === id);
+    if (!rec) return apiJson({ error: "Смета не найдена" }, 404);
+    return apiJson(apiRecordView(rec, entry.site));
+  }
+
+  if (path === "/api/v1/objects" && request.method === "GET") {
+    await touchIfOld();
+    const space = apiSpace(record, user, entry, false);
+    let objects = Array.isArray(space.data.objects) ? space.data.objects : [];
+    // В общем кабинете мастер видит только свои объекты (как на сайте)
+    if (space.key === "main" && user.role !== "admin" && user.login !== "admin") {
+      objects = objects.filter((o) => o && Array.isArray(o.visibleTo) && o.visibleTo.includes(user.login));
+    }
+    return apiJson({ objects: objects.filter(Boolean).map(apiObjectView) });
+  }
+
+  // Изменения через API: не чаще 10 в минуту на ключ. Каждое повышает версию
+  // данных — открытая у мастера страница со старыми данными при сохранении
+  // получит 409 и перезагрузится, а не затрёт сделанное через API.
+  const limited = async () => isRateLimited(env.AUTH_LIMITER, "api:" + entry.id);
+  const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+
+  if (path === "/api/v1/objects" && request.method === "POST") {
+    if (await limited()) return apiJson({ error: "Не больше 10 изменений в минуту на один ключ" }, 429);
+    const read = await readApiBody(request, 20000);
+    if (read.error) return apiJson({ error: read.error }, read.status);
+    const body = read.body || {};
+    const name = str(body.name, 200);
+    if (!name) return apiJson({ error: "Укажите название объекта name" }, 400);
+    const space = apiSpace(record, user, entry, true);
+    const obj = {
+      id: "obj_" + Date.now() + "_" + randomHex(3),
+      name,
+      client: str(body.client, 200),
+      address: str(body.address, 300),
+      access: str(body.access, 1000),
+      materials: str(body.materials, 3000),
+      author: user.login,
+      visibleTo: [user.login],
+      createdAt: new Date().toLocaleString("ru-RU", { timeZone: "Europe/Moscow" }),
+      source: "api",
+    };
+    if (!Array.isArray(space.data.objects)) space.data.objects = [];
+    space.data.objects.unshift(obj);
+    bumpRev(record, space.key, ["objects"]);
+    touch();
+    await writeBin(env, record);
+    return apiJson(apiObjectView(obj), 201);
+  }
+
+  const planPath = path.match(/^\/api\/v1\/objects\/([^/]+)\/plans$/);
+  if (planPath && request.method === "POST") {
+    if (await limited()) return apiJson({ error: "Не больше 10 изменений в минуту на один ключ" }, 429);
+    const space = apiSpace(record, user, entry, false);
+    const id = decodeURIComponent(planPath[1]);
+    const obj = (Array.isArray(space.data.objects) ? space.data.objects : []).find((o) => o && o.id === id);
+    if (!obj) return apiJson({ error: "Объект не найден" }, 404);
+    const read = await readApiBody(request, 300000);
+    if (read.error) return apiJson({ error: read.error }, read.status);
+    const parsed = apiPlan(read.body);
+    if (parsed.error) return apiJson({ error: parsed.error }, 400);
+    const plans = Array.isArray(obj.agentPlans) ? obj.agentPlans : [];
+    if (plans.length >= API_PLANS_MAX) return apiJson({ error: "У объекта уже много непроверенных замеров — пусть мастер сначала их посмотрит" }, 409);
+    const plan = {
+      id: "ap_" + Date.now() + "_" + randomHex(3),
+      at: Date.now(),
+      from: entry.name,
+      title: str(read.body && read.body.title, 100),
+      ...parsed.plan,
+    };
+    obj.agentPlans = [...plans, plan];
+    bumpRev(record, space.key, ["objects"]);
+    touch();
+    await writeBin(env, record);
+    return apiJson({ id: plan.id, rooms: plan.rooms.length, note: "Замеры ждут проверки мастером у объекта" }, 201);
+  }
+
+  if (path === "/api/v1/estimates" && request.method === "POST") {
+    if (await limited()) return apiJson({ error: "Не больше 10 изменений в минуту на один ключ" }, 429);
+    const read = await readApiBody(request, 200000);
+    if (read.error) return apiJson({ error: read.error }, read.status);
+    const body = read.body;
+    if (!body || typeof body !== "object") return apiJson({ error: "Тело запроса — не JSON" }, 400);
+    const space = apiSpace(record, user, entry, true);
+    const parsed = apiItems(body.items, space.data.services);
+    if (parsed.error) return apiJson({ error: parsed.error }, 400);
+    const objects = Array.isArray(space.data.objects) ? space.data.objects : [];
+    const objectId = str(body.objectId, 100);
+    if (objectId && !objects.some((o) => o && o.id === objectId)) return apiJson({ error: "Объект objectId не найден" }, 400);
+    const total = Math.round(parsed.items.reduce((s, i) => s + i.qty * i.price, 0) * 100) / 100;
+    const rec = {
+      id: "inv_" + Date.now() + "_" + randomHex(6),
+      author: user.login,
+      date: new Date().toLocaleString("ru-RU", { timeZone: "Europe/Moscow" }),
+      client: str(body.client, 200),
+      address: str(body.address, 300),
+      note: str(body.note, 2000),
+      total,
+      objectId,
+      docType: body.docType === "invoice" ? "invoice" : "estimate",
+      items: parsed.items,
+      attachments: [],
+      source: "api",
+      apiKey: entry.name,
+    };
+    if (!Array.isArray(space.data.history)) space.data.history = [];
+    space.data.history.unshift(rec);
+    bumpRev(record, space.key, ["history"]);
+    touch();
+    await writeBin(env, record);
+    return apiJson(apiRecordView(rec, entry.site), 201);
+  }
+
+  return apiJson({ error: "Not found" }, 404);
+}
+
 /* ============== хранилище: Durable Object ============== */
 
 // Один экземпляр на весь сайт. Все запросы к данным проходят через него
@@ -1933,6 +2357,8 @@ export default {
     }
     // Отвечаем тем адресом сайта, с которого пришёл запрос, если он есть
     // в списке ALLOWED_ORIGINS.
+    // API по ключу открыто для любых сайтов — его заголовки не трогаем.
+    if (new URL(request.url).pathname.startsWith("/api/")) return response;
     const origin = request.headers.get("Origin") || "";
     const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
     const headers = new Headers(response.headers);
