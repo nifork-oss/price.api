@@ -193,7 +193,7 @@ async function isRateLimited(limiter, key) {
 // заблокирован), поэтому для запросов с адреса VPS настоящий адрес
 // человека берём из X-Real-IP, который ставит nginx. Подделать его извне
 // нельзя: CF-Connecting-IP задаёт сам Cloudflare.
-const TRUSTED_PROXY_IPS = ["163.5.215.195"];
+const TRUSTED_PROXY_IPS = ["217.144.185.255", "163.5.215.195"]; // новый VPS и старый (пока идёт переезд)
 
 function clientIp(request) {
   const ip = request.headers.get("CF-Connecting-IP") || "unknown";
