@@ -48,6 +48,7 @@ currentUser = savedUser;
 await loadCloudData();
 if (cloudData && Array.isArray(cloudData.objects)) {
 showAppScreen();
+setTimeout(() => { if (typeof fillMissingRoomSurfaces === 'function') fillMissingRoomSurfaces(); }, 1500);
 } else {
 handleLogout();
 }

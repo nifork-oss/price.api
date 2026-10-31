@@ -91,6 +91,14 @@ roomSurfacesSeen.set(room.id, key);
 }));
 }
 
+// Помещения, сохранённые до этой доработки, ещё без поверхностей — при входе
+// мастера дописываем их и сохраняем один раз, чтобы агенту не ждать правки замера
+function fillMissingRoomSurfaces() {
+if (!authToken || isCurrentClient()) return;
+const missing = (cloudData.objects || []).some(obj => (Array.isArray(obj && obj.rooms) ? obj.rooms : []).some(r => r && r.measure && !r.surfaces));
+if (missing) saveCloudData();
+}
+
 function roundQty(v, unit) {
 const q = Math.round(v * 1000) / 1000;
 return unit === 'пог. м' ? Math.max(1, q) : q;
