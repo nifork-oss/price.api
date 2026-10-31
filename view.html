@@ -26,6 +26,7 @@ body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
 .item-name { color: #33404f; flex: 1; min-width: 0; }
 .item-meta { color: #8d97a5; font-size: 12px; }
 .item-sum { font-weight: 700; color: #1d2733; white-space: nowrap; }
+.discount-line, .discount-line .item-name { color: #c2361f; font-weight: 600; }
 .total-box { display: flex; justify-content: space-between; align-items: center; background: #1d2733; color: #fff; border-radius: 10px; padding: 14px 16px; margin-top: 14px; font-weight: 700; font-size: 16px; }
 .attachment-chip-wrap { display: flex; align-items: center; gap: 4px; }
 .attachment-thumb { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; background: #dfe3e8; }
@@ -351,6 +352,16 @@ ${rest !== 0 ? `<div class="pay-box-sub">Оплачено ${rub(paid)} из ${ru
 </div>`;
 }
 
+// Скидка на весь документ: сумма позиций, скидка; итог ниже — уже со скидкой
+function renderDiscountHtml(rec) {
+const d = rec.discount, sub = Number(rec.subtotal) || 0, off = Math.round((sub - Number(rec.total || 0)) * 100) / 100;
+if (!d || !(off > 0)) return '';
+const rub = n => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
+const label = d.kind === 'pct' ? `Скидка ${String(Number(d.value)).replace('.', ',')}%` : 'Скидка';
+return `<div class="item-row"><div class="item-name">Сумма без скидки</div><div class="item-sum">${rub(sub)}</div></div>
+<div class="item-row discount-line"><div class="item-name">${escapeHtml(label)}</div><div class="item-sum">−${rub(off)}</div></div>`;
+}
+
 // Итоги — штампом, как на листе чертежа; оплата — лентой рулетки
 function renderTotalsHtml(rec, isEstimate) {
 const rub = n => Number(n).toLocaleString('ru-RU') + ' ₽';
@@ -449,6 +460,7 @@ ${rec.note ? `<div class="note-box">${escapeHtml(rec.note)}</div>` : ''}
 
 <div class="card">
 <div class="items-list">${rows || '<div style="text-align:center; color:#8d97a5; padding:16px 0;">Нет позиций</div>'}</div>
+${renderDiscountHtml(rec)}
 ${renderTotalsHtml(rec, isEstimate)}
 </div>
 
