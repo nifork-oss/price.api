@@ -6,7 +6,7 @@
 // на том же экране, что после распознавания плана, и только потом добавляет.
 // Подключается из calc.html после calc-planfile.js.
 
-let apiKeysState = { keys: null, fresh: null, error: '' };
+let apiKeysState = { keys: null, fresh: null, error: '', guide: '' };
 
 function apiModeLabel(mode) {
 return mode === 'company' ? 'своя компания' : 'сотрудник';
@@ -37,6 +37,7 @@ drawApiKeys();
 try {
 const data = await apiKeysRequest('GET');
 apiKeysState.keys = data.keys;
+apiKeysState.guide = data.guide || '';
 apiKeysState.error = '';
 } catch (e) {
 apiKeysState.error = 'Не удалось загрузить ключи: ' + e.message;
@@ -59,7 +60,10 @@ else list.innerHTML = st.keys.map(k => `<div class="api-key-row">
 <b>${escapeHtml(k.name)}</b>
 <small>…${escapeHtml(k.tail)} · ${apiModeLabel(k.mode)} · создан ${apiDate(k.createdAt)}${k.lastUsedAt ? ` · работал ${apiDate(k.lastUsedAt)}` : ' · ещё не использовался'}</small>
 </div>
+<div style="display:flex; gap:6px; flex-wrap:wrap;">
+<button type="button" class="btn btn-ghost btn-sm" onclick="copyKeyGuide('${escapeHtml(k.id)}')">🤖 Инструкция</button>
 <button type="button" class="btn btn-danger btn-sm" onclick="revokeApiKey('${escapeHtml(k.id)}')">Отозвать</button>
+</div>
 </div>`).join('');
 fresh.innerHTML = st.fresh ? `<div class="api-key-fresh">
 <div class="api-key-fresh-title">Ключ «${escapeHtml(st.fresh.name)}» создан</div>
@@ -78,7 +82,7 @@ const name = (input.value || '').trim();
 if (!name) { alert('Назовите ключ — например, «Мой ИИ-агент» или по адресу сайта.'); input.focus(); return; }
 try {
 const data = await apiKeysRequest('POST', '', { name, site: window.location.href });
-apiKeysState = { keys: data.keys, fresh: { name, key: data.key, guide: data.guide }, error: '' };
+apiKeysState = { ...apiKeysState, keys: data.keys, fresh: { name, key: data.key, guide: data.guide }, error: '' };
 input.value = '';
 drawApiKeys();
 } catch (e) {
@@ -101,6 +105,19 @@ alert(e.message);
 function copyApiGuide() {
 const f = apiKeysState.fresh;
 if (f) copyApiText(f.guide, 'Скопировано — вставьте это своему ИИ-агенту первым сообщением');
+}
+
+// Инструкция для агента у уже созданного ключа. Сам ключ сервер не хранит —
+// если мастер его сохранил, подставим; иначе агент попросит ключ отдельно
+function copyKeyGuide(id) {
+const k = (apiKeysState.keys || []).find(x => x.id === id);
+const guide = apiKeysState.guide;
+if (!k || !guide) return;
+const typed = prompt(`Вставьте сохранённый ключ «${k.name}» (заканчивается на …${k.tail}), чтобы он попал в инструкцию.\nКлюча нет под рукой — оставьте пустым, тогда дайте его агенту отдельно.`, '');
+if (typed === null) return;
+const key = typed.trim();
+if (key && (!key.startsWith('sk_') || !key.endsWith(k.tail))) { alert(`Это не тот ключ: ключ «${k.name}» заканчивается на …${k.tail}.`); return; }
+copyApiText(key ? guide.replace('<ключ мастера>', key) : guide, key ? 'Инструкция с ключом скопирована — вставьте её своему ИИ-агенту' : 'Инструкция скопирована — ключ дайте агенту отдельно');
 }
 
 async function copyApiText(text, done) {

@@ -1095,3 +1095,15 @@ body.assistant-open .add-toast { z-index: 99; }
 .api-key-fresh p { font-size: 11px; color: var(--s-ink2); margin: 6px 0 8px; }
 .agent-plans { margin: 12px 0; padding: 4px 10px; border: 1px solid var(--tape-d); background: var(--tape-l); border-radius: 8px; }
 .agent-plans .agent-plan:last-child { border-bottom: none; }
+
+/* План квартиры на повёрнутом телефоне: план на всю ширину и сразу под
+   шапкой (с кнопками правки и масштаба), подсказки и остальные кнопки — ниже */
+@media (orientation: landscape) and (max-height: 540px) {
+#flatPanel .mp-head { padding-top: calc(4px + env(safe-area-inset-top, 0px)); padding-bottom: 4px; }
+#flatPanel .mp-head-row { margin-bottom: 0; }
+#flatBody { padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
+#flatBody .mp-body-inner { max-width: none; display: flex; flex-direction: column; }
+#flatBody .mp-body-inner > .flat-tools { order: -3; }
+#flatBody .mp-body-inner > .flat-zoom { order: -2; margin-bottom: 4px; }
+#flatBody .mp-body-inner > .flat-viewbox { order: -1; margin-bottom: 8px; }
+}

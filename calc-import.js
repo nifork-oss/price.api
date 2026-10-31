@@ -153,20 +153,106 @@ function ulImgKey(id) { return 'underlayImg:' + id; }
 function ulViewKey(id) { return 'underlayView:' + id; }
 function getUnderlay(id) {
 if (!id) return null;
+ulCloudPull(id);
 try {
 const view = JSON.parse(localStorage.getItem(ulViewKey(id)) || 'null');
 if (!view) return null;
-if (!(id in ulCache)) ulCache[id] = localStorage.getItem(ulImgKey(id));
+if (!(id in ulCache) || !ulCache[id]) ulCache[id] = localStorage.getItem(ulImgKey(id));
 return ulCache[id] ? { ...view, src: ulCache[id] } : null;
 } catch (e) { return null; }
 }
 function saveUnderlayView(id, view) {
 const { src, ...rest } = view;
+rest.at = Date.now();
 try { localStorage.setItem(ulViewKey(id), JSON.stringify(rest)); } catch (e) { /* пусто */ }
+ulCloudPushLater(id);
 }
 function removeUnderlay(id) {
 try { localStorage.removeItem(ulImgKey(id)); localStorage.removeItem(ulViewKey(id)); } catch (e) { /* пусто */ }
 delete ulCache[id];
+delete ulImgDirty[id];
+clearTimeout(ulPushTimers[id]);
+ulCloudSend('DELETE', id);
+}
+// Новая картинка подложки: в память, в телефон (если хватает места) и в облако
+// вместе со следующим сохранением положения
+function storeUnderlayImage(id, dataUrl) {
+ulCache[id] = dataUrl;
+ulImgDirty[id] = true;
+try { localStorage.setItem(ulImgKey(id), dataUrl); }
+catch (e) { showAddToast('В телефоне мало места — подложка хранится только в облаке'); }
+}
+
+/* ---------- подложка в облаке ---------- */
+// Подложка (картинка и её положение) живёт в облаке, а телефон хранит копию:
+// на другом устройстве или после очистки браузера она подтягивается сама.
+// При первом показе подложки за сеанс сверяемся с облаком: новее там — берём
+// оттуда, новее здесь (или в облаке её ещё нет) — отправляем туда.
+const ulCloudChecked = {};
+const ulImgDirty = {};
+const ulPushTimers = {};
+
+function ulLocalView(id) {
+try { return JSON.parse(localStorage.getItem(ulViewKey(id)) || 'null'); } catch (e) { return null; }
+}
+
+async function ulCloudSend(method, id, body, query) {
+if (!authToken || isCurrentClient()) return null;
+try {
+const res = await fetch(`${WORKER_URL}/underlay?id=${encodeURIComponent(id)}${query || ''}`, {
+method,
+headers: { 'Authorization': 'Bearer ' + authToken, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+...(body ? { body: JSON.stringify(body) } : {})
+});
+return res.ok ? await res.json().catch(() => null) : null;
+} catch (e) { return null; }
+}
+
+function ulCloudPushLater(id) {
+clearTimeout(ulPushTimers[id]);
+ulPushTimers[id] = setTimeout(() => ulCloudPush(id), 1500);
+}
+
+async function ulCloudPush(id) {
+const view = ulLocalView(id);
+if (!view) return;
+const image = ulImgDirty[id] || !view.imgAt ? ulCache[id] || (() => { try { return localStorage.getItem(ulImgKey(id)); } catch (e) { return null; } })() : null;
+const sent = { ...view };
+delete sent.imgAt;
+const res = await ulCloudSend('PUT', id, { view: sent, at: view.at || Date.now(), ...(image ? { image } : {}) });
+if (!res) return;
+if (image) delete ulImgDirty[id];
+const now = ulLocalView(id);
+if (now && res.imgAt) { now.imgAt = res.imgAt; try { localStorage.setItem(ulViewKey(id), JSON.stringify(now)); } catch (e) { /* пусто */ } }
+}
+
+async function ulCloudPull(id) {
+if (ulCloudChecked[id] || !authToken || isCurrentClient()) return;
+ulCloudChecked[id] = true;
+const cloud = await ulCloudSend('GET', id);
+if (!cloud) return;
+const local = ulLocalView(id);
+if (!cloud.view) { if (local) ulCloudPush(id); return; }
+if (local && (local.at || 0) >= cloud.at) { if ((local.at || 0) > cloud.at) ulCloudPush(id); return; }
+let src = ulCache[id] || null;
+if (!src) { try { src = localStorage.getItem(ulImgKey(id)); } catch (e) { src = null; } }
+if (!src || !local || local.imgAt !== cloud.imgAt) {
+const img = await ulCloudSend('GET', id, null, '&img=1');
+if (!img || !img.image) return;
+src = img.image;
+try { localStorage.setItem(ulImgKey(id), src); } catch (e) { /* мало места — держим в памяти */ }
+}
+ulCache[id] = src;
+try { localStorage.setItem(ulViewKey(id), JSON.stringify({ ...cloud.view, at: cloud.at, imgAt: cloud.imgAt })); } catch (e) { /* пусто */ }
+ulRerender(id);
+}
+
+// Подложка пришла из облака — перерисовать то, что сейчас открыто
+function ulRerender(id) {
+try {
+if (typeof flatObjectId !== 'undefined' && flatObjectId && id === 'flat_' + flatObjectId) { renderFlatPlan(); return; }
+if (typeof measure !== 'undefined' && measure && measure.id === id) renderMeasure();
+} catch (e) { /* окно уже закрыли */ }
 }
 
 function pickUnderlayFile(kind) {
@@ -183,9 +269,7 @@ if (!pick) return;
 showAddToast('Готовлю подложку…');
 const img = await fileToJpeg(file, 1600, pick.page);
 const id = measure.id;
-try { localStorage.setItem(ulImgKey(id), img.dataUrl); }
-catch (e) { alert('Не хватает места на телефоне для подложки. Удалите подложки у других комнат.'); return; }
-ulCache[id] = img.dataUrl;
+storeUnderlayImage(id, img.dataUrl);
 // по умолчанию — поверх уже введённых стен, иначе 8 м шириной
 const g = rulerGeometry(measure);
 const xs = [0, ...g.segs.map(s => s.x2)], ys = [0, ...g.segs.map(s => s.y2)];
@@ -986,11 +1070,8 @@ const ul = lastPlan && lastPlan.plan.underlay;
 if (ul && aiTarget.preview && aiTarget.preview.startsWith('data:image/')) {
 // картинка, которую распознавали, — подложкой под план квартиры, сразу на своём месте
 const id = 'flat_' + obj.id;
-try {
-localStorage.setItem(ulImgKey(id), aiTarget.preview);
-ulCache[id] = aiTarget.preview;
+storeUnderlayImage(id, aiTarget.preview);
 saveUnderlayView(id, { ...ul, rot: 0, op: 0.5, hidden: false, locked: true });
-} catch (e) { /* не хватило места — без подложки */ }
 }
 closeAiReview();
 await saveCloudData();

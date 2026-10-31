@@ -176,3 +176,107 @@ test('подложка к замерам: хранится отдельно, о�
   await call('DELETE', '/agent-plan-image?id=' + plan.data.id, { token });
   assert.strictEqual(env.STORAGE.map.has('agentimg:' + plan.data.id), false);
 });
+
+test('инструкция для агента берётся и потом, без ключа', async () => {
+  const { call, token } = await setup();
+  await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const list = await call('GET', '/api-keys', { token });
+  assert.match(list.data.guide, /<ключ мастера>/);
+  assert.match(list.data.guide, /PATCH \/api\/v1\/estimates/);
+});
+
+test('объём сметы — из посчитанных поверхностей помещений объекта', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const page = await call('GET', '/appdata', { token });
+  const rooms = [
+    { id: 'r1', measure: { room: 'Кухня', height: '2,7', walls: ['3'] }, surfaces: { walls: { v: 30.5, u: 'м²', l: 'Стены' }, slopes: { v: 0.4, u: 'пог. м', l: 'Откосы' } } },
+    { id: 'r2', measure: { room: 'Спальня', walls: ['4'] }, surfaces: { walls: { v: 20, u: 'м²', l: 'Стены' } } },
+  ];
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, services: [{ name: 'Шпаклёвка стен', price: 500 }, { name: 'Откосы', price: 100 }], objects: [{ id: 'o1', name: 'Квартира', rooms }] } });
+
+  const detail = await call('GET', '/api/v1/objects/o1', { key });
+  assert.strictEqual(detail.status, 200);
+  assert.strictEqual(detail.data.rooms[0].name, 'Кухня');
+  assert.strictEqual(detail.data.rooms[0].height_m, 2.7);
+  assert.deepStrictEqual(detail.data.rooms[0].surfaces.walls, { value: 30.5, unit: 'м²', label: 'Стены' });
+  assert.strictEqual(detail.data.editable, false);
+
+  const noObj = await call('POST', '/api/v1/estimates', { key, body: { items: [{ service: 'Шпаклёвка стен', surface: 'walls', room_ids: ['r1'] }] } });
+  assert.strictEqual(noObj.status, 400);
+  const missing = await call('POST', '/api/v1/estimates', { key, body: { objectId: 'o1', items: [{ service: 'Откосы', surface: 'slopes', room_ids: ['r2'] }] } });
+  assert.match(missing.data.error, /Спальня/);
+
+  const made = await call('POST', '/api/v1/estimates', { key, body: { objectId: 'o1', items: [
+    { service: 'Шпаклёвка стен', surface: 'walls', room_ids: ['r1', 'r2'] },
+    { service: 'Откосы', surface: 'slopes', room_ids: ['r1'] },
+  ] } });
+  assert.strictEqual(made.status, 201);
+  assert.strictEqual(made.data.items[0].qty, 50.5);
+  assert.strictEqual(made.data.items[0].location, 'Кухня, Спальня');
+  assert.deepStrictEqual(made.data.items[0].room_ids, ['r1', 'r2']);
+  // погонные метры — не меньше 1, как на сайте
+  assert.strictEqual(made.data.items[1].qty, 1);
+  assert.strictEqual(made.data.items[1].unit, 'пог. м');
+  assert.strictEqual(made.data.total, 50.5 * 500 + 100);
+  const saved = (await call('GET', '/appdata', { token })).data.data.history[0];
+  assert.deepStrictEqual(saved.items[0].rooms.map(r => r.roomId), ['r1', 'r2']);
+  assert.strictEqual(saved.items[0].surface, 'walls');
+});
+
+test('агент правит и удаляет только то, что создал через API', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, services: [{ name: 'Шпаклёвка стен', price: 500 }],
+    history: [{ id: 'inv_site', client: 'С сайта', total: 1, items: [] }], objects: [{ id: 'o_site', name: 'С сайта' }] } });
+
+  const est = await call('POST', '/api/v1/estimates', { key, body: { client: 'Пётр', items: [{ service: 'Шпаклёвка стен', qty: 10 }] } });
+  const patched = await call('PATCH', '/api/v1/estimates/' + est.data.id, { key, body: { client: 'Пётр Иванов', items: [{ service: 'Шпаклёвка стен', qty: 4 }] } });
+  assert.strictEqual(patched.status, 200);
+  assert.strictEqual(patched.data.client, 'Пётр Иванов');
+  assert.strictEqual(patched.data.total, 2000);
+  assert.strictEqual((await call('PATCH', '/api/v1/estimates/inv_site', { key, body: { client: 'x' } })).status, 403);
+  assert.strictEqual((await call('DELETE', '/api/v1/estimates/inv_site', { key })).status, 403);
+  assert.strictEqual((await call('DELETE', '/api/v1/estimates/' + est.data.id, { key })).status, 200);
+  assert.strictEqual((await call('GET', '/api/v1/estimates/' + est.data.id, { key })).status, 404);
+
+  const obj = await call('POST', '/api/v1/objects', { key, body: { name: 'Квартира' } });
+  const op = await call('PATCH', '/api/v1/objects/' + obj.data.id, { key, body: { address: 'Ленина 5' } });
+  assert.strictEqual(op.data.address, 'Ленина 5');
+  assert.strictEqual((await call('PATCH', '/api/v1/objects/' + obj.data.id, { key, body: { name: ' ' } })).status, 400);
+  assert.strictEqual((await call('PATCH', '/api/v1/objects/o_site', { key, body: { name: 'x' } })).status, 403);
+
+  const plan = await call('POST', `/api/v1/objects/${obj.data.id}/plans`, { key, body: { rooms: [{ name: 'Кухня', pts: [[0, 0], [1, 0], [1, 1]] }] } });
+  assert.strictEqual((await call('DELETE', `/api/v1/objects/${obj.data.id}/plans/${plan.data.id}`, { key })).status, 200);
+  assert.strictEqual((await call('DELETE', `/api/v1/objects/${obj.data.id}/plans/${plan.data.id}`, { key })).status, 404);
+
+  // объект со сметой удалить нельзя, пустой — можно
+  const withEst = await call('POST', '/api/v1/estimates', { key, body: { objectId: obj.data.id, items: [{ service: 'Шпаклёвка стен', qty: 1 }] } });
+  assert.strictEqual((await call('DELETE', '/api/v1/objects/' + obj.data.id, { key })).status, 409);
+  await call('DELETE', '/api/v1/estimates/' + withEst.data.id, { key });
+  assert.strictEqual((await call('DELETE', '/api/v1/objects/' + obj.data.id, { key })).status, 200);
+  assert.strictEqual((await call('GET', '/api/v1/objects/' + obj.data.id, { key })).status, 404);
+});
+
+test('подложка плана в облаке: картинка и положение, своё пространство', async () => {
+  const { env, call, token } = await setup();
+  assert.deepStrictEqual((await call('GET', '/underlay?id=flat_o1', { token })).data, { view: null });
+  assert.strictEqual((await call('PUT', '/underlay?id=flat_o1', { token, body: { view: { x: 1 } } })).status, 400, 'без картинки нельзя');
+  assert.strictEqual((await call('PUT', '/underlay?id=flat_o1', { token, body: { view: { x: 1 }, image: 'http://x' } })).status, 400);
+  const put = await call('PUT', '/underlay?id=flat_o1', { token, body: { view: { x: 1, w: 8, ar: 0.7 }, at: 100, image: 'data:image/jpeg;base64,AAAA' } });
+  assert.strictEqual(put.status, 200);
+  assert.strictEqual(put.data.at, 100);
+  assert.ok(put.data.imgAt > 0);
+  const moved = await call('PUT', '/underlay?id=flat_o1', { token, body: { view: { x: 2, w: 8, ar: 0.7 }, at: 200 } });
+  assert.strictEqual(moved.data.imgAt, put.data.imgAt, 'картинка та же');
+  const meta = await call('GET', '/underlay?id=flat_o1', { token });
+  assert.deepStrictEqual(meta.data.view, { x: 2, w: 8, ar: 0.7 });
+  assert.strictEqual((await call('GET', '/underlay?id=flat_o1&img=1', { token })).data.image, 'data:image/jpeg;base64,AAAA');
+  // у другого мастера — своё пространство
+  const other = await call('POST', '/register', { body: { login: 'petr', email: 'p@x.ru', password: 'pw', mode: 'company' } });
+  assert.deepStrictEqual((await call('GET', '/underlay?id=flat_o1', { token: other.data.token })).data, { view: null });
+  assert.strictEqual((await call('GET', '/underlay?id=../x', { token })).status, 400);
+  await call('DELETE', '/underlay?id=flat_o1', { token });
+  assert.deepStrictEqual([...env.STORAGE.map.keys()].filter(k => k.startsWith('ul')), []);
+});

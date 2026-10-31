@@ -72,6 +72,33 @@ SURFACES.forEach(s => { out[s.key] = { ...measureValueForTab(r, s.tab), label: s
 return out;
 }
 
+// Посчитанные поверхности помещений кладём в данные объекта (room.surfaces),
+// чтобы ИИ-агент через API брал объём из замеров. Пересчитываем только
+// помещения, у которых замер изменился с прошлого раза.
+const roomSurfacesSeen = new Map();
+function stampRoomSurfaces() {
+(cloudData.objects || []).forEach(obj => (Array.isArray(obj && obj.rooms) ? obj.rooms : []).forEach(room => {
+if (!room || !room.measure) return;
+const key = JSON.stringify(room.measure);
+if (room.surfaces && roomSurfacesSeen.get(room.id) === key) return;
+const out = {};
+try {
+const all = roomSurfaces(room);
+Object.keys(all).forEach(k => { if (all[k].value > 0) out[k] = { v: Math.round(all[k].value * 1000) / 1000, u: all[k].unit, l: all[k].label }; });
+} catch (e) { /* замер не считается — без поверхностей */ }
+room.surfaces = out;
+roomSurfacesSeen.set(room.id, key);
+}));
+}
+
+// Помещения, сохранённые до этой доработки, ещё без поверхностей — при входе
+// мастера дописываем их и сохраняем один раз, чтобы агенту не ждать правки замера
+function fillMissingRoomSurfaces() {
+if (!authToken || isCurrentClient()) return;
+const missing = (cloudData.objects || []).some(obj => (Array.isArray(obj && obj.rooms) ? obj.rooms : []).some(r => r && r.measure && !r.surfaces));
+if (missing) saveCloudData();
+}
+
 function roundQty(v, unit) {
 const q = Math.round(v * 1000) / 1000;
 return unit === 'пог. м' ? Math.max(1, q) : q;

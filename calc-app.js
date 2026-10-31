@@ -48,6 +48,7 @@ currentUser = savedUser;
 await loadCloudData();
 if (cloudData && Array.isArray(cloudData.objects)) {
 showAppScreen();
+setTimeout(() => { if (typeof fillMissingRoomSurfaces === 'function') fillMissingRoomSurfaces(); }, 1500);
 } else {
 handleLogout();
 }
@@ -95,7 +96,7 @@ if (loader) {
 loader.style.display = 'block';
 loader.textContent = attempt === 1 ? 'Загрузка данных...' : `Облако не отвечает, пробую ещё раз (${attempt}/${maxAttempts})...`;
 }
-const res = await fetch(`${WORKER_URL}/appdata`, {
+const res = await authFetch(`${WORKER_URL}/appdata`, {
 headers: { "Authorization": "Bearer " + authToken }
 });
 if (res.ok) {
@@ -141,6 +142,7 @@ renderServices();
 
 async function saveCloudData() {
 const maxAttempts = 3;
+if (typeof stampRoomSurfaces === 'function') stampRoomSurfaces();
 for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 showSyncStatus(attempt === 1 ? 'Сохраняю в облако…' : `Не получилось, пробую ещё раз (${attempt}/${maxAttempts})…`);
 try {
@@ -206,12 +208,41 @@ if (mode === 'register') setRegisterRole('master');
 if (mode === 'login') setLoginMode('employee');
 }
 
-async function handleLogin() {
+// Вход и регистрация не висят бесконечно, если сеть режет сервер:
+// через 15 секунд запрос обрывается с понятной подсказкой.
+const AUTH_TIMEOUT_MS = 15000;
+const AUTH_TIMEOUT_TEXT = 'Сервер не ответил за 15 секунд. Похоже, сеть блокирует сайт — включите или выключите VPN, смените Wi-Fi/мобильный интернет и попробуйте ещё раз.';
+
+function authFetch(url, options) {
+const ctrl = new AbortController();
+const timer = setTimeout(() => ctrl.abort(), AUTH_TIMEOUT_MS);
+return fetch(url, { ...options, signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
+function authNetworkError(e) {
+return e && e.name === 'AbortError' ? AUTH_TIMEOUT_TEXT : 'Нет связи с сервером. Проверьте интернет (или попробуйте с VPN/без VPN) и нажмите ещё раз.';
+}
+
+// Пока идёт запрос — кнопка неактивна и показывает «Вход…»
+async function withBusyButton(btn, busyText, work) {
+if (!btn) return work();
+if (btn.disabled) return;
+const text = btn.textContent;
+btn.disabled = true;
+btn.textContent = busyText;
+try { return await work(); } finally { btn.disabled = false; btn.textContent = text; }
+}
+
+async function handleLogin(btn) {
+return withBusyButton(btn, 'Вход…', loginRequest);
+}
+
+async function loginRequest() {
 const inputVal = document.getElementById('loginInput').value.trim();
 const p = document.getElementById('passInput').value.trim();
 const errDiv = document.getElementById('authError');
 try {
-const res = await fetch(`${WORKER_URL}/login`, {
+const res = await authFetch(`${WORKER_URL}/login`, {
 method: "POST",
 headers: { "Content-Type": "application/json" },
 body: JSON.stringify({ login: inputVal, password: p, mode: selectedLoginMode })
@@ -241,7 +272,7 @@ errDiv.style.display = 'none';
 await loadCloudData();
 showAppScreen();
 } catch (e) {
-errDiv.textContent = 'Ошибка сети, попробуйте ещё раз';
+errDiv.textContent = authNetworkError(e);
 errDiv.style.display = 'block';
 }
 }
@@ -267,7 +298,11 @@ document.getElementById('regRoleMasterBtn').classList.toggle('active', role === 
 document.getElementById('regRoleClientBtn').classList.toggle('active', role === 'client');
 }
 
-async function handleRegister() {
+async function handleRegister(btn) {
+return withBusyButton(btn, 'Регистрирую…', registerRequest);
+}
+
+async function registerRequest() {
 const l = document.getElementById('regLoginInput').value.trim();
 const email = document.getElementById('regEmailInput').value.trim();
 const p = document.getElementById('regPassInput').value.trim();
@@ -279,7 +314,7 @@ errDiv.style.display = 'block';
 return;
 }
 try {
-const res = await fetch(`${WORKER_URL}/register`, {
+const res = await authFetch(`${WORKER_URL}/register`, {
 method: "POST",
 headers: { "Content-Type": "application/json" },
 body: JSON.stringify({ login: l, email, password: p, role: selectedRegisterRole })
@@ -300,7 +335,7 @@ localStorage.removeItem('isAdminAuthorized');
 await loadCloudData();
 showAppScreen();
 } catch (e) {
-errDiv.textContent = 'Ошибка сети, попробуйте ещё раз';
+errDiv.textContent = authNetworkError(e);
 errDiv.style.display = 'block';
 }
 }
@@ -1207,22 +1242,35 @@ const w = window.open(url, '_blank');
 if (!w) location.href = url;
 }
 
-async function shareInvoiceLink(id) {
+// Текст для заказчика: приветствие, что это за документ, сумма и ссылка
+function clientMessageText(rec) {
+const isEstimate = rec.docType === 'estimate';
+const money = Number(rec.total || 0).toLocaleString('ru-RU') + ' ₽';
+const lines = [rec.client ? `Здравствуйте, ${rec.client}!` : 'Здравствуйте!'];
+lines.push(`${isEstimate ? 'Предварительный расчёт' : 'Счёт'}${rec.address ? ` по адресу ${rec.address}` : ''} на ${money}:`);
+lines.push(getInvoiceShareUrl(rec.id));
+const signature = (cloudData.self && (cloudData.self.companyName || '').trim()) || '';
+if (signature) lines.push(signature);
+return lines.join('\n');
+}
+
+// «Отправить заказчику»: WhatsApp, Telegram, другое приложение или копия
+function shareInvoiceLink(id) {
+const rec = (cloudData.history || []).find(r => String(r.id) === String(id)) || { id };
 const url = getInvoiceShareUrl(id);
-if (navigator.share) {
-try {
-await navigator.share({ title: 'Счёт', url });
-return;
-} catch (e) {
-// пользователь отменил или системный шаринг не сработал — пробуем скопировать
-}
-}
-try {
-await navigator.clipboard.writeText(url);
-showAddToast('Ссылка скопирована');
-} catch (e) {
-prompt('Скопируйте ссылку на счёт:', url);
-}
+const text = clientMessageText(rec);
+const copy = async (value, done, ask) => {
+try { await navigator.clipboard.writeText(value); showAddToast(done); }
+catch (e) { prompt(ask, value); }
+};
+const items = [
+{ icon: '💬', label: 'WhatsApp', onClick: () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener') },
+{ icon: '📤', label: 'Telegram', onClick: () => window.open('https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(text.replace(url, '').replace(/\n+/g, '\n').trim()), '_blank', 'noopener') },
+];
+if (navigator.share) items.push({ icon: '📤', label: 'Другое приложение…', onClick: () => navigator.share({ text }).catch(() => {}) });
+items.push({ icon: '📋', label: 'Скопировать сообщение', onClick: () => copy(text, 'Сообщение скопировано', 'Скопируйте сообщение:') });
+items.push({ icon: '🔗', label: 'Скопировать только ссылку', onClick: () => copy(url, 'Ссылка скопирована', 'Скопируйте ссылку:') });
+openSheet(`Отправить заказчику${rec.client ? ' · ' + rec.client : ''}`, items);
 }
 
 async function sendHistoryRecordPDF(id) {
@@ -1662,7 +1710,7 @@ ${renderAttachmentsHtml(rec.attachments)}
 ${!isEstimate ? renderPaymentSectionHtml(rec, recordId) : ''}
 <div class="hc-actions">
 <button type="button" class="hc-btn hc-btn-primary" onclick="sendHistoryRecordPDF('${recordId}')"><svg class="ic"><use href="#i-send"/></svg> Отправить PDF</button>
-${canShare ? `<button type="button" class="hc-btn" onclick="openClientView('${recordId}')" aria-label="Посмотреть, как увидит заказчик" title="Как видит заказчик"><svg class="ic"><use href="#i-eye"/></svg></button><button type="button" class="hc-btn" onclick="shareInvoiceLink('${recordId}')" aria-label="Ссылка для заказчика"><svg class="ic"><use href="#i-link"/></svg></button>` : ''}
+${canShare ? `<button type="button" class="hc-btn" onclick="openClientView('${recordId}')" aria-label="Посмотреть, как увидит заказчик" title="Как видит заказчик"><svg class="ic"><use href="#i-eye"/></svg></button><button type="button" class="hc-btn" onclick="shareInvoiceLink('${recordId}')" aria-label="Отправить заказчику" title="Отправить заказчику"><svg class="ic"><use href="#i-chat"/></svg></button>` : ''}
 <button type="button" class="hc-btn hc-btn-more" onclick="openRecordActions('${recordId}', '${containerId}')" aria-label="Другие действия">⋯</button>
 </div>
 </div>
@@ -1727,7 +1775,7 @@ const items = [
 ];
 if (rec && rec.id && !rec.shareDisabled) {
 items.push({ icon: '👁', label: 'Посмотреть, как увидит заказчик', onClick: () => openClientView(recordId) });
-items.push({ icon: '🔗', label: 'Ссылка для заказчика', onClick: () => shareInvoiceLink(recordId) });
+items.push({ icon: '💬', label: 'Отправить заказчику (WhatsApp, Telegram…)', onClick: () => shareInvoiceLink(recordId) });
 }
 if (rec && rec.id && isCurrentAdmin()) {
 items.push(rec.shareDisabled
