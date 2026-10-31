@@ -280,3 +280,32 @@ test('подложка плана в облаке: картинка и поло�
   await call('DELETE', '/underlay?id=flat_o1', { token });
   assert.deepStrictEqual([...env.STORAGE.map.keys()].filter(k => k.startsWith('ul')), []);
 });
+
+test('простые замеры: размеры и соседство — сервер раскладывает план, двери у обоих', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const obj = await call('POST', '/api/v1/objects', { key, body: { name: 'Квартира' } });
+  const url = `/api/v1/objects/${obj.data.id}/plans`;
+  const plan = await call('POST', url, { key, body: { rooms: [
+    { name: 'Кухня', size_mm: [3000, 3200], next_to: { room: 'Гостиная', side: 'right' }, doors: [{ to: 'Гостиная', width_mm: 800 }] },
+    { name: 'Гостиная', size_mm: [4600, 3200], height_mm: 2700, windows: [{ side: 'top', offset_mm: 800, width_mm: 1400, height_mm: 1500 }] },
+    { name: 'Ванная', size_mm: [1700, 1500], next_to: { room: 'Кухня', side: 'bottom', offset_mm: 500, wall_mm: 120 } },
+  ] } });
+  assert.strictEqual(plan.status, 201, JSON.stringify(plan.data));
+  const L = Object.fromEntries(plan.data.layout.map(r => [r.name, r.pts]));
+  assert.deepStrictEqual(L['Гостиная'], [[0, 0], [4600, 0], [4600, 3200], [0, 3200]]);
+  assert.deepStrictEqual(L['Кухня'][0], [4700, 0]);
+  assert.deepStrictEqual(L['Ванная'][0], [5200, 3320]);
+  const saved = (await call('GET', '/appdata', { token })).data.data.objects[0].agentPlans[0].rooms;
+  const by = Object.fromEntries(saved.map(r => [r.name, r]));
+  assert.ok(!('size_mm' in by['Кухня']) && !('next_to' in by['Кухня']));
+  assert.deepStrictEqual(by['Гостиная'].openings.find(o => o.type === 'window').at, [[800, 0], [2200, 0]]);
+  assert.deepStrictEqual(by['Гостиная'].openings.find(o => o.type === 'door').at, [[4600, 1200], [4600, 2000]]);
+  assert.deepStrictEqual(by['Кухня'].openings.find(o => o.type === 'door').at, [[4700, 1200], [4700, 2000]]);
+
+  const bad = async (rooms, re) => { const r = await call('POST', url, { key, body: { rooms } }); assert.strictEqual(r.status, 400); assert.match(r.data.error, re); };
+  await bad([{ name: 'А', size_mm: [3000, 0] }], /size_mm/);
+  await bad([{ name: 'А', size_mm: [3000, 3000] }, { name: 'Б', size_mm: [2000, 2000], next_to: { room: 'Нет', side: 'left' } }], /нет помещения «Нет»/);
+  await bad([{ name: 'А', size_mm: [3000, 3000] }, { name: 'Б', size_mm: [2000, 2000] }], /укажите next_to/);
+  await bad([{ name: 'А', size_mm: [3000, 3000], doors: [{ to: 'Б' }] }, { name: 'Б', size_mm: [2000, 2000], next_to: { room: 'А', side: 'right', offset_mm: 2900 } }], /нет общей стены/);
+});

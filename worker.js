@@ -2219,6 +2219,24 @@ function apiGuide(base, key) {
   Сметы, которые мастер сделал на сайте, через API только читаются (editable: false).
 
 Формат замеров (POST /api/v1/objects/<id>/plans)
+Простой способ — для прямоугольных помещений: размеры и соседство, план сервер сложит сам.
+{"title":"Замер 30.10","rooms":[
+  {"name":"Гостиная","size_mm":[4600,3200],"height_mm":2700,
+   "windows":[{"side":"top","offset_mm":800,"width_mm":1400,"height_mm":1500}]},
+  {"name":"Кухня","size_mm":[3000,3200],"height_mm":2700,
+   "next_to":{"room":"Гостиная","side":"right","offset_mm":0,"wall_mm":100},
+   "doors":[{"to":"Гостиная","width_mm":800,"height_mm":2100}]}]}
+- size_mm — [ширина слева направо, глубина сверху вниз] по внутренним поверхностям стен.
+- next_to — к какому помещению примыкает и с какой стороны от него (side: top, right, bottom, left);
+  offset_mm — сдвиг вдоль общей стены от левого (верхнего) угла соседа, wall_mm — толщина стены между ними (по умолчанию 100).
+  Первое помещение — без next_to (встанет в начало координат). Соседа можно указать и с pts.
+- doors — двери в соседние помещения: to, width_mm, height_mm, offset_mm (без него — по середине общей стены).
+  Дверь указывай у одного из двух помещений — у второго сервер поставит её сам.
+- windows — окна на стене своего помещения: side, offset_mm от левого (верхнего) угла, width_mm, height_mm;
+  "type":"balcony" — балконный блок (ещё door_width_mm и door_height_mm).
+В ответе — layout: какие углы получились у каждого помещения; проверь, что план сошёлся.
+
+Точный способ — для помещений сложной формы (ниши, короба, скосы) — углы контура pts.
 Все помещения — в одной системе координат, в миллиметрах, целыми числами: (0,0) — верхний левый угол
 квартиры, x вправо, y вниз. Контур помещения — по внутренним поверхностям стен.
 {"title":"Замер 30.10","rooms":[{"name":"Гостиная","height_mm":2700,
@@ -2248,13 +2266,123 @@ function apiGuide(base, key) {
 Ошибки приходят как {"error":"..."} с понятным текстом — исправь запрос по нему.`;
 }
 
+// Простой формат замеров: агент даёт размеры прямоугольных помещений и
+// говорит, к какому помещению и с какой стороны каждое примыкает, — сервер
+// сам раскладывает их в общей системе координат (мм, y вниз), ставит двери
+// между помещениями сразу у обоих и окна на нужную стену. Помещения с pts
+// (сложной формы) остаются как есть, к ним тоже можно примыкать.
+const API_SIDES = ["top", "right", "bottom", "left"];
+const API_WALL_MM = 100;
+
+function apiLayoutRooms(rooms) {
+  const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const box = new Map(); // имя → { x, y, w, h }
+  const byName = new Map(rooms.map((r) => [String((r && r.name) || ""), r]));
+  const sized = rooms.filter((r) => r && Array.isArray(r.size_mm));
+  if (!sized.length) return { rooms };
+  for (const r of rooms) {
+    if (!r || typeof r !== "object" || !String(r.name || "").trim()) return { error: "У каждого помещения нужно имя name" };
+    if (Array.isArray(r.size_mm)) {
+      const [w, h] = r.size_mm.map(num);
+      if (!(w > 0 && h > 0 && w <= 100000 && h <= 100000)) return { error: `«${r.name}»: size_mm — [ширина, глубина] в мм, больше нуля` };
+    } else if (Array.isArray(r.pts) && r.pts.length >= 3) {
+      const xs = r.pts.map((q) => num(q && q[0])), ys = r.pts.map((q) => num(q && q[1]));
+      if (xs.includes(null) || ys.includes(null)) return { error: `«${r.name}»: в pts нужны числа` };
+      box.set(String(r.name), { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) });
+    }
+  }
+  if (byName.size !== rooms.length) return { error: "Имена помещений должны быть разными" };
+  // раскладываем: первое без next_to — в (0,0) или в at_mm, остальные — от соседей
+  let left = sized.filter((r) => !box.has(String(r.name)));
+  while (left.length) {
+    const before = left.length;
+    left = left.filter((r) => {
+      const [w, h] = r.size_mm;
+      const nt = r.next_to;
+      if (!nt) {
+        if (box.size && !Array.isArray(r.at_mm)) return true; // ждём, вдруг его поставят от соседа
+        const at = Array.isArray(r.at_mm) ? r.at_mm.map(num) : [0, 0];
+        box.set(String(r.name), { x: at[0] || 0, y: at[1] || 0, w, h });
+        return false;
+      }
+      const ref = box.get(String(nt.room || ""));
+      if (!ref) return true;
+      const gap = num(nt.wall_mm) !== null ? nt.wall_mm : API_WALL_MM, off = num(nt.offset_mm) || 0;
+      const pos = { right: [ref.x + ref.w + gap, ref.y + off], left: [ref.x - gap - w, ref.y + off],
+        bottom: [ref.x + off, ref.y + ref.h + gap], top: [ref.x + off, ref.y - gap - h] }[nt.side];
+      if (!pos) return true;
+      box.set(String(r.name), { x: pos[0], y: pos[1], w, h });
+      return false;
+    });
+    if (left.length === before) {
+      const free = left.find((r) => !r.next_to);
+      if (free) return { error: `«${free.name}»: укажите next_to — к какому помещению и с какой стороны оно примыкает (или at_mm — где его левый верхний угол)` };
+      const bad = left[0];
+      if (bad.next_to && !API_SIDES.includes(bad.next_to.side)) return { error: `«${bad.name}»: next_to.side — top, right, bottom или left` };
+      if (bad.next_to && !byName.has(String(bad.next_to.room || ""))) return { error: `«${bad.name}»: нет помещения «${String(bad.next_to.room || "").slice(0, 60)}» для next_to` };
+      return { error: `«${bad.name}»: не получается поставить — проверьте next_to (соседи не должны ссылаться друг на друга по кругу)` };
+    }
+  }
+  const out = rooms.map((r) => {
+    if (!Array.isArray(r.size_mm)) return { ...r, openings: Array.isArray(r.openings) ? [...r.openings] : [] };
+    const b = box.get(String(r.name));
+    const { size_mm, next_to, at_mm, doors, windows, ...rest } = r;
+    return { ...rest, pts: [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]], openings: Array.isArray(r.openings) ? [...r.openings] : [] };
+  });
+  const outByName = new Map(out.map((r) => [String(r.name), r]));
+  // окна и балконные блоки — на стене своего помещения: side и отступ от левого (верхнего) угла
+  for (const r of sized) {
+    const b = box.get(String(r.name)), room = outByName.get(String(r.name));
+    for (const wd of Array.isArray(r.windows) ? r.windows : []) {
+      const wmm = num(wd && wd.width_mm), off = num(wd && wd.offset_mm) || 0;
+      if (!(wmm > 0) || !API_SIDES.includes(wd.side)) return { error: `«${r.name}»: у окна нужны side (top/right/bottom/left) и width_mm` };
+      const along = wd.side === "top" || wd.side === "bottom";
+      const start = along ? b.x + off : b.y + off;
+      const fixed = { top: b.y, bottom: b.y + b.h, left: b.x, right: b.x + b.w }[wd.side];
+      const at = along ? [[start, fixed], [start + wmm, fixed]] : [[fixed, start], [fixed, start + wmm]];
+      const { side, offset_mm, width_mm, ...extra } = wd;
+      room.openings.push({ type: wd.type === "balcony" ? "balcony" : "window", ...extra, at });
+    }
+  }
+  // двери между помещениями: на общей стене, сразу у обоих
+  for (const r of sized) {
+    for (const d of Array.isArray(r.doors) ? r.doors : []) {
+      const a = box.get(String(r.name)), to = String((d && d.to) || ""), b = box.get(to);
+      if (!b) return { error: `«${r.name}»: дверь в «${to.slice(0, 60)}» — такого помещения нет` };
+      const wmm = num(d.width_mm) || 800;
+      // общая стена: края помещений не дальше 600 мм (толщина стены) и перекрытие не уже двери
+      const near = (p, q) => Math.abs(p - q) <= 600;
+      const cands = [];
+      if (near(a.x + a.w, b.x)) cands.push([true, a.x + a.w, b.x]);
+      if (near(b.x + b.w, a.x)) cands.push([true, a.x, b.x + b.w]);
+      if (near(a.y + a.h, b.y)) cands.push([false, a.y + a.h, b.y]);
+      if (near(b.y + b.h, a.y)) cands.push([false, a.y, b.y + b.h]);
+      const fit = cands.map(([v, wa, wb]) => ({ vertical: v, wallA: wa, wallB: wb,
+        lo: v ? Math.max(a.y, b.y) : Math.max(a.x, b.x), hi: v ? Math.min(a.y + a.h, b.y + b.h) : Math.min(a.x + a.w, b.x + b.w) }))
+        .find((c) => c.hi - c.lo >= wmm);
+      if (!fit) return { error: `«${r.name}» и «${to}»: нет общей стены шире двери ${wmm} мм` };
+      const { vertical, wallA, wallB, lo, hi } = fit;
+      const s0 = num(d.offset_mm) !== null ? Math.min(lo + d.offset_mm, hi - wmm) : lo + (hi - lo - wmm) / 2;
+      const seg = (wall) => (vertical ? [[wall, s0], [wall, s0 + wmm]] : [[s0, wall], [s0 + wmm, wall]]);
+      const { to: _to, offset_mm, width_mm, ...extra } = d;
+      const door = { type: "door", height_mm: 2100, ...extra };
+      outByName.get(String(r.name)).openings.push({ ...door, at: seg(wallA) });
+      outByName.get(to).openings.push({ ...door, at: seg(wallB) });
+    }
+  }
+  return { rooms: out };
+}
+
 // Замеры от агента: проверяем только, что это похоже на план (список
 // помещений), сами помещения разбирает страница на экране проверки
 function apiPlan(body) {
   if (!body || typeof body !== "object") return { error: "Тело запроса — не JSON" };
-  const rooms = Array.isArray(body) ? body : body.rooms;
+  let rooms = Array.isArray(body) ? body : body.rooms;
   if (!Array.isArray(rooms) || rooms.length === 0) return { error: "Нужен список помещений rooms" };
   if (rooms.length > API_PLAN_ROOMS_MAX) return { error: `Не больше ${API_PLAN_ROOMS_MAX} помещений за раз` };
+  const laid = apiLayoutRooms(rooms);
+  if (laid.error) return { error: laid.error };
+  rooms = laid.rooms;
   for (let i = 0; i < rooms.length; i++) {
     const r = rooms[i];
     if (!r || typeof r !== "object") return { error: `Помещение ${i + 1}: ожидается объект` };
@@ -2456,7 +2584,8 @@ async function handleApi(request, env, url) {
     bumpRev(record, space.key, ["objects"]);
     touch();
     await writeBin(env, record);
-    return apiJson({ id: plan.id, rooms: plan.rooms.length, note: "Замеры ждут проверки мастером у объекта" }, 201);
+    return apiJson({ id: plan.id, rooms: plan.rooms.length, note: "Замеры ждут проверки мастером у объекта",
+      layout: plan.rooms.map((r) => ({ name: r.name, pts: r.pts || null })) }, 201);
   }
 
   if (path === "/api/v1/estimates" && request.method === "POST") {

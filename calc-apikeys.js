@@ -138,6 +138,7 @@ if (!plans.length || isCurrentClient()) return '';
 return `<div class="agent-plans">${plans.map(p => {
 const n = Array.isArray(p.rooms) ? p.rooms.length : 0;
 return `<div class="agent-plan">
+${agentPlanThumb(p.rooms)}
 <div class="agent-plan-info">
 <b>🤖 Замеры от ИИ-агента${p.title ? ` · ${escapeHtml(p.title)}` : ''}</b>
 <small>Ключ «${escapeHtml(p.from || '')}» · ${n} ${pluralRu(n, 'помещение', 'помещения', 'помещений')} · ${apiDate(p.at)}</small>
@@ -148,6 +149,19 @@ return `<div class="agent-plan">
 </div>
 </div>`;
 }).join('')}</div>`;
+}
+
+// Мини-картинка присланного плана: контуры помещений (углы pts, в мм) —
+// сразу видно, что прислал агент, ещё до экрана проверки
+function agentPlanThumb(rooms) {
+const shapes = (Array.isArray(rooms) ? rooms : []).map(r => (r && Array.isArray(r.pts) ? r.pts : [])
+.filter(q => Array.isArray(q) && Number.isFinite(+q[0]) && Number.isFinite(+q[1])).map(q => [+q[0], +q[1]])).filter(pts => pts.length >= 3);
+if (!shapes.length) return '';
+const all = shapes.flat(), xs = all.map(q => q[0]), ys = all.map(q => q[1]);
+const minX = Math.min(...xs), minY = Math.min(...ys), w = Math.max(...xs) - minX || 1, h = Math.max(...ys) - minY || 1;
+const pad = Math.max(w, h) * 0.04, sw = Math.max(w, h) * 0.012;
+return `<svg class="agent-plan-thumb" viewBox="${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${shapes.map(pts =>
+`<path d="M${pts.map(q => q.join(' ')).join('L')}Z" fill="#fff4d1" stroke="#14181f" stroke-width="${sw}" stroke-linejoin="miter"/>`).join('')}</svg>`;
 }
 
 function findAgentPlan(objectId, planId) {
