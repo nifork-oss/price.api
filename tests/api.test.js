@@ -309,3 +309,24 @@ test('простые замеры: размеры и соседство — се
   await bad([{ name: 'А', size_mm: [3000, 3000] }, { name: 'Б', size_mm: [2000, 2000] }], /укажите next_to/);
   await bad([{ name: 'А', size_mm: [3000, 3000], doors: [{ to: 'Б' }] }, { name: 'Б', size_mm: [2000, 2000], next_to: { room: 'А', side: 'right', offset_mm: 2900 } }], /нет общей стены/);
 });
+
+test('скидка на смету: процент или рубли, итог со скидкой, видна заказчику', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, services: [{ name: 'Шпаклёвка стен', price: 500 }] } });
+  const made = await call('POST', '/api/v1/estimates', { key, body: { items: [{ service: 'Шпаклёвка стен', qty: 20 }], discount: { percent: 10 } } });
+  assert.strictEqual(made.status, 201);
+  assert.strictEqual(made.data.total, 9000);
+  assert.strictEqual(made.data.subtotal, 10000);
+  assert.deepStrictEqual(made.data.discount, { percent: 10 });
+  const view = await call('GET', '/invoice?id=' + made.data.id);
+  assert.strictEqual(view.data.total, 9000);
+  assert.deepStrictEqual(view.data.discount, { kind: 'pct', value: 10 });
+  const rub = await call('PATCH', '/api/v1/estimates/' + made.data.id, { key, body: { discount: { rub: 1500 } } });
+  assert.strictEqual(rub.data.total, 8500);
+  const none = await call('PATCH', '/api/v1/estimates/' + made.data.id, { key, body: { discount: null } });
+  assert.strictEqual(none.data.total, 10000);
+  assert.ok(!('discount' in none.data));
+  assert.strictEqual((await call('POST', '/api/v1/estimates', { key, body: { items: [{ service: 'Шпаклёвка стен', qty: 1 }], discount: { percent: 150 } } })).status, 400);
+});

@@ -536,6 +536,8 @@ const handler = {
           address: rec.address,
           note: rec.note,
           total: rec.total,
+          subtotal: rec.subtotal,
+          discount: rec.discount,
           items: rec.items || [],
           attachments: rec.attachments || [],
           objectName: obj ? obj.name : null,
@@ -2131,6 +2133,31 @@ function apiItems(rawItems, services, rooms) {
   return { items };
 }
 
+// Скидка на весь документ: "discount":{"percent":10} или {"rub":1500}; null — убрать
+function apiDiscount(raw) {
+  if (raw === null) return { discount: null };
+  if (!raw || typeof raw !== "object") return { error: "discount: {\"percent\": 10} или {\"rub\": 1500}" };
+  const pct = Number(raw.percent), rub = Number(raw.rub);
+  if (raw.percent !== undefined) {
+    if (!(pct > 0 && pct <= 100)) return { error: "discount.percent — от 0 до 100" };
+    return { discount: { kind: "pct", value: pct } };
+  }
+  if (raw.rub !== undefined) {
+    if (!(rub > 0 && rub <= 1e9)) return { error: "discount.rub — больше нуля" };
+    return { discount: { kind: "rub", value: rub } };
+  }
+  return { error: "discount: {\"percent\": 10} или {\"rub\": 1500}" };
+}
+
+// Итог с учётом скидки: total — к оплате, subtotal — сумма позиций
+function apiApplyTotals(rec) {
+  const subtotal = Math.round((rec.items || []).reduce((a, i) => a + i.qty * i.price, 0) * 100) / 100;
+  const d = rec.discount;
+  const off = d ? Math.round((d.kind === "pct" ? subtotal * Math.min(100, d.value) / 100 : Math.min(subtotal, d.value)) * 100) / 100 : 0;
+  rec.total = Math.round((subtotal - off) * 100) / 100;
+  if (off > 0) rec.subtotal = subtotal; else { delete rec.discount; delete rec.subtotal; }
+}
+
 function apiRecordView(rec, site) {
   return {
     id: rec.id,
@@ -2140,6 +2167,7 @@ function apiRecordView(rec, site) {
     address: rec.address || "",
     note: rec.note || "",
     total: Number(rec.total) || 0,
+    ...(rec.discount ? { subtotal: Number(rec.subtotal) || 0, discount: rec.discount.kind === "pct" ? { percent: rec.discount.value } : { rub: rec.discount.value } } : {}),
     items: (rec.items || []).map((i) => ({ name: i.name, price: i.price, qty: i.qty, unit: i.unit, location: i.location || "",
       ...(i.surface && Array.isArray(i.rooms) ? { surface: i.surface, room_ids: i.rooms.map((r) => r.roomId) } : {}) })),
     objectId: rec.objectId || "",
@@ -2208,6 +2236,8 @@ function apiGuide(base, key) {
    "items":[{"service":"Шпаклёвка стен","qty":35.5,"unit":"м²","location":"Гостиная"},
             {"name":"Вынос мусора","price":3000,"qty":1,"unit":"усл."}]}
   service — точное название услуги из прайса (цену подставит сервер); или name + price для своей позиции.
+  Скидка на весь документ (по желанию): "discount":{"percent":10} или {"rub":1500}; в PATCH null — убрать.
+  Тогда total — итог со скидкой, subtotal — сумма позиций.
   unit — одно из: м², пог. м, шт., компл., час, усл. (по умолчанию м²). docType "invoice" — счёт вместо сметы.
   Объём можно не считать самому, а взять из помещений объекта (нужен objectId):
    {"service":"Шпаклёвка стен","surface":"walls","room_ids":["<id помещения>","<id помещения>"]}
@@ -2600,7 +2630,12 @@ async function handleApi(request, env, url) {
     if (objectId && !estObj) return apiJson({ error: "Объект objectId не найден" }, 400);
     const parsed = apiItems(body.items, space.data.services, estObj ? estObj.rooms || [] : null);
     if (parsed.error) return apiJson({ error: parsed.error }, 400);
-    const total = Math.round(parsed.items.reduce((s, i) => s + i.qty * i.price, 0) * 100) / 100;
+    let discount = null;
+    if (body.discount !== undefined) {
+      const d = apiDiscount(body.discount);
+      if (d.error) return apiJson({ error: d.error }, 400);
+      discount = d.discount;
+    }
     const rec = {
       id: "inv_" + Date.now() + "_" + randomHex(6),
       author: user.login,
@@ -2608,14 +2643,16 @@ async function handleApi(request, env, url) {
       client: str(body.client, 200),
       address: str(body.address, 300),
       note: str(body.note, 2000),
-      total,
+      total: 0,
       objectId,
       docType: body.docType === "invoice" ? "invoice" : "estimate",
       items: parsed.items,
       attachments: [],
       source: "api",
       apiKey: entry.name,
+      ...(discount ? { discount } : {}),
     };
+    apiApplyTotals(rec);
     if (!Array.isArray(space.data.history)) space.data.history = [];
     space.data.history.unshift(rec);
     bumpRev(record, space.key, ["history"]);
@@ -2654,8 +2691,13 @@ async function handleApi(request, env, url) {
         const parsed = apiItems(body.items, space.data.services, estObj ? estObj.rooms || [] : null);
         if (parsed.error) return apiJson({ error: parsed.error }, 400);
         rec.items = parsed.items;
-        rec.total = Math.round(parsed.items.reduce((a, i) => a + i.qty * i.price, 0) * 100) / 100;
       }
+      if ("discount" in body) {
+        const d = apiDiscount(body.discount);
+        if (d.error) return apiJson({ error: d.error }, 400);
+        if (d.discount) rec.discount = d.discount; else delete rec.discount;
+      }
+      apiApplyTotals(rec);
       ["client", "address"].forEach((k) => { if (k in body) rec[k] = str(body[k], k === "address" ? 300 : 200); });
       if ("note" in body) rec.note = str(body.note, 2000);
       if (body.docType === "invoice" || body.docType === "estimate") rec.docType = body.docType;

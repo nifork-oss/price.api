@@ -1111,3 +1111,13 @@ body.assistant-open .add-toast { z-index: 99; }
 #flatBody .mp-body-inner > .flat-tools { order: -3; }
 #flatBody .mp-body-inner > .flat-viewbox { order: -1; margin-bottom: 8px; }
 }
+
+/* Скидка на весь счёт — над итогом */
+.discount-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; }
+.discount-row label { font-weight: 600; color: var(--s-ink2, #33404f); }
+.discount-row input { width: 90px; border: 1px solid #dfe3e8; border-radius: 7px; padding: 6px 8px; font-size: 14px; }
+.discount-kind { display: inline-flex; border: 1px solid #dfe3e8; border-radius: 7px; overflow: hidden; }
+.discount-kind button { min-width: 36px; min-height: 32px; border: none; background: #ffffff; color: #485566; font-weight: 700; cursor: pointer; }
+.discount-kind button.active { background: #14181f; color: #ffffff; }
+#discountSum { color: #c2361f; font-weight: 600; }
+.hc-discount { display: flex; justify-content: space-between; gap: 8px; padding-top: 6px; color: #c2361f; font-weight: 600; font-size: 13px; }

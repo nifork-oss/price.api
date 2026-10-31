@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261031-2. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261031-3. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Кабинет мастера и Калькулятор</title>
@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=17c50512">
+<link rel="stylesheet" href="calc.css?v=6a24fec4">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -396,6 +396,12 @@
 <div class="invoice-preview">
 <div id="invoiceInfo" style="margin-bottom: 10px; font-size: 12px; color: #485566; line-height: 1.4;"></div>
 <div id="invoiceItems"></div>
+<div class="discount-row">
+<label for="discountValue">Скидка</label>
+<input type="number" id="discountValue" min="0" step="any" inputmode="decimal" placeholder="0" oninput="setInvoiceDiscount()">
+<div class="discount-kind" role="group" aria-label="Скидка в процентах или рублях"><button type="button" id="discountPctBtn" class="active" onclick="setDiscountKind('pct')">%</button><button type="button" id="discountRubBtn" onclick="setDiscountKind('rub')">₽</button></div>
+<span id="discountSum"></span>
+</div>
 <div class="total-box">
 <div>Итого:</div>
 <div><span id="totalSum">0</span> ₽</div>
@@ -665,7 +671,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=5d951e0f"></script>
+<script src="calc-app.js?v=c8396db8"></script>
 <script src="calc-geo.js?v=7519180b"></script>
 
 <script src="calc-measure.js?v=b19af441"></script>
