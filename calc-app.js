@@ -19,6 +19,8 @@ let currentUserMode = 'employee';
 let currentUserHasTriedCompanyMode = false;
 let authToken = null;
 let invoiceCart = [];
+// Скидка на весь счёт: { kind: 'pct' | 'rub', value } — процент или рубли; null — без скидки
+let invoiceDiscount = null;
 let invoiceAttachments = [];
 let currentObjectId = null;
 // Версия данных с сервера — отправляется при сохранении, чтобы не затереть
@@ -944,7 +946,8 @@ client: (document.getElementById('clientName').value || '').trim(),
 address: (document.getElementById('objectAddress').value || '').trim(),
 note: (document.getElementById('invoiceNote').value || '').trim(),
 attachments: invoiceAttachments,
-roomSel: [...selectedRoomIds]
+roomSel: [...selectedRoomIds],
+discount: invoiceDiscount
 };
 }
 
@@ -1000,7 +1003,7 @@ if (!d || !isDraftEmpty(st) || isCurrentClient()) {
 hideDraftOffer();
 return;
 }
-const total = d.cart.reduce((sum, i) => sum + (Number(i.qty) || 0) * (Number(i.price) || 0), 0);
+const total = docTotals(d.cart, d.discount).total;
 const obj = d.objectId ? (cloudData.objects || []).find(o => o.id === d.objectId) : null;
 const when = d.savedAt ? new Date(d.savedAt) : null;
 const whenText = when
@@ -1043,6 +1046,8 @@ invoiceCart = d.cart;
 if (migrateLegacyRooms(d.rooms, invoiceCart, d.objectId)) saveCloudData();
 selectedRoomIds = new Set(Array.isArray(d.roomSel) ? d.roomSel : []);
 invoiceAttachments = Array.isArray(d.attachments) ? d.attachments : [];
+invoiceDiscount = d.discount && Number(d.discount.value) > 0 ? d.discount : null;
+syncDiscountUI();
 renderReportAttachments();
 renderServices();
 renderInvoice();
@@ -1102,6 +1107,55 @@ updateCalcBarTotal();
 updateCalcDetailsSummary();
 });
 
+/* ---------- скидка ---------- */
+// Сумма скидки в рублях: процент от суммы позиций или рубли, не больше самой суммы
+function discountOf(d, subtotal) {
+const v = d ? Number(d.value) : 0;
+if (!(v > 0) || !(subtotal > 0)) return 0;
+const rub = d.kind === 'pct' ? subtotal * Math.min(100, v) / 100 : Math.min(subtotal, v);
+return Math.round(rub * 100) / 100;
+}
+function discountLabel(d) {
+return d && d.kind === 'pct' ? `Скидка ${String(Number(d.value)).replace('.', ',')}%` : 'Скидка';
+}
+// Итоги документа: сумма позиций, скидка и итог к оплате
+function docTotals(items, d) {
+const subtotal = Math.round((items || []).reduce((a, i) => a + (Number(i.qty) || 0) * (Number(i.price) || 0), 0) * 100) / 100;
+const discount = discountOf(d, subtotal);
+return { subtotal, discount, total: Math.round((subtotal - discount) * 100) / 100 };
+}
+function rubFmt(n) { return Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽'; }
+
+function setInvoiceDiscount() {
+const v = Number(String(document.getElementById('discountValue').value || '').replace(',', '.'));
+const kind = document.getElementById('discountRubBtn').classList.contains('active') ? 'rub' : 'pct';
+invoiceDiscount = v > 0 ? { kind, value: kind === 'pct' ? Math.min(100, v) : v } : null;
+renderInvoiceTotal();
+scheduleDraftSave();
+}
+function setDiscountKind(kind) {
+document.getElementById('discountPctBtn').classList.toggle('active', kind === 'pct');
+document.getElementById('discountRubBtn').classList.toggle('active', kind === 'rub');
+setInvoiceDiscount();
+}
+// Поля скидки по invoiceDiscount — после восстановления черновика, правки или очистки счёта
+function syncDiscountUI() {
+const input = document.getElementById('discountValue');
+if (!input) return;
+input.value = invoiceDiscount ? String(invoiceDiscount.value) : '';
+const rubKind = !!(invoiceDiscount && invoiceDiscount.kind === 'rub');
+document.getElementById('discountPctBtn').classList.toggle('active', !rubKind);
+document.getElementById('discountRubBtn').classList.toggle('active', rubKind);
+renderInvoiceTotal();
+}
+function renderInvoiceTotal() {
+const t = docTotals(invoiceCart, invoiceDiscount);
+const el = document.getElementById('totalSum');
+if (el) el.textContent = t.total.toLocaleString('ru-RU', { maximumFractionDigits: 2 });
+const info = document.getElementById('discountSum');
+if (info) info.textContent = t.discount > 0 ? `−${rubFmt(t.discount)} · без скидки ${rubFmt(t.subtotal)}` : '';
+}
+
 function updateInvoiceInfo() {
 updateCalcDetailsSummary();
 const info = document.getElementById('invoiceInfo');
@@ -1125,7 +1179,7 @@ let total = 0;
 updateInvoiceInfo();
 if (invoiceCart.length === 0) {
 container.innerHTML = '<div style="color:#8d97a5; font-size: 12px; text-align:center; padding: 10px 0;">Счёт пока пуст</div>';
-document.getElementById('totalSum').textContent = '0';
+renderInvoiceTotal();
 return;
 }
 invoiceCart.forEach((item, idx) => {
@@ -1154,7 +1208,7 @@ ${measureNoteHtml(item)}
 </div>
 `;
 });
-document.getElementById('totalSum').textContent = total.toLocaleString('ru-RU');
+renderInvoiceTotal();
 }
 
 function updateInvoiceItemField(idx, field, value) {
@@ -1177,9 +1231,7 @@ item[field] = value;
 // полей ввода — иначе курсор/фокус будет сбрасываться при каждой цифре.
 const container = document.getElementById('invoiceItems');
 if (container) {
-let total = 0;
-invoiceCart.forEach(i => total += i.qty * i.price);
-document.getElementById('totalSum').textContent = total.toLocaleString('ru-RU');
+renderInvoiceTotal();
 const row = container.children[idx];
 if (row) {
 const sumEl = row.querySelector('span[style*="margin-left:auto"]');
@@ -1199,9 +1251,10 @@ const note = document.getElementById('invoiceNote').value.trim();
 const dateStr = new Date().toLocaleDateString('ru-RU');
 const items = [...invoiceCart];
 const docType = selectedDocType;
+const discount = invoiceDiscount;
 const saved = await saveInvoiceToHistory(true);
 if (!saved) return;
-await generateAndSharePDF({ client, address, note, dateStr, items, docType });
+await generateAndSharePDF({ client, address, note, dateStr, items, docType, discount });
 }
 
 async function downloadInvoicePDF() {
@@ -1215,9 +1268,10 @@ const note = document.getElementById('invoiceNote').value.trim();
 const dateStr = new Date().toLocaleDateString('ru-RU');
 const items = [...invoiceCart];
 const docType = selectedDocType;
+const discount = invoiceDiscount;
 const saved = await saveInvoiceToHistory(true);
 if (!saved) return;
-await downloadPDF({ client, address, note, dateStr, items, docType });
+await downloadPDF({ client, address, note, dateStr, items, docType, discount });
 }
 
 async function toggleShareLink(id) {
@@ -1277,14 +1331,14 @@ async function sendHistoryRecordPDF(id) {
 const rec = (cloudData.history || []).find(r => String(r.id) === String(id));
 if (!rec) return;
 const dateStr = (rec.date || '').split(',')[0] || new Date().toLocaleDateString('ru-RU');
-await generateAndSharePDF({ client: rec.client, address: rec.address, note: rec.note, dateStr, items: rec.items || [], docType: rec.docType });
+await generateAndSharePDF({ client: rec.client, address: rec.address, note: rec.note, dateStr, items: rec.items || [], docType: rec.docType, discount: rec.discount });
 }
 
 async function downloadHistoryRecordPDF(id) {
 const rec = (cloudData.history || []).find(r => String(r.id) === String(id));
 if (!rec) return;
 const dateStr = (rec.date || '').split(',')[0] || new Date().toLocaleDateString('ru-RU');
-await downloadPDF({ client: rec.client, address: rec.address, note: rec.note, dateStr, items: rec.items || [], docType: rec.docType });
+await downloadPDF({ client: rec.client, address: rec.address, note: rec.note, dateStr, items: rec.items || [], docType: rec.docType, discount: rec.discount });
 }
 
 function triggerFileDownload(blob, fileName) {
@@ -1297,7 +1351,7 @@ document.body.removeChild(link);
 URL.revokeObjectURL(link.href);
 }
 
-async function buildInvoicePDFBlob({ client, address, note, dateStr, items, docType }) {
+async function buildInvoicePDFBlob({ client, address, note, dateStr, items, docType, discount }) {
 const isEstimate = docType === 'estimate';
 let rows = '';
 let total = 0;
@@ -1344,7 +1398,9 @@ ${note ? `<p style="margin: 6px 0; font-size: 14px;"><b>Пояснение:</b> 
 </thead>
 <tbody>${rows}</tbody>
 </table>
-<h3 style="text-align: right; margin-top: 20px; font-size: 18px; color: #000;">${isEstimate ? 'ИТОГО ПО РАСЧЁТУ' : 'ИТОГО К ОПЛАТЕ'}: ${total.toLocaleString('ru-RU')} ₽</h3>
+${discountOf(discount, total) > 0 ? `<p style="text-align: right; margin: 16px 0 0; font-size: 14px; color: #33404f;">Сумма: ${rubFmt(total)}</p>
+<p style="text-align: right; margin: 4px 0 0; font-size: 14px; color: #c2361f;">${escapeHtml(discountLabel(discount))}: −${rubFmt(discountOf(discount, total))}</p>` : ''}
+<h3 style="text-align: right; margin-top: ${discountOf(discount, total) > 0 ? 8 : 20}px; font-size: 18px; color: #000;">${isEstimate ? 'ИТОГО ПО РАСЧЁТУ' : 'ИТОГО К ОПЛАТЕ'}: ${rubFmt(docTotals(items, discount).total)}</h3>
 ${(cloudData.self && cloudData.self.invoiceNote) ? `
 <div style="margin-top: 25px; padding: 12px; background: #f4f6f8; border-left: 4px solid #14181f; border-radius: 4px; font-size: 11px; color: #485566; line-height: 1.5;">
 <b>Примечание:</b><br>
@@ -1590,7 +1646,9 @@ return false;
 const client = document.getElementById('clientName').value.trim() || "Без имени";
 const address = document.getElementById('objectAddress').value.trim() || "Без адреса";
 const note = document.getElementById('invoiceNote').value.trim();
-let total = invoiceCart.reduce((sum, item) => sum + (item.qty * item.price), 0);
+const totals = docTotals(invoiceCart, invoiceDiscount);
+const total = totals.total;
+const discount = totals.discount > 0 ? { ...invoiceDiscount } : null;
 if (invoiceAttachments.some(a => a.uploading)) {
 alert('Дождитесь окончания загрузки файлов отчёта.');
 return false;
@@ -1606,6 +1664,7 @@ rec.note = note;
 rec.objectId = objectId;
 rec.items = [...invoiceCart];
 rec.total = total;
+if (discount) { rec.discount = discount; rec.subtotal = totals.subtotal; } else { delete rec.discount; delete rec.subtotal; }
 rec.attachments = attachments;
 rec.date = new Date().toLocaleString('ru-RU');
 // Тип документа (счёт / предв. расчёт) при редактировании не меняется —
@@ -1631,6 +1690,7 @@ total,
 objectId,
 docType: selectedDocType,
 items: [...invoiceCart],
+...(discount ? { discount, subtotal: totals.subtotal } : {}),
 attachments
 };
 if (!cloudData.history) cloudData.history = [];
@@ -1706,7 +1766,7 @@ ${showAddress ? `<div class="hc-meta"><span class="meta-k">Адрес</span> ${e
 ${isCurrentAdmin() ? `<div class="hc-meta"><span class="meta-k">Мастер</span> ${escapeHtml(masterName)}</div>` : ''}
 ${rec.note ? `<div class="hc-meta"><span class="meta-k">Пояснение</span> ${escapeHtml(rec.note)}</div>` : ''}
 ${renderAttachmentsHtml(rec.attachments)}
-<div class="hc-items">${itemsHtml ? `<div class="hc-th"><span>Работа</span><span>Сумма</span></div>${itemsHtml}` : '<span style="color:#8d97a5;">Нет позиций</span>'}</div>
+<div class="hc-items">${itemsHtml ? `<div class="hc-th"><span>Работа</span><span>Сумма</span></div>${itemsHtml}` : '<span style="color:#8d97a5;">Нет позиций</span>'}${rec.discount && discountOf(rec.discount, docTotals(items).subtotal) > 0 ? `<div class="hc-discount"><span>${escapeHtml(discountLabel(rec.discount))}</span><span>−${rubFmt(discountOf(rec.discount, docTotals(items).subtotal))}</span></div>` : ''}</div>
 ${!isEstimate ? renderPaymentSectionHtml(rec, recordId) : ''}
 <div class="hc-actions">
 <button type="button" class="hc-btn hc-btn-primary" onclick="sendHistoryRecordPDF('${recordId}')"><svg class="ic"><use href="#i-send"/></svg> Отправить PDF</button>
@@ -2429,6 +2489,8 @@ const objSelect = document.getElementById('invoiceObjectSelect');
 if (objSelect) objSelect.value = '';
 setDocType('invoice');
 invoiceCart = [];
+invoiceDiscount = null;
+syncDiscountUI();
 selectedRoomIds = new Set();
 invoiceAttachments = [];
 renderReportAttachments();
@@ -2878,6 +2940,8 @@ editingRecordId = id;
 editingReturnContext = containerId === 'objectHistoryList' ? 'object' : 'history';
 objectHistorySubTab = rec.docType === 'estimate' ? 'estimate' : 'invoice';
 invoiceCart = (rec.items || []).map(i => ({ ...i }));
+invoiceDiscount = rec.discount ? { ...rec.discount } : null;
+syncDiscountUI();
 selectedRoomIds = new Set();
 if (migrateLegacyRooms(rec.rooms, invoiceCart, rec.objectId)) saveCloudData();
 invoiceAttachments = (rec.attachments || []).map(a => ({ ...a }));
@@ -2928,6 +2992,8 @@ const returnToObject = editingReturnContext === 'object' && currentObjectId;
 editingRecordId = null;
 editingReturnContext = null;
 invoiceCart = [];
+invoiceDiscount = null;
+syncDiscountUI();
 selectedRoomIds = new Set();
 invoiceAttachments = [];
 renderReportAttachments();
