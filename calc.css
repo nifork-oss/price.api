@@ -1095,15 +1095,19 @@ body.assistant-open .add-toast { z-index: 99; }
 .api-key-fresh p { font-size: 11px; color: var(--s-ink2); margin: 6px 0 8px; }
 .agent-plans { margin: 12px 0; padding: 4px 10px; border: 1px solid var(--tape-d); background: var(--tape-l); border-radius: 8px; }
 .agent-plans .agent-plan:last-child { border-bottom: none; }
+.agent-plan-thumb { flex: 0 0 auto; width: 72px; height: 72px; background: #ffffff; border: 1px solid var(--s-line); border-radius: 6px; }
 
 /* План квартиры на повёрнутом телефоне: план на всю ширину и сразу под
    шапкой (с кнопками правки и масштаба), подсказки и остальные кнопки — ниже */
+.flat-float { display: none; }
 @media (orientation: landscape) and (max-height: 540px) {
-#flatPanel .mp-head { padding-top: calc(4px + env(safe-area-inset-top, 0px)); padding-bottom: 4px; }
-#flatPanel .mp-head-row { margin-bottom: 0; }
+/* шапку и строку масштаба прячем: «−», «+» и «✕» — поверх плана в углу */
+#flatPanel .mp-head, #flatBody .flat-zoom { display: none; }
+#flatBody { padding-top: max(6px, env(safe-area-inset-top, 0px)); }
+#flatBody .flat-float { display: flex; gap: 6px; position: absolute; top: 6px; right: 6px; z-index: 3; }
+#flatBody .flat-float .mp-head-btn { width: 40px; min-height: 36px; padding: 0; font-size: 18px; background: rgba(255, 255, 255, .92); }
 #flatBody { padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); }
 #flatBody .mp-body-inner { max-width: none; display: flex; flex-direction: column; }
 #flatBody .mp-body-inner > .flat-tools { order: -3; }
-#flatBody .mp-body-inner > .flat-zoom { order: -2; margin-bottom: 4px; }
 #flatBody .mp-body-inner > .flat-viewbox { order: -1; margin-bottom: 8px; }
 }

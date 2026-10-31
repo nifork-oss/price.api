@@ -198,6 +198,23 @@ ${showName ? `<text x="${lx}" y="${ly - rf * 0.15}" font-size="${rf}" text-ancho
 ${opt.heights ? flatHeightLabels(r, lx, (showName ? ly + rf * 1.05 : ly + rf * 0.3) + Math.max(rf, fs * 0.7) * 1.05, Math.max(rf * 0.85, fs * 0.7), fs) : ''}
 </g>`;
 }).join('');
+// Длины стен внутри каждой комнаты (для PDF): вдоль стены, не вверх ногами;
+// у коротких стенок ниш и колонн, куда подпись не влезает, — без неё
+let dims = '';
+if (opt.dims) items.forEach(r => {
+const n = r.pts.length, sign = flatArea2(r.pts) < 0 ? -1 : 1, df = fs * 0.62;
+for (let i = 0; i < (r.closed ? n : n - 1); i++) {
+const a = r.pts[i], b = r.pts[(i + 1) % n];
+const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+const txt = FLAT_FMT(Math.round(len * 100) / 100);
+if (len < df * (txt.length * 0.6 + 1)) continue;
+const nx = -(b[1] - a[1]) / len * sign, ny = (b[0] - a[0]) / len * sign;
+const mx = (a[0] + b[0]) / 2 + nx * df * 0.9, my = (a[1] + b[1]) / 2 + ny * df * 0.9;
+let ang = Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI;
+if (ang > 90) ang -= 180; else if (ang <= -90) ang += 180;
+dims += `<text x="${mx}" y="${my}" font-size="${df}" text-anchor="middle" dominant-baseline="central" transform="rotate(${ang} ${mx} ${my})" font-family="Arial, sans-serif" fill="#c2361f" font-weight="700">${txt}</text>`;
+}
+});
 // Ручки выделенной комнаты: углы — кружки, середины стен — квадратики с длиной
 let handles = '';
 const s = opt.sel && items.find(r => r.id === opt.sel);
@@ -214,7 +231,7 @@ handles += `<rect data-w="${i}" x="${mx - hr * 0.8}" y="${my - hr * 0.8}" width=
 }
 s.pts.forEach((p, i) => { handles += `<circle data-v="${i}" cx="${p[0]}" cy="${p[1]}" r="${hr}" fill="#ffcf3d" stroke="#14181f" stroke-width="${hf * 0.12}"/>`; });
 }
-return `<svg class="flat-svg" viewBox="${v.minX} ${v.minY} ${v.w} ${v.h}" xmlns="http://www.w3.org/2000/svg">${under}${bridges}${body}${handles}</svg>`;
+return `<svg class="flat-svg" viewBox="${v.minX} ${v.minY} ${v.w} ${v.h}" xmlns="http://www.w3.org/2000/svg">${under}${bridges}${body}${dims}${handles}</svg>`;
 }
 
 // Проём на плане — отрезок на стене комнаты (в метрах) или null
@@ -456,7 +473,7 @@ const scroll = oldWrap ? [oldWrap.scrollLeft, oldWrap.scrollTop] : null;
 body.innerHTML = `<div class="mp-body-inner">
 ${top}
 <div class="flat-zoom"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><span>Площадь: <b>${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²</b></span><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button></div>
-<div class="flat-viewbox"><div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, { zoom: flatZoom, ...(ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
+<div class="flat-viewbox"><div class="flat-float"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button><button type="button" class="mp-head-btn" onclick="closeFlatPlan()" aria-label="Закрыть">✕</button></div><div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, { zoom: flatZoom, ...(ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatHMode ? { pickWalls: 'flatHWall', pickOps: true, onTap: 'flatHRoom', heights: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatOpsMode ? { pickWalls: 'flatOpsWall', pickOps: 'flatOpsRemove', underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatTapMode ? { underlay: flatUlOpt(), view: flatViewOf(items) }
@@ -2381,8 +2398,8 @@ const W = land ? 297 : 210, H = land ? 210 : 297, M = 10, head = 18;
 const total = items.reduce((a, r) => a + flatPolyArea(r.pts), 0);
 const info = plObjectInfo(obj);
 const line1 = [info.object, info.address].filter(Boolean).join(' · ') || 'План квартиры';
-const line2 = [`Площадь ${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²`, info.client ? `заказчик ${info.client}` : '', info.company, info.date].filter(Boolean).join(' · ');
-const plan = flatSvg(items, { view: v, underlay: ul }).replace('<svg class="flat-svg"', `<svg x="${M}" y="${M + head}" width="${W - 2 * M}" height="${H - 2 * M - head}" preserveAspectRatio="xMidYMid meet"`);
+const line2 = [`Площадь ${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²`, 'размеры стен в метрах', info.client ? `заказчик ${info.client}` : '', info.company, info.date].filter(Boolean).join(' · ');
+const plan = flatSvg(items, { view: v, underlay: ul, dims: true }).replace('<svg class="flat-svg"', `<svg x="${M}" y="${M + head}" width="${W - 2 * M}" height="${H - 2 * M - head}" preserveAspectRatio="xMidYMid meet"`);
 const dpi = 200, wPx = Math.round(W / 25.4 * dpi), hPx = Math.round(H / 25.4 * dpi);
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${wPx}" height="${hPx}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#fff"/>
 <text x="${M}" y="${M + 6}" font-size="6" font-family="Arial, sans-serif" font-weight="700" fill="#14181f">${escapeHtml(line1)}</text>
