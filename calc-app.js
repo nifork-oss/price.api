@@ -2808,6 +2808,7 @@ ${!isCurrentClient() ? `<button type="button" class="btn btn-primary" style="mar
 </div>` : ''}
 
 ${typeof agentPlansHtml === 'function' ? agentPlansHtml(obj) : ''}
+${typeof foremanCardHtml === 'function' ? foremanCardHtml(obj) : ''}
 ${renderObjectRoomsHtml(obj)}
 ${(obj.measurements || []).length ? `<details style="margin:8px 0;"><summary style="cursor:pointer; font-weight:700; color:#485566; padding:6px 0;">История замеров (${obj.measurements.length})</summary>${renderMeasureHistoryHtml(obj.id)}</details>` : ''}
 

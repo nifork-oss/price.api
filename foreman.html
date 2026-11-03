@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<meta name="description" content="Приглашение прораба: счета по объекту — одобрить или отклонить одним нажатием. Без регистрации.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Кабинет мастера">
+<meta property="og:title" content="Приглашение для прораба">
+<meta property="og:description" content="Счета по объекту — одобрить или отклонить одним нажатием. Без регистрации, с телефона.">
+<meta property="og:image" content="https://moysite.duckdns.org/og-foreman.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://moysite.duckdns.org/og-foreman.png">
+<title>Счета объекта — Кабинет мастера</title>
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink: #14181f; --ink2: #5a6470; --ink3: #8a929c; --line: #d9dde2; --paper: #f4f6f8; --acc: #ffc93c; --ok: #1d7a4c; --bad: #c2361f; }
+* { box-sizing: border-box; }
+body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; margin: 0; padding: 16px 16px 40px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.container { max-width: 640px; margin: 0 auto; }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.brand-logo { width: 36px; height: 36px; border-radius: 9px; background: var(--ink); color: var(--acc); display: grid; place-items: center; font-weight: 800; font-size: 20px; }
+.brand b { display: block; font-size: 15px; line-height: 1.1; }
+.brand span { font-size: 12px; color: var(--ink3); }
+.loader { text-align: center; color: var(--ink2); padding: 60px 0; font-size: 14px; }
+.error-box { border: 2px solid var(--ink); padding: 22px; text-align: center; font-size: 14px; margin-top: 30px; line-height: 1.5; }
+.hello { border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line); padding: 14px 0 16px; margin-bottom: 6px; }
+.hello small { display: inline-block; background: var(--acc); font-size: 11px; font-weight: 700; padding: 3px 8px; letter-spacing: .02em; }
+.hello h1 { margin: 8px 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; }
+.hello p { margin: 2px 0; font-size: 13.5px; color: var(--ink2); }
+.summary { display: flex; gap: 8px; margin: 12px 0 2px; flex-wrap: wrap; }
+.sum-chip { font-size: 12.5px; font-weight: 600; border: 1px solid var(--line); padding: 5px 10px; border-radius: 999px; color: var(--ink2); }
+.sum-chip b { color: var(--ink); }
+.doc { padding: 18px 0; }
+.doc + .doc { border-top: 2px solid var(--ink); }
+.doc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.doc-title { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.doc-sub { font-size: 12.5px; color: var(--ink3); margin-top: 3px; }
+.badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border: 1px solid currentColor; border-radius: 2px; white-space: nowrap; }
+.b-wait { color: #85600f; background: #fff7dc; }
+.b-ok { color: var(--ok); background: #eef6f1; }
+.b-bad { color: var(--bad); background: #fbeeea; }
+.total { display: flex; justify-content: space-between; align-items: center; background: #1d2733; color: #fff; padding: 13px 16px; margin-top: 12px; font-weight: 600; font-size: 16px; }
+.note { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); background: var(--paper); font-size: 13px; color: #33404f; border-radius: 8px; white-space: pre-wrap; }
+details.items { margin-top: 10px; }
+details.items summary { cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--ink2); padding: 6px 0; }
+.item { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.item:last-child { border-bottom: none; }
+.item-name { flex: 1; min-width: 0; font-weight: 500; }
+.item-meta { color: var(--ink3); font-size: 12px; margin-top: 2px; }
+.item-sum { font-weight: 600; white-space: nowrap; }
+.decision { margin-top: 14px; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn { min-height: 50px; border-radius: 8px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; border: 2px solid var(--ink); background: #fff; color: var(--ink); }
+.btn:active { transform: scale(.985); }
+.btn:disabled { opacity: .55; cursor: default; }
+.btn-ok { background: var(--ink); color: #fff; }
+.btn-bad { border-color: var(--bad); color: var(--bad); }
+.btn-text { border: none; background: none; min-height: 36px; font-size: 13px; color: var(--ink2); text-decoration: underline; padding: 0; width: auto; }
+.reject-box { margin-top: 10px; }
+.reject-box label { display: block; font-size: 13px; color: var(--ink2); margin-bottom: 6px; }
+.reject-box textarea { width: 100%; min-height: 84px; border: 1px solid #b8c0ca; border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 14px; resize: vertical; }
+.reject-box .btns { margin-top: 10px; }
+.result { padding: 11px 13px; border-radius: 8px; font-size: 13.5px; line-height: 1.45; }
+.result.ok { background: #eef6f1; color: #1f5c3d; }
+.result.bad { background: #fbeeea; color: #8c2a1a; }
+.result.warn { background: #fff7dc; color: #85600f; margin-bottom: 8px; }
+.result small { display: block; opacity: .8; margin-top: 2px; }
+.err { color: var(--bad); font-size: 13px; margin-top: 8px; }
+.empty { text-align: center; color: var(--ink2); padding: 36px 10px; font-size: 14px; }
+.ruler { height: 14px; margin-top: 26px; background: var(--acc) repeating-linear-gradient(90deg, transparent 0 9px, rgba(20,24,31,.75) 9px 10px); background-size: 100% 100%; opacity: .9; }
+.foot { text-align: center; font-size: 12px; color: var(--ink3); margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="brand"><div class="brand-logo">₽</div><div><b>Кабинет мастера</b><span>Сметы и счета онлайн</span></div></div>
+  <div id="loadingState" class="loader">Загружаю счета объекта…</div>
+  <div id="errorState" class="error-box" style="display:none;"></div>
+  <div id="app" style="display:none;"></div>
+  <div class="ruler"></div>
+  <div class="foot">Ссылка личная: решения от вашего имени видит мастер</div>
+</div>
+<script>
+// Сервер: на moysite.duckdns.org — через nginx этого же VPS (/price-api/ →
+// price-api.nifork.workers.dev), на остальных адресах (github.io) — напрямую
+const WORKER_URL = location.hostname === "moysite.duckdns.org"
+  ? location.origin + "/price-api"
+  : "https://price-api.nifork.workers.dev";
+const TOKEN = new URLSearchParams(location.search).get('t') || '';
+let state = null;          // ответ сервера
+let rejecting = null;      // id счёта, у которого открыто поле причины отказа
+let busy = null;           // id счёта, по которому идёт запрос
+let errors = {};           // id → текст ошибки
+
+function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+const rub = n => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('ru-RU') + ' ₽';
+const num = n => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString('ru-RU');
+
+function showError(msg) {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  const box = document.getElementById('errorState');
+  box.textContent = msg;
+  box.style.display = 'block';
+}
+
+function whenText(ts) {
+  try { return new Date(ts).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; }
+}
+
+function badge(a) {
+  if (!a) return '<span class="badge b-wait">ждёт решения</span>';
+  return a.status === 'approved' ? '<span class="badge b-ok">одобрен</span>' : '<span class="badge b-bad">отклонён</span>';
+}
+
+function decisionHtml(d) {
+  const a = d.approval, id = esc(d.id);
+  const label = d.docType === 'estimate' ? 'смету' : 'счёт';
+  const q = JSON.stringify(String(d.id)).replace(/"/g, '&quot;');
+  if (rejecting === d.id) {
+    return `<div class="decision reject-box">
+      <label for="c-${id}">Что не так? Мастер увидит этот комментарий</label>
+      <textarea id="c-${id}" maxlength="500" placeholder="Например: не учтён вынос мусора"></textarea>
+      ${errors[d.id] ? `<div class="err">${esc(errors[d.id])}</div>` : ''}
+      <div class="btns"><button type="button" class="btn" onclick="cancelReject()">Назад</button><button type="button" class="btn btn-bad" ${busy === d.id ? 'disabled' : ''} onclick="decide(${q}, 'rejected')">Отклонить ${label}</button></div>
+    </div>`;
+  }
+  if (a) {
+    const ok = a.status === 'approved';
+    return `<div class="decision">
+      ${a.changed ? `<div class="result warn">Сумма изменилась после вашего решения. Проверьте ${label} ещё раз.</div>` : ''}
+      <div class="result ${ok ? 'ok' : 'bad'}"><b>${ok ? 'Вы одобрили' : 'Вы отклонили'} ${label}</b><small>${esc(whenText(a.at))}${a.comment ? ' · ' + esc(a.comment) : ''}</small></div>
+      <div style="margin-top:8px;"><button type="button" class="btn btn-text" onclick="${ok ? `startReject(${q})` : `decide(${q}, 'approved')`}">${ok ? 'Передумал — отклонить' : 'Передумал — одобрить'}</button></div>
+      ${errors[d.id] ? `<div class="err">${esc(errors[d.id])}</div>` : ''}
+    </div>`;
+  }
+  return `<div class="decision">
+    ${errors[d.id] ? `<div class="err" style="margin:0 0 8px;">${esc(errors[d.id])}</div>` : ''}
+    <div class="btns"><button type="button" class="btn btn-bad" ${busy === d.id ? 'disabled' : ''} onclick="startReject(${q})">Отклонить</button><button type="button" class="btn btn-ok" ${busy === d.id ? 'disabled' : ''} onclick="decide(${q}, 'approved')">${busy === d.id ? 'Сохраняю…' : 'Одобрить'}</button></div>
+  </div>`;
+}
+
+function docHtml(d) {
+  const kind = d.docType === 'estimate' ? 'Смета' : 'Счёт';
+  const items = d.items || [];
+  return `<section class="doc">
+    <div class="doc-head"><div><h2 class="doc-title">${esc(d.title || kind)}</h2><div class="doc-sub">${kind}${d.date ? ' · ' + esc(d.date) : ''}</div></div>${badge(d.approval)}</div>
+    ${d.note ? `<div class="note">${esc(d.note)}</div>` : ''}
+    <details class="items"><summary>Позиции (${items.length})</summary>${items.map(it => `<div class="item"><div class="item-name">${esc(it.name)}<div class="item-meta">${esc([it.location, it.qty ? num(it.qty) + ' ' + it.unit : '', it.price ? 'по ' + num(it.price) + ' ₽' : ''].filter(Boolean).join(' · '))}</div></div><div class="item-sum">${num(it.qty * it.price)} ₽</div></div>`).join('')}</details>
+    <div class="total"><span>${d.discount ? 'Итого со скидкой' : 'Итого'}</span><span>${rub(d.total)}</span></div>
+    ${decisionHtml(d)}
+  </section>`;
+}
+
+function render() {
+  const s = state;
+  const docs = s.docs || [];
+  const wait = docs.filter(d => !d.approval).length, ok = docs.filter(d => d.approval && d.approval.status === 'approved').length, bad = docs.filter(d => d.approval && d.approval.status === 'rejected').length;
+  document.getElementById('loadingState').style.display = 'none';
+  const app = document.getElementById('app');
+  app.style.display = 'block';
+  app.innerHTML = `<div class="hello">
+      <small>ПРИГЛАШЕНИЕ ДЛЯ ПРОРАБА</small>
+      <h1>${esc(s.object.name || 'Объект')}</h1>
+      ${s.object.address ? `<p>${esc(s.object.address)}</p>` : ''}
+      <p>${s.foreman ? esc(s.foreman) + ', о' : 'О'}добрите или отклоните счета по объекту${s.company ? ' · ' + esc(s.company) : ''}.</p>
+      ${docs.length ? `<div class="summary"><span class="sum-chip">Ждут решения <b>${wait}</b></span><span class="sum-chip">Одобрено <b>${ok}</b></span><span class="sum-chip">Отклонено <b>${bad}</b></span></div>` : ''}
+    </div>
+    ${docs.length ? docs.map(docHtml).join('') : '<div class="empty">По этому объекту пока нет счетов.<br>Когда мастер выставит счёт, он появится здесь — обновите страницу.</div>'}`;
+}
+
+function startReject(id) { rejecting = id; errors = {}; render(); const t = document.getElementById('c-' + id); if (t) t.focus(); }
+function cancelReject() { rejecting = null; errors = {}; render(); }
+
+async function decide(id, decision) {
+  const t = document.getElementById('c-' + id);
+  const comment = decision === 'rejected' && t ? t.value.trim() : '';
+  if (decision === 'rejected' && !comment) { errors[id] = 'Напишите причину отказа — мастеру нужно понимать, что поправить.'; render(); return; }
+  busy = id; errors = {}; render();
+  try {
+    const res = await fetch(`${WORKER_URL}/foreman/decision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ t: TOKEN, id, decision, comment }) });
+    let data = null; try { data = await res.json(); } catch (e) { /* пусто */ }
+    if (!res.ok) throw new Error((data && data.error) || 'Не получилось сохранить решение');
+    const d = state.docs.find(x => x.id === id);
+    if (d) d.approval = data.approval;
+    rejecting = null;
+  } catch (e) {
+    errors[id] = e.message === 'Failed to fetch' ? 'Нет связи с сервером — попробуйте ещё раз.' : e.message;
+  }
+  busy = null;
+  render();
+}
+
+async function load() {
+  if (!TOKEN) { showError('Ссылка некорректна: в ней нет приглашения. Попросите мастера прислать её заново.'); return; }
+  try {
+    const res = await fetch(`${WORKER_URL}/foreman?t=${encodeURIComponent(TOKEN)}`);
+    let data = null; try { data = await res.json(); } catch (e) { /* пусто */ }
+    if (!res.ok) { showError((data && data.error) || 'Не удалось открыть приглашение.'); return; }
+    state = data;
+    render();
+  } catch (e) {
+    showError('Не удалось загрузить счета — проверьте интернет и обновите страницу.');
+  }
+}
+load();
+</script>
+</body>
+</html>

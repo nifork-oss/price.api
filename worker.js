@@ -446,6 +446,68 @@ function conflictResponse() {
   );
 }
 
+
+/* ============== прораб: приглашение по ссылке и согласование счетов ============== */
+
+// Мастер создаёт для объекта ссылку-приглашение. Прораб открывает её без входа и по счетам
+// этого объекта нажимает «Одобрить» или «Отклонить». Решения лежат в отдельных ключах хранилища
+// (fa:<id счёта>), а не внутри счетов: кабинет сохраняет историю целиком и затёр бы чужую запись.
+//   fi:<sha256 токена>    → { space, objectId, name, createdAt }  — по нему прораб входит
+//   fio:<space>:<objectId> → { token, hash, name, createdAt }     — чтобы мастер мог снова скопировать ссылку
+//   fa:<id счёта>          → { status, at, by, comment, total, log[] }
+const FOREMAN_PREFIX = "fi:";
+const FOREMAN_OBJ_PREFIX = "fio:";
+const FOREMAN_DECISION_PREFIX = "fa:";
+const FOREMAN_TOKEN_RE = /^pr_[0-9a-f]{48}$/;
+const FOREMAN_DOCS_MAX = 50;
+const FOREMAN_ITEMS_MAX = 200;
+
+function spaceData(record, space) {
+  if (space === "main") return { objects: Array.isArray(record.objects) ? record.objects : [], history: Array.isArray(record.history) ? record.history : [] };
+  const cd = (record.companyData || {})[String(space).slice(COMPANY_PREFIX.length)] || {};
+  return { objects: Array.isArray(cd.objects) ? cd.objects : [], history: Array.isArray(cd.history) ? cd.history : [] };
+}
+
+// Счета и сметы объекта, открытые по ссылке (отключённые мастером не показываем)
+function foremanDocs(data, objectId) {
+  return data.history.filter((r) => r && r.objectId === objectId && !r.shareDisabled && r.id !== undefined).slice(0, FOREMAN_DOCS_MAX);
+}
+
+function foremanApprovalView(a, rec) {
+  if (!a) return null;
+  return {
+    status: a.status, at: a.at, by: a.by || "", comment: a.comment || "",
+    // сумма изменилась после решения — прорабу и мастеру видно, что решение относится к старой версии
+    changed: Number(a.total) !== Number(rec && rec.total),
+  };
+}
+
+async function foremanInvite(env, token) {
+  if (!env.STORAGE || typeof token !== "string" || !FOREMAN_TOKEN_RE.test(token)) return null;
+  return (await env.STORAGE.get(FOREMAN_PREFIX + (await sha256Hex(token)))) || null;
+}
+
+function foremanDocView(rec, approval) {
+  return {
+    id: rec.id,
+    docType: rec.docType || "invoice",
+    title: rec.title || "",
+    date: rec.date || "",
+    note: rec.note || "",
+    total: Number(rec.total) || 0,
+    subtotal: rec.subtotal === undefined ? null : Number(rec.subtotal) || 0,
+    discount: rec.discount || null,
+    items: (Array.isArray(rec.items) ? rec.items : []).slice(0, FOREMAN_ITEMS_MAX).map((it) => ({
+      name: String((it && it.name) || "").slice(0, 200),
+      qty: Number(it && it.qty) || 0,
+      unit: String((it && it.unit) || "").slice(0, 20),
+      price: Number(it && it.price) || 0,
+      location: String((it && it.location) || "").slice(0, 120),
+    })),
+    approval: foremanApprovalView(approval, rec),
+  };
+}
+
 /* ============== обработчик запросов ============== */
 
 const handler = {
@@ -565,6 +627,57 @@ const handler = {
         });
       }
 
+      // Страница прораба по ссылке-приглашению (без входа): объект и его счета с решениями
+      if (path === "/foreman" && request.method === "GET") {
+        if (await isRateLimited(env.PUBLIC_LIMITER, "foreman:" + clientIp(request))) return tooManyRequests();
+        const invite = await foremanInvite(env, url.searchParams.get("t") || "");
+        if (!invite) return json({ error: "Ссылка не действует. Попросите мастера прислать новую." }, 404);
+        const record = await readBin(env);
+        const data = spaceData(record, invite.space);
+        const obj = data.objects.find((o) => o && o.id === invite.objectId);
+        if (!obj) return json({ error: "Объект не найден. Возможно, мастер его удалил." }, 404);
+        const docs = foremanDocs(data, obj.id);
+        const approvals = await Promise.all(docs.map((r) => env.STORAGE.get(FOREMAN_DECISION_PREFIX + String(r.id))));
+        const owner = invite.space === "main" ? null : record.users.find((u) => u.login === invite.space.slice(COMPANY_PREFIX.length));
+        return json({
+          object: { name: obj.name || "", address: obj.address || "" },
+          foreman: invite.name || obj.foreman || "",
+          company: (owner && (owner.companyName || owner.login)) || "",
+          docs: docs.map((r, i) => foremanDocView(r, approvals[i])),
+        });
+      }
+
+      // Решение прораба: одобрить или отклонить счёт своего объекта (можно изменить позже)
+      if (path === "/foreman/decision" && request.method === "POST") {
+        if (await isRateLimited(env.PUBLIC_LIMITER, "foreman-d:" + clientIp(request))) return tooManyRequests();
+        const raw = await request.text();
+        if (raw.length > 5000) return json({ error: "Слишком большой запрос" }, 413);
+        let body;
+        try { body = JSON.parse(raw); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        const invite = await foremanInvite(env, body && body.t);
+        if (!invite) return json({ error: "Ссылка не действует. Попросите мастера прислать новую." }, 404);
+        if (!body || !["approved", "rejected"].includes(body.decision)) return json({ error: "Решение — approved или rejected" }, 400);
+        const comment = String(body.comment || "").trim().slice(0, 500);
+        if (body.decision === "rejected" && !comment) return json({ error: "Напишите, что не так — мастеру нужна причина отказа" }, 400);
+        const record = await readBin(env);
+        const data = spaceData(record, invite.space);
+        const obj = data.objects.find((o) => o && o.id === invite.objectId);
+        const rec = obj ? foremanDocs(data, obj.id).find((r) => String(r.id) === String(body.id)) : null;
+        if (!rec) return json({ error: "Счёт не найден среди счетов этого объекта" }, 404);
+        const key = FOREMAN_DECISION_PREFIX + String(rec.id);
+        const old = await env.STORAGE.get(key);
+        const next = {
+          status: body.decision,
+          at: Date.now(),
+          by: invite.name || obj.foreman || "Прораб",
+          comment,
+          total: Number(rec.total) || 0,
+          log: [...(old ? [...(Array.isArray(old.log) ? old.log : []), { status: old.status, at: old.at, comment: old.comment || "", total: old.total }] : [])].slice(-20),
+        };
+        await env.STORAGE.put(key, next);
+        return json({ approval: foremanApprovalView(next, rec) });
+      }
+
       // Публичное сохранение расчёта "1м² / пирог" (доступно без входа —
       // так уже было устроено на сайте: посетитель считает смету без логина)
       if (path === "/pirog" && request.method === "POST") {
@@ -679,6 +792,44 @@ const handler = {
       // Всё, что ниже, требует действительного токена входа
       const auth = await getAuthUser(request, env);
       if (!auth) return json({ error: "Требуется вход" }, 401);
+
+      // Приглашение для прораба: создать (или выпустить заново), посмотреть вместе с решениями, отозвать
+      if (path === "/foreman-invite") {
+        if (auth.role === "client") return json({ error: "Недостаточно прав" }, 403);
+        if (!env.STORAGE) return json({ error: "Приглашения сейчас недоступны" }, 501);
+        const objectId = String(url.searchParams.get("objectId") || "").slice(0, 100);
+        const space = auth.mode === "company" ? COMPANY_PREFIX + auth.login : "main";
+        const record = await readBin(env);
+        const data = spaceData(record, space);
+        const isAdminUser = auth.role === "admin" || auth.login === "admin";
+        const obj = data.objects.find((o) => o && o.id === objectId && (space !== "main" || isAdminUser || (Array.isArray(o.visibleTo) && o.visibleTo.includes(auth.login))));
+        if (!obj) return json({ error: "Объект не найден" }, 404);
+        const pointer = FOREMAN_OBJ_PREFIX + space + ":" + obj.id;
+        const current = await env.STORAGE.get(pointer);
+        if (request.method === "GET") {
+          const docs = foremanDocs(data, obj.id);
+          const approvals = await Promise.all(docs.map((r) => env.STORAGE.get(FOREMAN_DECISION_PREFIX + String(r.id))));
+          return json({
+            invite: current ? { token: current.token, name: current.name || "", createdAt: current.createdAt } : null,
+            docs: docs.map((r, i) => ({ id: r.id, docType: r.docType || "invoice", title: r.title || "", date: r.date || "", total: Number(r.total) || 0, approval: foremanApprovalView(approvals[i], r) })),
+          });
+        }
+        if (request.method === "DELETE") {
+          if (current) await env.STORAGE.delete([FOREMAN_PREFIX + current.hash, pointer]);
+          return json({ ok: true });
+        }
+        if (request.method === "POST") {
+          const body = await request.json().catch(() => ({}));
+          const name = String((body && body.name) || obj.foreman || "").trim().slice(0, 80);
+          const token = "pr_" + randomHex(24);
+          const hash = await sha256Hex(token);
+          const createdAt = Date.now();
+          if (current) await env.STORAGE.delete([FOREMAN_PREFIX + current.hash]);   // старая ссылка перестаёт работать
+          await env.STORAGE.put(FOREMAN_PREFIX + hash, { space, objectId: obj.id, name, createdAt });
+          await env.STORAGE.put(pointer, { token, hash, name, createdAt });
+          return json({ invite: { token, name, createdAt } }, 201);
+        }
+      }
 
       // Подложка к замерам от ИИ-агента: страница берёт её при проверке замеров
       // и удаляет, когда замеры добавлены или убраны
