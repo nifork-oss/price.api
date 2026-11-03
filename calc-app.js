@@ -533,6 +533,7 @@ renderObjects();
 }
 
 function toggleAccordion(headerEl) {
+setTimeout(saveServiceInputs, 0);
 const categoryBlock = headerEl.closest('.accordion-category');
 const isOpen = categoryBlock.classList.contains('open');
 const parentContainer = categoryBlock.parentElement;
@@ -547,6 +548,7 @@ categoryBlock.classList.add('open');
 function renderServices() {
 const container = document.getElementById('servicesList');
 if (!container) return;
+const keep = snapshotServiceInputs() || readServiceInputs();
 container.innerHTML = '';
 const queryInput = document.getElementById('searchCalcInput');
 const query = queryInput ? queryInput.value.toLowerCase().trim() : '';
@@ -577,8 +579,9 @@ if (!categoryMatches && filteredItems.length === 0) return;
 hasResults = true;
 const categoryBlock = document.createElement('div');
 categoryBlock.className = 'accordion-category';
-if (query) categoryBlock.classList.add('open');
 const catName = group.category ? group.category.name : "Без категории";
+categoryBlock.dataset.cat = catName;
+if (query || (keep && keep.open.includes(catName))) categoryBlock.classList.add('open');
 const headerEl = document.createElement('div');
 headerEl.className = 'accordion-header';
 headerEl.onclick = () => toggleAccordion(headerEl);
@@ -603,6 +606,8 @@ const idx = item.globalIdx;
 let unitsOptions = DEFAULT_UNITS.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join('');
 const card = document.createElement('div');
 card.className = 'service-card';
+card.dataset.name = srv.name;
+card.dataset.price = String(srv.price);
 card.innerHTML = `
 <div class="service-title">
 <span>${escapeHtml(srv.name)}</span>
@@ -616,7 +621,7 @@ card.innerHTML = `
 <select id="select_unit_${idx}">${unitsOptions}</select>
 <button type="button" class="mp-mini" onclick="openMeasure({ kind: 'service', idx: ${idx} })" aria-label="Посчитать замером"><svg class="ic"><use href="#i-ruler"/></svg></button>
 </div>
-<input type="text" id="input_loc_${idx}" class="location-input" placeholder="Где на объекте (необязательно, например: кухня)">
+${roomFieldHtml(`input_loc_${idx}`)}
 <button type="button" class="add-to-cart-btn" data-idx="${idx}" onclick="addToInvoice(${idx})">Добавить в счёт</button>
 `;
 contentEl.appendChild(card);
@@ -628,8 +633,149 @@ container.appendChild(categoryBlock);
 if (!hasResults && query) {
 container.innerHTML = '<div style="text-align:center; color:#8d97a5; padding:20px;">Ничего не найдено</div>';
 }
+applyServiceInputs(keep);
 renderInvoice();
 }
+
+// ---------- введённое в карточках услуг не теряется ----------
+// Список услуг перерисовывается при возврате в приложение (данные
+// подгружаются заново) — раньше при этом пропадали набранные количество,
+// цена и помещение, а раскрытая категория сворачивалась. Запоминаем их
+// по названию услуги и возвращаем; на случай, если телефон выгрузит
+// страницу, копия лежит в sessionStorage.
+function serviceInputsKey() { return 'calcSrvInputs:' + (currentUser || ''); }
+
+function snapshotServiceInputs() {
+const cont = document.getElementById('servicesList');
+if (!cont || !cont.querySelector('.service-card')) return null;
+const open = [...cont.querySelectorAll('.accordion-category.open')].map(b => b.dataset.cat).filter(Boolean);
+const fields = {};
+cont.querySelectorAll('.service-card').forEach(card => {
+const q = card.querySelector('input[id^="input_qty_"]');
+const u = card.querySelector('select[id^="select_unit_"]');
+const pr = card.querySelector('input[id^="input_price_"]');
+const loc = card.querySelector('[id^="input_loc_"]');
+const f = {
+qty: q ? q.value : '1', measure: q && q.dataset.measure ? q.dataset.measure : '',
+unit: u ? u.value : '', price: pr ? pr.value : '', loc: loc ? loc.value : ''
+};
+const changed = f.qty !== '1' || f.measure || f.loc || (u && u.selectedIndex > 0) || (f.price !== '' && f.price !== card.dataset.price);
+if (changed) fields[card.dataset.name] = f;
+});
+return { open, fields };
+}
+
+function readServiceInputs() {
+try {
+const d = JSON.parse(sessionStorage.getItem(serviceInputsKey()) || 'null');
+return d && Array.isArray(d.open) && d.fields ? d : null;
+} catch (e) { return null; }
+}
+
+function saveServiceInputs() {
+const snap = snapshotServiceInputs();
+if (!snap) return;
+try { sessionStorage.setItem(serviceInputsKey(), JSON.stringify(snap)); } catch (e) { /* пусто */ }
+}
+
+function applyServiceInputs(keep) {
+if (!keep || !keep.fields) return;
+const cont = document.getElementById('servicesList');
+cont.querySelectorAll('.service-card').forEach(card => {
+const f = keep.fields[card.dataset.name];
+if (!f) return;
+const q = card.querySelector('input[id^="input_qty_"]');
+const u = card.querySelector('select[id^="select_unit_"]');
+const pr = card.querySelector('input[id^="input_price_"]');
+const loc = card.querySelector('[id^="input_loc_"]');
+if (q) { q.value = f.qty; if (f.measure) q.dataset.measure = f.measure; }
+if (u && f.unit && [...u.options].some(o => o.value === f.unit)) u.value = f.unit;
+if (pr && f.price !== '') pr.value = f.price;
+if (loc && f.loc) setRoomFieldValue(loc, f.loc);
+});
+}
+
+// ---------- помещение позиции: список из карточки объекта ----------
+// Вместо того чтобы каждый раз писать название комнаты, его выбирают из
+// списка: помещения с замером + названия из карточки объекта (roomNames).
+// Выбранное помещение — «текущее»: оно стоит во всех карточках услуг, пока
+// не выберут другое, так удобно вбивать позиции подряд по одной комнате.
+let currentRoomName = '';
+let extraRoomNames = []; // добавленные, когда объект не выбран
+
+function parseRoomNames(text) {
+const out = [];
+String(text || '').split(/[\n,;]+/).forEach(n => {
+n = n.trim().slice(0, 60);
+if (n && !out.some(x => x.toLowerCase() === n.toLowerCase())) out.push(n);
+});
+return out;
+}
+
+function calcRoomNames() {
+const obj = typeof calcObject === 'function' ? calcObject() : null;
+const names = [];
+const add = n => { n = String(n || '').trim(); if (n && !names.some(x => x.toLowerCase() === n.toLowerCase())) names.push(n); };
+if (obj) {
+objectRooms(obj).forEach(r => add(r.measure && r.measure.room));
+(Array.isArray(obj.roomNames) ? obj.roomNames : []).forEach(add);
+}
+extraRoomNames.forEach(add);
+return names;
+}
+
+function roomOptionsHtml(selected) {
+const names = calcRoomNames();
+if (selected && !names.some(n => n === selected)) names.push(selected);
+return `<option value="">Помещение: не указано</option>`
++ names.map(n => `<option value="${escapeHtml(n)}"${n === selected ? ' selected' : ''}>${escapeHtml(n)}</option>`).join('')
++ `<option value="__add__">+ Добавить помещение…</option>`;
+}
+
+function roomFieldHtml(id) {
+return `<select id="${id}" class="location-input room-select" onchange="onRoomFieldChange(this)" aria-label="Помещение">${roomOptionsHtml(currentRoomName)}</select>`;
+}
+
+function refreshRoomFields() {
+const html = roomOptionsHtml(currentRoomName);
+document.querySelectorAll('select.room-select').forEach(el => { el.innerHTML = html; el.value = currentRoomName; });
+}
+
+function setRoomFieldValue(el, value) {
+currentRoomName = String(value || '').trim();
+refreshRoomFields();
+}
+
+async function addRoomName(name) {
+const obj = calcObject();
+if (obj) {
+if (!Array.isArray(obj.roomNames)) obj.roomNames = [];
+if (!calcRoomNames().some(n => n.toLowerCase() === name.toLowerCase())) {
+obj.roomNames.push(name);
+try { await saveCloudData(); } catch (e) { /* сохранится со следующим изменением */ }
+}
+} else if (!extraRoomNames.some(n => n.toLowerCase() === name.toLowerCase())) {
+extraRoomNames.push(name);
+}
+}
+
+function onRoomFieldChange(el) {
+if (el.value === '__add__') {
+const obj = calcObject();
+const name = (prompt(obj ? `Новое помещение для объекта «${obj.name}»:` : 'Название помещения:') || '').trim().slice(0, 60);
+if (!name) { el.value = currentRoomName; return; }
+const known = calcRoomNames().find(n => n.toLowerCase() === name.toLowerCase());
+setRoomFieldValue(el, known || name);
+if (!known) addRoomName(name).then(() => { if (obj) showAddToast(`Помещение «${name}» добавлено в объект`); });
+} else {
+setRoomFieldValue(el, el.value);
+}
+saveServiceInputs();
+}
+
+document.addEventListener('input', (e) => { if (e.target.closest && e.target.closest('#servicesList')) saveServiceInputs(); });
+document.addEventListener('change', (e) => { if (e.target.closest && e.target.closest('#servicesList')) saveServiceInputs(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveServiceInputs(); });
 
 // Замер, вставленный в поле количества, прикрепляется к позиции —
 // если число в поле с тех пор не меняли.
@@ -669,7 +815,7 @@ return;
 const measureNote = takeMeasureNote(qtyInput, qty);
 // Погонный метр: меньше одного не бывает, больше — считается как есть (1,001 → 1,001)
 if (unit === 'пог. м') qty = Math.max(1, qty);
-invoiceCart.push({ name, price, qty, unit, location: '', ...(measureNote ? { measure: measureNote } : {}) });
+invoiceCart.push({ name, price, qty, unit, location: currentRoomName, ...(measureNote ? { measure: measureNote } : {}) });
 renderInvoice();
 showAddToast(`Добавлено: ${name}`);
 nameInput.value = '';
@@ -699,7 +845,8 @@ const measureNote = takeMeasureNote(qtyInput, parseFloat(qtyInput.value));
 invoiceCart.push({ name: srv.name, price, qty, unit, location, ...(measureNote ? { measure: measureNote } : {}) });
 renderInvoice();
 showAddToast(`Добавлено: ${srv.name}`);
-if (locInput) locInput.value = '';
+qtyInput.value = '1';
+saveServiceInputs();
 const btn = document.querySelector(`.add-to-cart-btn[data-idx="${idx}"]`);
 if (btn) {
 btn.classList.remove('just-added');
@@ -947,7 +1094,8 @@ address: (document.getElementById('objectAddress').value || '').trim(),
 note: (document.getElementById('invoiceNote').value || '').trim(),
 attachments: invoiceAttachments,
 roomSel: [...selectedRoomIds],
-discount: invoiceDiscount
+discount: invoiceDiscount,
+editId: editingRecordId || ''
 };
 }
 
@@ -972,7 +1120,7 @@ draftTimer = setTimeout(saveDraftNow, 400);
 
 function saveDraftNow() {
 clearTimeout(draftTimer);
-if (!currentUser || isCurrentClient() || editingRecordId) return;
+if (!currentUser || isCurrentClient()) return;
 const st = collectDraftState();
 // Пока висит предложение продолжить старый черновик, пустой калькулятор
 // его не стирает. Если же человек начал новый счёт, не нажав ни одну из
@@ -1016,6 +1164,8 @@ if (obj) parts.push(obj.name); else if (d.client) parts.push(d.client);
 if (d.cart.length) parts.push(`${d.cart.length} ${pluralRu(d.cart.length, 'позиция', 'позиции', 'позиций')} · ${total.toLocaleString('ru-RU')} ₽`);
 if (whenText) parts.push(whenText);
 document.getElementById('draftOfferInfo').textContent = parts.join(' · ');
+const title = document.querySelector('#draftOffer .draft-offer-text b');
+if (title) title.textContent = d.editId ? 'Несохранённые правки' : 'Незаконченный счёт';
 document.getElementById('draftOffer').classList.add('show');
 draftOfferPending = true;
 }
@@ -1049,10 +1199,15 @@ invoiceAttachments = Array.isArray(d.attachments) ? d.attachments : [];
 invoiceDiscount = d.discount && Number(d.discount.value) > 0 ? d.discount : null;
 syncDiscountUI();
 renderReportAttachments();
+// Правки счёта из истории: снова открываем его на редактирование
+const editRec = d.editId ? (cloudData.history || []).find(r => String(r.id) === String(d.editId)) : null;
+editingRecordId = editRec ? editRec.id : null;
+editingReturnContext = editRec ? 'history' : null;
+updateEditModeUI();
 renderServices();
 renderInvoice();
 saveDraftNow();
-showAddToast('Черновик восстановлен');
+showAddToast(editRec ? 'Правки восстановлены — не забудьте сохранить' : 'Черновик восстановлен');
 }
 
 function discardDraft() {
@@ -2551,6 +2706,7 @@ return;
 }
 selectedRoomIds = new Set();
 if (typeof renderRooms === 'function') renderRooms();
+refreshRoomFields();
 if (!select.value) return;
 const obj = (cloudData.objects || []).find(o => o.id === select.value);
 if (!obj) return;
@@ -2596,7 +2752,7 @@ renderObjects();
 showAddToast(`Объект «${newObj.name}» создан`);
 }
 
-async function createObject({ name, client, address = '', access = '', materials = '', foreman = '', foremanPhone = '', designer = '', designerPhone = '' }) {
+async function createObject({ name, client, address = '', access = '', materials = '', foreman = '', foremanPhone = '', designer = '', designerPhone = '', roomNames = [] }) {
 const newObj = {
 id: 'obj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
 name,
@@ -2606,6 +2762,7 @@ access,
 materials,
 ...(foreman ? { foreman } : {}), ...(foremanPhone ? { foremanPhone } : {}),
 ...(designer ? { designer } : {}), ...(designerPhone ? { designerPhone } : {}),
+...(roomNames.length ? { roomNames } : {}),
 author: currentUser || 'admin',
 visibleTo: [currentUser || 'admin'],
 createdAt: new Date().toLocaleString('ru-RU')
@@ -2644,17 +2801,20 @@ const client = document.getElementById('newObjClient').value.trim();
 const address = document.getElementById('newObjAddress').value.trim();
 const access = document.getElementById('newObjAccess').value.trim();
 const materials = document.getElementById('newObjMaterials').value.trim();
+const roomNamesEl = document.getElementById('newObjRoomNames');
+const roomNames = parseRoomNames(roomNamesEl ? roomNamesEl.value : '');
 const contacts = objContactsFromForm('newObj');
 if (!name || !client) {
 alert('Укажите как минимум название объекта и имя заказчика!');
 return;
 }
-await createObject({ name, client, address, access, materials, ...contacts });
+await createObject({ name, client, address, access, materials, ...contacts, ...(roomNames.length ? { roomNames } : {}) });
 document.getElementById('newObjName').value = '';
 document.getElementById('newObjClient').value = '';
 document.getElementById('newObjAddress').value = '';
 document.getElementById('newObjAccess').value = '';
 document.getElementById('newObjMaterials').value = '';
+if (roomNamesEl) roomNamesEl.value = '';
 ['ForemanName', 'ForemanPhone', 'DesignerName', 'DesignerPhone'].forEach(k => { document.getElementById('newObj' + k).value = ''; });
 const card = document.getElementById('newObjectCard');
 if (card) card.classList.remove('open');
@@ -2886,6 +3046,11 @@ container.innerHTML = `
 <label>Спецификация материалов</label>
 <textarea id="editObjMaterials">${escapeHtml(obj.materials || '')}</textarea>
 </div>
+<div class="form-group">
+<label>Помещения для калькулятора</label>
+<textarea id="editObjRoomNames" placeholder="Каждое с новой строки: Кухня, Спальня, Санузел…">${escapeHtml((obj.roomNames || []).join('\n'))}</textarea>
+<div style="font-size:11px; color:#8d97a5; margin-top:4px;">Помещения с замером попадают в список сами.</div>
+</div>
 ${visibilityHtml}
 <button type="button" class="btn btn-success" onclick="saveObjectEdit('${obj.id}')">Сохранить</button>
 </div>
@@ -2906,6 +3071,8 @@ obj.client = client;
 obj.address = document.getElementById('editObjAddress').value.trim();
 obj.access = document.getElementById('editObjAccess').value.trim();
 obj.materials = document.getElementById('editObjMaterials').value.trim();
+const roomNames = parseRoomNames(document.getElementById('editObjRoomNames').value);
+if (roomNames.length) obj.roomNames = roomNames; else delete obj.roomNames;
 const contacts = objContactsFromForm('editObj');
 ['foreman', 'foremanPhone', 'designer', 'designerPhone'].forEach(k => { if (contacts[k]) obj[k] = contacts[k]; else delete obj[k]; });
 if (isCurrentAdmin()) {
@@ -2960,6 +3127,9 @@ setDocType(rec.docType === 'estimate' ? 'estimate' : 'invoice');
 
 updateEditModeUI();
 renderServices();
+// Только что открытый счёт совпадает с сохранённым — черновик не нужен,
+// пока в нём ничего не поменяли
+markDraftSaved();
 window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -3005,6 +3175,7 @@ if (objSelect) objSelect.value = '';
 setDocType('invoice');
 updateEditModeUI();
 renderServices();
+saveDraftNow();
 
 if (returnToObject) {
 document.getElementById('calcTab').style.display = 'none';

@@ -3021,7 +3021,7 @@ const unitSel = document.getElementById(t.kind === 'service' ? `select_unit_${t.
 const loc = t.kind === 'service' ? document.getElementById(`input_loc_${t.idx}`) : null;
 if (qty) { qty.value = value; qty.dataset.measure = JSON.stringify(note); }
 if (unitSel && unitForKind(v.unit) && [...unitSel.options].some(o => o.value === v.unit)) unitSel.value = v.unit;
-if (loc && !loc.value.trim() && measure.room) loc.value = measure.room;
+if (loc && !loc.value.trim() && measure.room) setRoomFieldValue(loc, measure.room);
 }
 closeMeasure();
 showAddToast(`Вставлено: ${mFmt(value)}${v.unit ? ' ' + v.unit : ''}`);
