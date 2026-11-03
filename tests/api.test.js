@@ -389,3 +389,60 @@ test('этаж — поле помещения: у плана целиком и�
   const detail = await call('GET', '/api/v1/objects/o1', { key });
   assert.deepStrictEqual(detail.data.rooms.map(r => r.floor), ['1', '2', '']);
 });
+
+test('прораб: ссылка-приглашение, одобрение и отклонение счетов только своего объекта', async () => {
+  const { call, token } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  const inv = (id, objectId, total) => ({ id, objectId, docType: 'invoice', date: '03.11.2026', client: 'Иван', total, items: [{ name: 'Шпаклёвка', price: 500, qty: 2, unit: 'м²' }] });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [{ id: 'o1', name: 'Квартира', address: 'Ленина 5', foreman: 'Пётр', rooms: [] }, { id: 'o2', name: 'Другой', rooms: [] }],
+    history: [inv('h1', 'o1', 1000), inv('h2', 'o1', 2000), inv('h3', 'o2', 5000), { ...inv('h4', 'o1', 700), shareDisabled: true }] } });
+
+  assert.strictEqual((await call('POST', '/foreman-invite?objectId=nope', { token, body: {} })).status, 404);
+  assert.strictEqual((await call('POST', '/foreman-invite?objectId=o1')).status, 401, 'без входа приглашение не выпустить');
+  const made = await call('POST', '/foreman-invite?objectId=o1', { token, body: {} });
+  assert.strictEqual(made.status, 201, JSON.stringify(made.data));
+  const t = made.data.invite.token;
+  assert.match(t, /^pr_[0-9a-f]{48}$/);
+  assert.strictEqual(made.data.invite.name, 'Пётр', 'имя берётся из карточки объекта');
+
+  // прораб без входа видит только счета своего объекта (без отключённых)
+  const view = await call('GET', '/foreman?t=' + t);
+  assert.strictEqual(view.status, 200);
+  assert.strictEqual(view.data.object.name, 'Квартира');
+  assert.deepStrictEqual(view.data.docs.map(d => d.id), ['h1', 'h2']);
+  assert.strictEqual(view.data.docs[0].items[0].name, 'Шпаклёвка');
+  assert.ok(!JSON.stringify(view.data).includes('payments'));
+  assert.strictEqual((await call('GET', '/foreman?t=pr_' + '0'.repeat(48))).status, 404);
+  assert.strictEqual((await call('GET', '/foreman?t=bad')).status, 404);
+
+  const decide = (body) => call('POST', '/foreman/decision', { body: { t, ...body } });
+  assert.strictEqual((await decide({ id: 'h3', decision: 'approved' })).status, 404, 'чужой объект — нельзя');
+  assert.strictEqual((await decide({ id: 'h4', decision: 'approved' })).status, 404, 'отключённый счёт — нельзя');
+  assert.strictEqual((await decide({ id: 'h1', decision: 'maybe' })).status, 400);
+  assert.strictEqual((await decide({ id: 'h1', decision: 'rejected' })).status, 400, 'отказ — только с причиной');
+  const rej = await decide({ id: 'h1', decision: 'rejected', comment: 'Не учтён вынос мусора' });
+  assert.strictEqual(rej.status, 200);
+  assert.strictEqual(rej.data.approval.status, 'rejected');
+  assert.strictEqual((await decide({ id: 'h2', decision: 'approved' })).data.approval.by, 'Пётр');
+  // решение можно изменить; прошлое остаётся в журнале на сервере
+  assert.strictEqual((await decide({ id: 'h1', decision: 'approved' })).data.approval.status, 'approved');
+
+  // мастер видит решения; если сумма потом изменилась — пометка changed
+  let seen = await call('GET', '/foreman-invite?objectId=o1', { token });
+  assert.strictEqual(seen.data.invite.token, t);
+  assert.deepStrictEqual(seen.data.docs.map(d => [d.id, d.approval.status, d.approval.changed]), [['h1', 'approved', false], ['h2', 'approved', false]]);
+  const page2 = await call('GET', '/appdata', { token });
+  const hist = page2.data.data.history.map(r => (r.id === 'h2' ? { ...r, total: 2500 } : r));
+  await call('PUT', '/appdata', { token, body: { baseRev: page2.data.rev, history: hist } });
+  seen = await call('GET', '/foreman-invite?objectId=o1', { token });
+  assert.strictEqual(seen.data.docs.find(d => d.id === 'h2').approval.changed, true);
+
+  // новая ссылка отключает старую, отзыв отключает совсем
+  const again = await call('POST', '/foreman-invite?objectId=o1', { token, body: { name: 'Сергей' } });
+  assert.strictEqual((await call('GET', '/foreman?t=' + t)).status, 404);
+  assert.strictEqual((await call('GET', '/foreman?t=' + again.data.invite.token)).data.foreman, 'Сергей');
+  assert.strictEqual((await call('GET', '/foreman?t=' + again.data.invite.token)).data.docs[0].approval.status, 'approved', 'решения сохраняются');
+  assert.strictEqual((await call('DELETE', '/foreman-invite?objectId=o1', { token })).status, 200);
+  assert.strictEqual((await call('GET', '/foreman?t=' + again.data.invite.token)).status, 404);
+  assert.strictEqual((await call('GET', '/foreman-invite?objectId=o1', { token })).data.invite, null);
+});

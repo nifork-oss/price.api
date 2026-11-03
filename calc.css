@@ -1125,3 +1125,16 @@ body.assistant-open .add-toast { z-index: 99; }
 /* переключатель этажей на плане квартиры */
 .flat-floors { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
 .room-floor-head { margin: 14px 0 6px; font-size: 13px; font-weight: 700; color: #5b6573; text-transform: uppercase; letter-spacing: .04em; }
+
+/* прораб: ссылка и решения по счетам у объекта */
+.fm-hint { font-size: 13px; color: var(--s-ink2, #5a6470); margin-bottom: 10px; line-height: 1.45; }
+.fm-link input { width: 100%; font: inherit; font-size: 12.5px; padding: 9px 10px; border: 1px solid #b8c0ca; border-radius: 6px; background: #f4f6f8; color: #14181f; }
+.fm-btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.fm-small { display: block; font-size: 12px; color: #8a929c; margin-top: 4px; }
+.fm-docs { margin-top: 10px; }
+.fm-doc { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--s-line, #d9dde2); }
+.fm-doc-info { min-width: 0; flex: 1; }
+.fm-doc-info b { display: block; font-size: 13.5px; }
+.fm-doc-info small { font-size: 12px; color: #8a929c; overflow-wrap: anywhere; }
+.fm-chip { font-size: 11px; font-weight: 700; padding: 3px 8px; border: 1px solid currentColor; border-radius: 2px; white-space: nowrap; }
+.fm-wait { color: #85600f; background: #fff7dc; } .fm-ok { color: #1d7a4c; background: #eef6f1; } .fm-bad { color: #c2361f; background: #fbeeea; }
