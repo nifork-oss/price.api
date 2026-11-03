@@ -52,6 +52,10 @@ body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
 .pay-list { margin-top: 8px; padding-top: 8px; border-top: 1px dashed currentColor; font-size: 13px; }
 .pay-list-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
 .item-rooms { font-size: 12px; color: #14181f; margin-top: 2px; }
+.vw-flat-h { margin: 0 0 10px; font-size: 16px; }
+.vw-flat { background: #fff; border: 1px solid #dfe3e8; border-radius: 10px; padding: 6px; }
+.vw-flat .flat-svg { display: block; width: 100%; height: auto; max-height: 70vh; }
+.vw-flat-hint { font-size: 12px; color: #5d6878; margin-top: 6px; }
 /* где выполняются работы: план и развёртки с подсветкой */
 .vw-tabs, .vw-items { display: flex; gap: 6px; flex-wrap: wrap; }
 .vw-tabs { margin-bottom: 10px; }
@@ -258,12 +262,13 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 </div>
 
 <!-- чертежи помещений: те же расчёт и рисунки, что в кабинете мастера -->
-<script src="calc-measure.js?v=2c8fe45d"></script>
+<script src="calc-measure.js?v=8e74d212"></script>
 <script src="calc-ruler.js?v=39bf04eb"></script>
 <script src="calc-molding.js?v=fbcfe7fe"></script>
 <script src="calc-tile.js?v=73f1f2bc"></script>
 <script src="calc-mask.js?v=5a581f09"></script>
 <script src="calc-wpview.js?v=ec762275"></script>
+<script src="calc-flat.js?v=c0de7e82"></script>
 <script>
 // Сервер: на moysite.duckdns.org — через nginx этого же VPS (/price-api/ →
 // price-api.nifork.workers.dev, у части провайдеров workers.dev заблокирован),
@@ -496,6 +501,7 @@ ${renderDiscountHtml(rec)}
 ${renderTotalsHtml(rec, isEstimate)}
 </div>
 
+${vwFlatHtml(rec)}
 <div class="card" id="vwCard" style="display:none;"></div>
 
 ${Array.isArray(rec.attachments) && rec.attachments.length > 0 ? `
@@ -510,6 +516,24 @@ vwInit(rec);
 }
 
 /* ---------- где выполняются работы: план и развёртки помещений ---------- */
+// Общий план квартиры — все помещения объекта; нажатие на комнату с
+// работами открывает её чертёж ниже.
+function vwFlatHtml(rec) {
+const rooms = (Array.isArray(rec.flat) ? rec.flat : []).filter(r => r && r.measure && r.plan);
+if (rooms.length < 2 || typeof flatSvg !== 'function' || typeof flatItem !== 'function') return '';
+try {
+const items = rooms.map(r => flatItem(r.id, r.measure.room || 'Помещение', r.measure, r.plan));
+const tap = (rec.rooms || []).length ? 'vwFlatTap' : '';
+return `<div class="card"><h2 class="vw-flat-h">План квартиры</h2><div class="vw-flat">${flatSvg(items, tap ? { onTap: tap } : {})}</div>${tap ? '<div class="vw-flat-hint">Нажмите на помещение, чтобы увидеть, где в нём работы</div>' : ''}</div>`;
+} catch (e) { return ''; }
+}
+function vwFlatTap(id) {
+const j = vwRooms().findIndex(r => r.id === id);
+const card = document.getElementById('vwCard');
+if (j < 0 || !card || card.style.display === 'none') return;
+vwSetRoom(j);
+card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 // Те же чертежи, что мастер видит при выборе работы: нажали на работу —
 // её место подсвечено оранжевым на плане или развёртке стены.
 let vwRec = null;

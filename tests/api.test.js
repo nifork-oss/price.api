@@ -357,3 +357,16 @@ test('связанные документы: работы ↔ материалы
   await call('DELETE', '/api/v1/estimates/' + mat.data.id, { key });
   assert.deepStrictEqual((await call('GET', '/invoice?id=' + works.data.id)).data.related, []);
 });
+
+test('страница счёта: общий план квартиры — все помещения объекта с местом на плане', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const page = await call('GET', '/appdata', { token });
+  const m = name => ({ room: name, walls: [{ len: 3 }, { len: 3 }, { len: 3 }, { len: 3 }] });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, services: [{ name: 'Покраска', price: 100 }], objects: [{ id: 'obj_1', name: 'Кв', client: 'И',
+    rooms: [{ id: 'r1', measure: m('Кухня'), plan: { x: 0, y: 0 } }, { id: 'r2', measure: m('Спальня'), plan: { x: 3, y: 0 } }, { id: 'r3', measure: m('Без плана') }] }] } });
+  const made = await call('POST', '/api/v1/estimates', { key, body: { objectId: 'obj_1', items: [{ service: 'Покраска', qty: 1 }] } });
+  assert.strictEqual(made.status, 201);
+  const view = await call('GET', '/invoice?id=' + made.data.id);
+  assert.deepStrictEqual(view.data.flat.map(r => [r.id, r.plan.x]), [['r1', 0], ['r2', 3]]);
+});

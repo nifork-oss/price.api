@@ -556,6 +556,11 @@ const handler = {
             (rec.items || []).forEach((it) => (Array.isArray(it && it.rooms) ? it.rooms : []).forEach((r) => r && r.roomId && ids.add(r.roomId)));
             return (obj && Array.isArray(obj.rooms) ? obj.rooms : []).filter((r) => r && ids.has(r.id) && r.measure).map((r) => ({ id: r.id, measure: r.measure }));
           })(),
+          // Общий план квартиры: все помещения объекта, разложенные на плане
+          // (room.plan — где лежит комната). Без него план не рисуется.
+          flat: (obj && Array.isArray(obj.rooms) ? obj.rooms : [])
+            .filter((r) => r && r.measure && r.plan && typeof r.plan.x === "number" && typeof r.plan.y === "number")
+            .map((r) => ({ id: r.id, measure: r.measure, plan: { x: r.plan.x, y: r.plan.y } })),
           // Для страницы заказчика — только даты и суммы оплат, без способа
           // оплаты и прочих служебных полей.
           payments: (rec.docType === "estimate" ? [] : rec.payments || []).map((p) => ({

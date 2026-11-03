@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261031-3. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261103-1. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="description" content="Замер, смета и счёт для отделочников: помещения, планы, прайс мастера и ссылка заказчику.">
@@ -395,6 +395,7 @@
 <button type="button" class="mp-mini" onclick="openMeasure({ kind: 'custom' })" aria-label="Посчитать замером"><svg class="ic"><use href="#i-ruler"/></svg></button>
 </div>
 <select id="customItemUnit" style="width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #cfd5dd; border-radius:8px; font-size:14px; background:#fff; margin-top:6px;"></select>
+<select id="customItemLoc" class="location-input room-select" onchange="onRoomFieldChange(this)" aria-label="Помещение"><option value="">Помещение: не указано</option></select>
 <button type="button" class="add-to-cart-btn" onclick="addCustomInvoiceItem()">Добавить к счёту</button>
 <div style="font-size:11px; color:#8d97a5; margin-top:6px;">Не сохраняется в прайс-лист — только для этого счёта.</div>
 </div>
@@ -471,6 +472,10 @@
 <div class="form-group">
 <label>Спецификация материалов</label>
 <textarea id="newObjMaterials" placeholder="Например: грунт Ceresit CT17 — 20л, шпаклевка Vetonit — 5 меш."></textarea>
+</div>
+<div class="form-group">
+<label>Помещения для калькулятора</label>
+<textarea id="newObjRoomNames" placeholder="Каждое с новой строки: Кухня, Спальня, Санузел…"></textarea>
 </div>
 <button type="button" class="btn btn-success" onclick="addNewObject()">Добавить объект</button>
 </div>
@@ -682,10 +687,10 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=c8396db8"></script>
+<script src="calc-app.js?v=a8c1b7e1"></script>
 <script src="calc-geo.js?v=7519180b"></script>
 
-<script src="calc-measure.js?v=b19af441"></script>
+<script src="calc-measure.js?v=8e74d212"></script>
 
 <script src="calc-rooms.js?v=c5b073e3"></script>
 <script src="calc-wpview.js?v=ec762275"></script>
