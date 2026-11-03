@@ -330,3 +330,30 @@ test('скидка на смету: процент или рубли, итог �
   assert.ok(!('discount' in none.data));
   assert.strictEqual((await call('POST', '/api/v1/estimates', { key, body: { items: [{ service: 'Шпаклёвка стен', qty: 1 }], discount: { percent: 150 } } })).status, 400);
 });
+
+test('связанные документы: работы ↔ материалы, ссылки в обе стороны, вкладки у заказчика', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const works = await call('POST', '/api/v1/estimates', { key, body: { title: 'Работы', items: [{ name: 'Шпаклёвка', price: 500, qty: 10 }] } });
+  assert.strictEqual(works.data.title, 'Работы');
+  const mat = await call('POST', '/api/v1/estimates', { key, body: { title: 'Материалы', related: [works.data.id], items: [{ name: 'Краска', price: 20000, qty: 1, unit: 'ведро' }] } });
+  assert.strictEqual(mat.status, 201);
+  assert.deepStrictEqual(mat.data.related, [works.data.id]);
+  const back = await call('GET', '/api/v1/estimates/' + works.data.id, { key });
+  assert.deepStrictEqual(back.data.related, [mat.data.id]);
+  const view = await call('GET', '/invoice?id=' + works.data.id);
+  assert.strictEqual(view.data.title, 'Работы');
+  assert.deepStrictEqual(view.data.related.map(d => [d.id, d.title]), [[mat.data.id, 'Материалы']]);
+
+  const bad = await call('PATCH', '/api/v1/estimates/' + works.data.id, { key, body: { related: ['inv_nope'] } });
+  assert.strictEqual(bad.status, 400);
+  assert.match(bad.data.error, /не найдена/);
+  const cleared = await call('PATCH', '/api/v1/estimates/' + mat.data.id, { key, body: { related: [] } });
+  assert.deepStrictEqual(cleared.data.related, []);
+  assert.deepStrictEqual((await call('GET', '/invoice?id=' + works.data.id)).data.related, []);
+
+  await call('PATCH', '/api/v1/estimates/' + works.data.id, { key, body: { related: [mat.data.id] } });
+  assert.strictEqual((await call('GET', '/invoice?id=' + mat.data.id)).data.related.length, 1);
+  await call('DELETE', '/api/v1/estimates/' + mat.data.id, { key });
+  assert.deepStrictEqual((await call('GET', '/invoice?id=' + works.data.id)).data.related, []);
+});
