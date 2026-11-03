@@ -233,6 +233,11 @@ h1 { font-weight: 700; letter-spacing: -0.025em; }
 .pay-list { border-top: none; margin-top: 8px; color: var(--s-ink2); font-family: var(--narrow); font-size: 14px; }
 .note-box { border-left: 3px solid var(--tape-d); }
 .footer-link { color: var(--s-ink3); }
+/* вкладки связанных документов: работы ↔ материалы */
+.doc-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.doc-tab { display: inline-block; padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--s-ink, #14181f); color: var(--s-ink, #14181f); background: #fff; font-size: 14px; font-weight: 600; text-decoration: none; }
+.doc-tab.active { background: var(--s-ink, #14181f); color: #fff; }
+.doc-subtitle { font-size: 15px; font-weight: 600; color: #485566; margin: 2px 0 6px; }
 </style>
 </head>
 <body>
@@ -429,6 +434,21 @@ const list = i.rooms.map(r => `${r.name} ${f(r.qty)}`).join(' · ') + (i.unit ? 
 return label ? `${label}: ${list}` : list;
 }
 
+// Вкладки связанных документов (работы, материалы): по порядку создания
+function docTabLabel(d) {
+if (d.title) return d.title;
+return (d.docType === 'estimate' ? 'Расчёт' : 'Счёт') + (d.date ? ' от ' + String(d.date).split(',')[0] : '');
+}
+function docTabsHtml(rec) {
+const rel = Array.isArray(rec.related) ? rec.related.filter(d => d && d.id) : [];
+if (!rel.length) return '';
+const ts = d => Number(String(d.id).split('_')[1]) || 0;
+const all = [rec, ...rel].sort((a, b) => ts(a) - ts(b));
+return `<nav class="doc-tabs" aria-label="Документы по объекту">${all.map(d => d.id === rec.id
+? `<span class="doc-tab active" aria-current="page">${escapeHtml(docTabLabel(d))}</span>`
+: `<a class="doc-tab" href="?id=${encodeURIComponent(d.id)}">${escapeHtml(docTabLabel(d))}</a>`).join('')}</nav>`;
+}
+
 function renderInvoice(rec) {
 document.getElementById('loadingState').style.display = 'none';
 const isEstimate = rec.docType === 'estimate';
@@ -445,11 +465,13 @@ rows += `
 
 const content = document.getElementById('contentState');
 content.innerHTML = `
+${docTabsHtml(rec)}
 <div class="card">
 <div class="doc-header">
 <h1 class="doc-title">${isEstimate ? 'Предварительный расчёт' : 'Счёт'}</h1>
 ${isEstimate ? '<span class="doc-badge">Не счёт на оплату</span>' : ''}
 </div>
+${rec.title ? `<div class="doc-subtitle">${escapeHtml(rec.title)}</div>` : ''}
 <div class="dimline" aria-hidden="true"><span>${escapeHtml(String(rec.date || '').split(',')[0])}</span></div>
 <div class="meta-row"><b>Дата:</b> ${escapeHtml(rec.date || '')}</div>
 ${rec.objectName ? `<div class="meta-row"><b>Объект:</b> ${escapeHtml(rec.objectName)}</div>` : ''}

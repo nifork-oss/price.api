@@ -513,13 +513,15 @@ const handler = {
         // "своей компании" (режим company хранит счета отдельно, в
         // companyData[логин].history). Раньше искалось только в общей,
         // и ссылки на счета из режима "своя компания" не открывались.
-        let rec = (record.history || []).find((r) => String(r.id) === String(id));
+        let history = record.history || [];
+        let rec = history.find((r) => String(r.id) === String(id));
         let objects = record.objects || [];
         if (!rec) {
           for (const cd of Object.values(record.companyData || {})) {
             const found = (cd && Array.isArray(cd.history) ? cd.history : []).find((r) => String(r.id) === String(id));
             if (found) {
               rec = found;
+              history = cd.history;
               objects = Array.isArray(cd.objects) ? cd.objects : [];
               break;
             }
@@ -535,6 +537,12 @@ const handler = {
           client: rec.client,
           address: rec.address,
           note: rec.note,
+          title: rec.title || "",
+          // Связанные документы (работы ↔ материалы) — только открытые по ссылке
+          related: (Array.isArray(rec.related) ? rec.related : [])
+            .map((rid) => history.find((r) => r && String(r.id) === String(rid)))
+            .filter((r) => r && !r.shareDisabled)
+            .map((r) => ({ id: r.id, title: r.title || "", docType: r.docType || "invoice", date: r.date || "" })),
           total: rec.total,
           subtotal: rec.subtotal,
           discount: rec.discount,
@@ -2158,6 +2166,32 @@ function apiApplyTotals(rec) {
   if (off > 0) rec.subtotal = subtotal; else { delete rec.discount; delete rec.subtotal; }
 }
 
+// Связанные документы (работы ↔ материалы): ссылки в обе стороны,
+// только между документами одной истории. ids — новый список для rec.
+const API_RELATED_MAX = 10;
+function apiSetRelated(history, rec, raw) {
+  if (!Array.isArray(raw)) return { error: "related — список id смет" };
+  const ids = [...new Set(raw.map((x) => String(x || "").trim()).filter(Boolean))].filter((x) => x !== String(rec.id));
+  if (ids.length > API_RELATED_MAX) return { error: `related — не больше ${API_RELATED_MAX} документов` };
+  const targets = [];
+  for (const id of ids) {
+    const t = history.find((r) => r && String(r.id) === id);
+    if (!t) return { error: `related: смета ${id.slice(0, 60)} не найдена` };
+    targets.push(t);
+  }
+  const keep = new Set(ids);
+  history.forEach((r) => {
+    if (!r || r === rec || !Array.isArray(r.related)) return;
+    if (r.related.includes(rec.id) && !keep.has(String(r.id))) r.related = r.related.filter((x) => x !== rec.id);
+  });
+  targets.forEach((t) => {
+    const list = Array.isArray(t.related) ? t.related : [];
+    if (!list.includes(rec.id)) t.related = [...list, rec.id].slice(-API_RELATED_MAX);
+  });
+  rec.related = targets.map((t) => t.id);
+  return {};
+}
+
 function apiRecordView(rec, site) {
   return {
     id: rec.id,
@@ -2166,6 +2200,8 @@ function apiRecordView(rec, site) {
     client: rec.client || "",
     address: rec.address || "",
     note: rec.note || "",
+    title: rec.title || "",
+    related: Array.isArray(rec.related) ? rec.related : [],
     total: Number(rec.total) || 0,
     ...(rec.discount ? { subtotal: Number(rec.subtotal) || 0, discount: rec.discount.kind === "pct" ? { percent: rec.discount.value } : { rub: rec.discount.value } } : {}),
     items: (rec.items || []).map((i) => ({ name: i.name, price: i.price, qty: i.qty, unit: i.unit, location: i.location || "",
@@ -2238,13 +2274,16 @@ function apiGuide(base, key) {
   service — точное название услуги из прайса (цену подставит сервер); или name + price для своей позиции.
   Скидка на весь документ (по желанию): "discount":{"percent":10} или {"rub":1500}; в PATCH null — убрать.
   Тогда total — итог со скидкой, subtotal — сумма позиций.
+  title — короткое название документа («Работы», «Материалы»), по желанию.
+  related — id других смет мастера, связанных с этой (например, работы и материалы одного объекта):
+  на странице заказчика они откроются вкладками. Связь ставится в обе стороны; в PATCH список заменяется целиком, [] — убрать.
   unit — одно из: м², пог. м, шт., компл., час, усл. (по умолчанию м²). docType "invoice" — счёт вместо сметы.
   Объём можно не считать самому, а взять из помещений объекта (нужен objectId):
    {"service":"Шпаклёвка стен","surface":"walls","room_ids":["<id помещения>","<id помещения>"]}
    — qty и unit подставит сервер (сумма surfaces.walls этих помещений), location — названия помещений.
   Ответ: {id, total, url} — url это ссылка на смету для заказчика.
 - PATCH /api/v1/estimates/<id> — изменить смету, созданную через API: любые из client, address, note,
-  docType, objectId, items (items заменяются целиком). Ответ — смета с новым total.
+  docType, objectId, title, related, items (items заменяются целиком). Ответ — смета с новым total.
 - DELETE /api/v1/estimates/<id> — удалить смету, созданную через API.
   Сметы, которые мастер сделал на сайте, через API только читаются (editable: false).
 
@@ -2643,6 +2682,7 @@ async function handleApi(request, env, url) {
       client: str(body.client, 200),
       address: str(body.address, 300),
       note: str(body.note, 2000),
+      title: str(body.title, 100),
       total: 0,
       objectId,
       docType: body.docType === "invoice" ? "invoice" : "estimate",
@@ -2654,6 +2694,10 @@ async function handleApi(request, env, url) {
     };
     apiApplyTotals(rec);
     if (!Array.isArray(space.data.history)) space.data.history = [];
+    if (body.related !== undefined) {
+      const rel = apiSetRelated(space.data.history, rec, body.related);
+      if (rel.error) return apiJson({ error: rel.error }, 400);
+    }
     space.data.history.unshift(rec);
     bumpRev(record, space.key, ["history"]);
     touch();
@@ -2676,6 +2720,7 @@ async function handleApi(request, env, url) {
     if (rec.source !== "api") return apiJson({ error: notOwn }, 403);
     if (request.method === "DELETE") {
       space.data.history = history.filter((r) => r !== rec);
+      space.data.history.forEach((r) => { if (r && Array.isArray(r.related)) r.related = r.related.filter((x) => x !== rec.id); });
     } else {
       const read = await readApiBody(request, 200000);
       if (read.error) return apiJson({ error: read.error }, read.status);
@@ -2700,6 +2745,11 @@ async function handleApi(request, env, url) {
       apiApplyTotals(rec);
       ["client", "address"].forEach((k) => { if (k in body) rec[k] = str(body[k], k === "address" ? 300 : 200); });
       if ("note" in body) rec.note = str(body.note, 2000);
+      if ("title" in body) rec.title = str(body.title, 100);
+      if ("related" in body) {
+        const rel = apiSetRelated(history, rec, body.related === null ? [] : body.related);
+        if (rel.error) return apiJson({ error: rel.error }, 400);
+      }
       if (body.docType === "invoice" || body.docType === "estimate") rec.docType = body.docType;
     }
     bumpRev(record, space.key, ["history"]);
