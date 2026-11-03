@@ -987,6 +987,7 @@ return key && obj && Array.isArray(obj.rooms) ? obj.rooms.find(r => r.measure &&
 const AI_GEOMETRY = ['height', 'shape', 'walls', 'wallHeights', 'turns', 'angles', 'openings', 'startHeading'];
 function aiUpdateMeasure(old, fresh) {
 AI_GEOMETRY.forEach(k => { if (fresh[k] === undefined) delete old[k]; else old[k] = JSON.parse(JSON.stringify(fresh[k])); });
+if (fresh.floor) old.floor = fresh.floor;   // этаж меняем, только если в новом замере он указан
 return old;
 }
 
@@ -1013,7 +1014,7 @@ return `<label class="ai-room">
 <div class="ai-sketch">${miniSketchSvg(m)}</div>
 <div class="ai-info">
 <input type="text" class="mp-name-in" value="${escapeHtml(m.room)}" data-ai-name="${i}" aria-label="Название помещения">
-<div class="ai-meta">${m.walls.length} ${pluralRu(m.walls.length, 'стена', 'стены', 'стен')}${ops ? ` · проёмов ${ops}` : ''}${mNum(m.height) ? ` · h ${mFmt(mNum(m.height))}` : ''}</div>
+<div class="ai-meta">${m.floor ? `${escapeHtml(/^-?\d+$/.test(m.floor) ? m.floor + ' этаж' : m.floor)} · ` : ''}${m.walls.length} ${pluralRu(m.walls.length, 'стена', 'стены', 'стен')}${ops ? ` · проёмов ${ops}` : ''}${mNum(m.height) ? ` · h ${mFmt(mNum(m.height))}` : ''}</div>
 <div class="${g.closed ? 'rl-ok' : 'rl-bad'}">${g.closed ? 'Комната сошлась' : `Не сходится на ${mFmt(g.gap)} м — поправите в замере`}</div>
 ${aiExistingRoom(obj, m.room) ? `<div class="ai-upd">${aiUpdateOn() ? 'Обновит помещение в объекте' : 'Добавится ещё одно с таким же названием'}</div>` : ''}
 </div>

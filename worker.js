@@ -2105,6 +2105,10 @@ function apiRoomQty(it, n, rooms, unitOf) {
   return { qty, unit: unitOf || unit, surface, rooms: parts, location: parts.map((p) => p.name).join(", ") };
 }
 
+function apiRoomFloor(room) {
+  return String((room && room.measure && room.measure.floor) || "").slice(0, API_FLOOR_MAX);
+}
+
 function apiRoomName(room) {
   return String((room && room.measure && room.measure.room) || "Помещение");
 }
@@ -2230,6 +2234,18 @@ function apiCorsHeaders() {
 
 const API_PLANS_MAX = 10;
 const API_PLAN_ROOMS_MAX = 60;
+const API_FLOOR_MAX = 30;
+
+// Этаж помещения: короткая подпись («1», «2», «Подвал», «Мансарда»). Число — тоже можно.
+// Пусто или не задан — этаж не указан. Возвращает { floor } или { error }.
+function apiFloor(v) {
+  if (v === undefined || v === null || v === "") return { floor: "" };
+  if (typeof v === "number" && Number.isFinite(v) && Number.isInteger(v)) return { floor: String(v) };
+  if (typeof v !== "string") return { error: "floor — этаж: число или короткий текст («2», «Подвал»)" };
+  const f = v.trim();
+  if (f.length > API_FLOOR_MAX) return { error: `floor — не длиннее ${API_FLOOR_MAX} символов` };
+  return { floor: f };
+}
 // Подложка к замерам (картинка чертежа под планом): хранится отдельным ключом
 // хранилища, пока мастер не проверит замеры, — в данные объекта не попадает
 const API_UNDERLAY_MAX = 2000000; // символов data:URL, ~1,5 МБ картинки
@@ -2252,8 +2268,8 @@ function apiGuide(base, key) {
 
 Что можно делать
 - GET /api/v1/services — прайс мастера: [{name, price, category}].
-- GET /api/v1/objects — объекты: [{id, name, client, address, rooms:[{id, name}], pendingPlans}].
-- GET /api/v1/objects/<id> — объект подробно: rooms:[{id, name, height_m, surfaces}] — surfaces это уже
+- GET /api/v1/objects — объекты: [{id, name, client, address, rooms:[{id, name, floor}], pendingPlans}].
+- GET /api/v1/objects/<id> — объект подробно: rooms:[{id, name, floor, height_m, surfaces}] — surfaces это уже
   посчитанные калькулятором объёмы помещения: {"walls":{"value":37.3,"unit":"м²","label":"Стены"},
   "ceiling":{...}, "slopes":{...}, ...}; pendingPlans — присланные замеры, которые мастер ещё не проверил.
   Сайт дописывает surfaces сам, когда мастер заходит в кабинет. Если у помещения surfaces всё же пустой —
@@ -2303,7 +2319,12 @@ function apiGuide(base, key) {
   Дверь указывай у одного из двух помещений — у второго сервер поставит её сам.
 - windows — окна на стене своего помещения: side, offset_mm от левого (верхнего) угла, width_mm, height_mm;
   "type":"balcony" — балконный блок (ещё door_width_mm и door_height_mm).
-В ответе — layout: какие углы получились у каждого помещения; проверь, что план сошёлся.
+- floor — этаж помещения: число или короткий текст ("1", 2, "Подвал", "Мансарда", до 30 символов). Можно у каждого
+  помещения или один раз на весь план: {"floor":"2","rooms":[…]} (у помещения важнее). Не указан — помещение без этажа.
+  У двухэтажного дома шли по плану на этаж (у каждого свой floor): на плане квартиры у мастера этажи переключаются,
+  а помещения разных этажей не накладываются друг на друга. Названия помещений в объекте делай разными
+  ("Кухня 1 эт."), иначе при добавлении замеров помещение с тем же названием обновится, а не добавится.
+В ответе — layout: какие углы получились у каждого помещения (и floor); проверь, что план сошёлся.
 
 Точный способ — для помещений сложной формы (ниши, короба, скосы) — углы контура pts.
 Все помещения — в одной системе координат, в миллиметрах, целыми числами: (0,0) — верхний левый угол
@@ -2449,9 +2470,20 @@ function apiPlan(body) {
   let rooms = Array.isArray(body) ? body : body.rooms;
   if (!Array.isArray(rooms) || rooms.length === 0) return { error: "Нужен список помещений rooms" };
   if (rooms.length > API_PLAN_ROOMS_MAX) return { error: `Не больше ${API_PLAN_ROOMS_MAX} помещений за раз` };
+  // этаж: у плана целиком (floor) или у каждого помещения; у помещения важнее
+  const planFloor = Array.isArray(body) ? { floor: "" } : apiFloor(body.floor);
+  if (planFloor.error) return { error: planFloor.error };
   const laid = apiLayoutRooms(rooms);
   if (laid.error) return { error: laid.error };
-  rooms = laid.rooms;
+  rooms = laid.rooms.map((r) => {
+    const own = apiFloor(r && r.floor);
+    if (own.error) return { __error: `«${String((r && r.name) || "").slice(0, 60)}»: ${own.error}` };
+    const floor = own.floor || planFloor.floor;
+    const { floor: _f, ...rest } = r;
+    return floor ? { ...rest, floor } : rest;
+  });
+  const badFloor = rooms.find((r) => r && r.__error);
+  if (badFloor) return { error: badFloor.__error };
   for (let i = 0; i < rooms.length; i++) {
     const r = rooms[i];
     if (!r || typeof r !== "object") return { error: `Помещение ${i + 1}: ожидается объект` };
@@ -2493,6 +2525,7 @@ function apiObjectDetail(o) {
     rooms: (Array.isArray(o.rooms) ? o.rooms : []).filter((r) => r && r.measure).map((r) => ({
       id: r.id,
       name: apiRoomName(r),
+      floor: apiRoomFloor(r),
       height_m: Number(String(r.measure.height || "").replace(",", ".")) || null,
       surfaces: surfaces(r),
     })),
@@ -2508,7 +2541,7 @@ function apiObjectView(o) {
     name: o.name || "",
     client: o.client || "",
     address: o.address || "",
-    rooms: (Array.isArray(o.rooms) ? o.rooms : []).filter((r) => r && r.measure).map((r) => ({ id: r.id, name: r.measure.room || "Помещение" })),
+    rooms: (Array.isArray(o.rooms) ? o.rooms : []).filter((r) => r && r.measure).map((r) => ({ id: r.id, name: r.measure.room || "Помещение", floor: apiRoomFloor(r) })),
     pendingPlans: Array.isArray(o.agentPlans) ? o.agentPlans.length : 0,
   };
 }
@@ -2654,7 +2687,7 @@ async function handleApi(request, env, url) {
     touch();
     await writeBin(env, record);
     return apiJson({ id: plan.id, rooms: plan.rooms.length, note: "Замеры ждут проверки мастером у объекта",
-      layout: plan.rooms.map((r) => ({ name: r.name, pts: r.pts || null })) }, 201);
+      layout: plan.rooms.map((r) => ({ name: r.name, floor: r.floor || "", pts: r.pts || null })) }, 201);
   }
 
   if (path === "/api/v1/estimates" && request.method === "POST") {
