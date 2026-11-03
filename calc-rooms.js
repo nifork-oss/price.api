@@ -383,10 +383,27 @@ const room = findObjectRoom(objectId, roomId);
 if (!room) return;
 openSheet(roomName(room), [
 { icon: '📏', label: 'Изменить замер', onClick: () => openMeasure({ kind: 'room', objectId, roomId }) },
+{ icon: '🏠', label: room.measure && room.measure.floor ? `Этаж: ${roomFloorLabel(room.measure.floor)} — изменить` : 'Указать этаж', onClick: () => setRoomFloor(objectId, roomId) },
 { icon: '📋', label: 'Копировать как новое помещение', onClick: () => duplicateRoom(objectId, roomId) },
 null,
 { icon: '🗑️', label: 'Удалить помещение', danger: true, onClick: () => deleteRoom(objectId, roomId) },
 ]);
+}
+
+// Этаж — поле помещения: по нему помещения дома или квартиры делятся на составы по этажам
+function roomFloorLabel(f) {
+f = String(f || '').trim();
+return !f ? '' : /^-?\d+$/.test(f) ? f + ' этаж' : f;
+}
+async function setRoomFloor(objectId, roomId) {
+const room = findObjectRoom(objectId, roomId);
+if (!room || !room.measure) return;
+const v = prompt('Этаж помещения: номер или название (например 1, 2, Подвал, Мансарда). Пусто — без этажа.', room.measure.floor || '');
+if (v === null) return;
+const f = v.trim().slice(0, 30);
+if (f) room.measure.floor = f; else delete room.measure.floor;
+await saveCloudData();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
 }
 
 async function duplicateRoom(objectId, roomId) {
@@ -673,11 +690,20 @@ return changed;
 function renderObjectRoomsHtml(obj) {
 const rooms = objectRooms(obj);
 const canEdit = !isCurrentClient();
+const floorsOf = [...new Set(rooms.map(r => String((r.measure && r.measure.floor) || '').trim()))];
+const grouped = floorsOf.length > 1 || (floorsOf.length === 1 && floorsOf[0] !== '');
+const fnum = f => (/^-?\d+$/.test(f) ? Number(f) : null);
+floorsOf.sort((a, b) => (fnum(a) !== null && fnum(b) !== null ? fnum(a) - fnum(b) : a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'ru')));
+const ordered = grouped ? floorsOf.flatMap(f => rooms.filter(r => String((r.measure && r.measure.floor) || '').trim() === f)) : rooms;
+let lastFloor = null;
 const list = rooms.length
-? rooms.map(room => {
+? ordered.map(room => {
+const fl = String((room.measure && room.measure.floor) || '').trim();
+const floorHead = grouped && fl !== lastFloor ? `<div class="room-floor-head">${escapeHtml(roomFloorLabel(fl) || 'Без этажа')} · помещений: ${ordered.filter(r => String((r.measure && r.measure.floor) || '').trim() === fl).length}</div>` : '';
+lastFloor = fl;
 const surf = roomSurfaces(room);
 const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'partStrips' && s.key !== 'ceilingNet' && s.key !== 'cornersOut' && s.key !== 'cornersIn' && !s.sub && surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
-return `<div class="room-card">
+return `${floorHead}<div class="room-card">
 <div class="room-head">
 <div class="room-name">${escapeHtml(roomName(room))}</div>
 ${canEdit ? `<button type="button" class="hc-btn hc-btn-more" style="flex:0 0 44px; min-height:38px;" onclick="openRoomActions('${obj.id}', '${room.id}')" aria-label="Действия">⋯</button>` : ''}

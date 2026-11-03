@@ -749,3 +749,22 @@ test('план квартиры: объединение соседних ком�
   // косая стена — нельзя
   assert.strictEqual(run(`flatUnion([[0,0],[2,0],[2,2],[0,1.5]], [[0,2.1],[2,2.1],[2,4],[0,4]])`), null);
 });
+
+test('этаж помещения из плана попадает в замер, а при обновлении помещения меняется только указанный', () => {
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-flat.js', 'calc-import.js']);
+  const run = (code) => JSON.parse(JSON.stringify(vm.runInContext(code, c.ctx || c)));
+  const out = run(`(() => {
+    const pts = [[0, 0], [3000, 0], [3000, 3000], [0, 3000]];
+    const a = flatPtsToMeasure({ name: 'Спальня', floor: 2, pts }, 'o').measure;
+    const b = flatPtsToMeasure({ name: 'Кухня', pts }, 'o').measure;
+    const old = { floor: '1', walls: [] };
+    aiUpdateMeasure(old, b);
+    const old2 = { floor: '1', walls: [] };
+    aiUpdateMeasure(old2, a);
+    return { a: a.floor, b: b.floor, keep: old.floor, change: old2.floor };
+  })()`);
+  assert.strictEqual(out.a, '2');
+  assert.strictEqual(out.b, undefined);
+  assert.strictEqual(out.keep, '1');
+  assert.strictEqual(out.change, '2');
+});

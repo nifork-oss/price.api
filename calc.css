@@ -1121,3 +1121,7 @@ body.assistant-open .add-toast { z-index: 99; }
 .discount-kind button.active { background: #14181f; color: #ffffff; }
 #discountSum { color: #c2361f; font-weight: 600; }
 .hc-discount { display: flex; justify-content: space-between; gap: 8px; padding-top: 6px; color: #c2361f; font-weight: 600; font-size: 13px; }
+
+/* переключатель этажей на плане квартиры */
+.flat-floors { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.room-floor-head { margin: 14px 0 6px; font-size: 13px; font-weight: 700; color: #5b6573; text-transform: uppercase; letter-spacing: .04em; }

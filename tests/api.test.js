@@ -357,3 +357,35 @@ test('связанные документы: работы ↔ материалы
   await call('DELETE', '/api/v1/estimates/' + mat.data.id, { key });
   assert.deepStrictEqual((await call('GET', '/invoice?id=' + works.data.id)).data.related, []);
 });
+
+test('этаж — поле помещения: у плана целиком или у каждого помещения, виден в GET /objects', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const obj = await call('POST', '/api/v1/objects', { key, body: { name: 'Дом' } });
+  const url = `/api/v1/objects/${obj.data.id}/plans`;
+  const r1 = await call('POST', url, { key, body: { floor: 1, rooms: [
+    { name: 'Кухня', size_mm: [3000, 3000] },
+    { name: 'Подвал', floor: 'Цоколь', size_mm: [2000, 2000], next_to: { room: 'Кухня', side: 'right' } },
+  ] } });
+  assert.strictEqual(r1.status, 201, JSON.stringify(r1.data));
+  assert.deepStrictEqual(r1.data.layout.map(r => r.floor), ['1', 'Цоколь']);
+  const r2 = await call('POST', url, { key, body: { rooms: [{ name: 'Спальня', pts: [[0, 0], [3000, 0], [3000, 3000], [0, 3000]] }] } });
+  assert.strictEqual(r2.data.layout[0].floor, '', 'без этажа — пустая строка');
+
+  const saved = (await call('GET', '/appdata', { token })).data.data.objects[0].agentPlans[0].rooms;
+  assert.strictEqual(saved.find(r => r.name === 'Кухня').floor, '1');
+
+  const bad = async (body, re) => { const r = await call('POST', url, { key, body }); assert.strictEqual(r.status, 400); assert.match(r.data.error, re); };
+  await bad({ rooms: [{ name: 'А', floor: { n: 1 }, size_mm: [1000, 1000] }] }, /«А».*floor/);
+  await bad({ floor: 'x'.repeat(31), rooms: [{ name: 'А', size_mm: [1000, 1000] }] }, /floor/);
+
+  // после проверки мастером этаж лежит в замере помещения и отдаётся наружу
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [{ id: 'o1', name: 'Дом', rooms: [
+    { id: 'r1', measure: { room: 'Кухня', floor: '1' } }, { id: 'r2', measure: { room: 'Спальня', floor: '2' } }, { id: 'r3', measure: { room: 'Гараж' } },
+  ] }] } });
+  const list = await call('GET', '/api/v1/objects', { key });
+  assert.deepStrictEqual(list.data.objects[0].rooms.map(r => r.floor), ['1', '2', '']);
+  const detail = await call('GET', '/api/v1/objects/o1', { key });
+  assert.deepStrictEqual(detail.data.rooms.map(r => r.floor), ['1', '2', '']);
+});

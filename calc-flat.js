@@ -75,6 +75,7 @@ return { ...o, width_m: w, offset_m: off };
 
 const m = newMeasure(objectId);
 m.room = r.name;
+if (r.floor !== undefined && r.floor !== null && String(r.floor).trim()) m.floor = String(r.floor).trim().slice(0, 30);
 m.height = r.height_m ? FLAT_FMT(r.height_m) : '';
 m.shape = 'free';
 m.walls = []; m.turns = []; m.angles = []; m.wallHeights = [];
@@ -391,12 +392,44 @@ function flatObj() {
 return (cloudData.objects || []).find(o => o.id === flatObjectId);
 }
 
+// Этажи объекта (поле floor у помещения): помещения разных этажей на плане не показываем вместе —
+// иначе они лягут друг на друга в одной системе координат
+let flatFloor = null;   // выбранный этаж; null — первый из списка
+function flatFloors(obj) {
+const seen = [];
+objectRooms(obj || flatObj()).forEach(r => {
+if (!r.plan || !r.measure) return;
+const f = String(r.measure.floor || '').trim();
+if (!seen.includes(f)) seen.push(f);
+});
+const num = f => (/^-?\d+$/.test(f) ? Number(f) : null);
+return seen.sort((a, b) => (num(a) !== null && num(b) !== null ? num(a) - num(b) : a === '' ? -1 : b === '' ? 1 : a.localeCompare(b, 'ru')));
+}
+function flatCurFloor() {
+const fl = flatFloors();
+return fl.length < 2 ? null : fl.includes(flatFloor) ? flatFloor : fl[0];
+}
+function flatSetFloor(f) {
+if (flatEdit || flatOpsDraft) return;   // не уходим с этажа посреди правки
+flatFloor = f;
+renderFlatPlan();
+}
+function flatFloorLabel(f) { return f === '' ? 'Без этажа' : /^-?\d+$/.test(f) ? f + ' этаж' : f; }
+function flatFloorBarHtml() {
+const fl = flatFloors(), cur = flatCurFloor();
+if (cur === null) return '';
+return `<div class="flat-floors">${fl.map(f => `<button type="button" class="mp-head-btn${f === cur ? ' on' : ''}" onclick="flatSetFloor(${JSON.stringify(f).replace(/"/g, '&quot;')})">${escapeHtml(flatFloorLabel(f))}</button>`).join('')}</div>`;
+}
+
 function flatRooms() {
-return objectRooms(flatObj()).filter(r => r.plan && r.measure);
+const all = objectRooms(flatObj()).filter(r => r.plan && r.measure);
+const cur = flatCurFloor();
+return cur === null ? all : all.filter(r => String(r.measure.floor || '').trim() === cur);
 }
 
 function openFlatPlan(objectId) {
 flatObjectId = objectId;
+flatFloor = null;
 flatOpsDraft = null;
 flatScaleMode = false; flatOpsMode = false; flatMergeFrom = null; flatSplitFrom = null; flatTapMode = false; flatHMode = false;
 flatUlAdjust = null;
@@ -430,7 +463,7 @@ function renderFlatPlan() {
 const body = document.getElementById('flatBody');
 if (!flatObj() || !body) return;
 const items = flatItems();
-const rest = objectRooms(flatObj()).length - items.length;
+const rest = objectRooms(flatObj()).filter(r => !(r.plan && r.measure)).length;
 const total = items.reduce((a, r) => a + flatPolyArea(r.pts), 0);
 const ed = flatEdit;
 const top = flatHMode
@@ -472,6 +505,7 @@ const oldWrap = document.getElementById('flatWrap');
 const scroll = oldWrap ? [oldWrap.scrollLeft, oldWrap.scrollTop] : null;
 body.innerHTML = `<div class="mp-body-inner">
 ${top}
+${flatFloorBarHtml()}
 <div class="flat-zoom"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><span>Площадь: <b>${(Math.round(total * 10) / 10).toLocaleString('ru-RU')} м²</b></span><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button></div>
 <div class="flat-viewbox"><div class="flat-float"><button type="button" class="mp-head-btn" onclick="flatSetZoom(-1)" aria-label="Мельче">−</button><button type="button" class="mp-head-btn" onclick="flatSetZoom(1)" aria-label="Крупнее">+</button><button type="button" class="mp-head-btn" onclick="closeFlatPlan()" aria-label="Закрыть">✕</button></div><div class="flat-wrap flat-view${ed || flatUlAdjust ? ' editing' : ''}" id="flatWrap"><div>${flatSvg(items, { zoom: flatZoom, ...(ed ? { view: ed.view, sel: ed.sel, underlay: flatUlOpt() } : flatUlAdjust ? { view: flatUlAdjust.view, underlay: flatUlOpt() } : flatScaleMode ? { pickWalls: true, underlay: flatUlOpt(), view: flatViewOf(items) }
 : flatHMode ? { pickWalls: 'flatHWall', pickOps: true, onTap: 'flatHRoom', heights: true, underlay: flatUlOpt(), view: flatViewOf(items) }
