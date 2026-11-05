@@ -66,7 +66,8 @@ document.getElementById('invoiceNote').addEventListener('input', updateInvoiceIn
 // уже неактуальные позиции.
 document.addEventListener('visibilitychange', async () => {
 if (document.visibilityState === 'visible' && authToken && currentUser) {
-await loadCloudData();
+// тихое обновление: то, что мастер вводил (фокус, цифры, «Где», раскрытая категория), не сбрасываем
+await loadCloudData({ keepForm: true });
 }
 });
 });
@@ -87,9 +88,60 @@ console.error('Не удалось обновить экран:', e);
 }
 }
 
-async function loadCloudData() {
+// Снимок того, что мастер ввёл в карточках услуг: фокус, значения полей, раскрытая категория, прокрутка.
+// Поля привязаны к услуге по названию, а не по номеру — если прайс поменялся, значения встанут на свои места.
+const SVC_FIELD = /^(input_qty|select_unit|input_price|input_loc)_(\d+)$/;
+function snapshotServiceForms() {
+const box = document.getElementById('servicesList');
+if (!box) return null;
+const services = (cloudData && cloudData.services) || [];
+const snap = { y: window.scrollY, fields: [], openCats: [], focus: null };
+box.querySelectorAll('input[id], select[id]').forEach(el => {
+const m = SVC_FIELD.exec(el.id);
+const srv = m && services[Number(m[2])];
+if (!srv) return;
+const def = m[1] === 'input_qty' ? '1' : m[1] === 'input_price' ? String(srv.price) : m[1] === 'select_unit' ? (el.options[0] ? el.options[0].value : '') : '';
+const f = { name: srv.name, kind: m[1], value: el.value, measure: el.dataset ? el.dataset.measure : undefined };
+if (el.value !== def || f.measure) snap.fields.push(f);
+if (el === document.activeElement) snap.focus = { name: srv.name, kind: m[1], start: el.selectionStart, end: el.selectionEnd };
+});
+box.querySelectorAll('.accordion-category.open .accordion-header > div:first-child > span').forEach(sp => { snap.openCats.push(sp.textContent); });
+return snap;
+}
+function restoreServiceForms(snap) {
+const box = document.getElementById('servicesList');
+if (!snap || !box) return;
+const services = (cloudData && cloudData.services) || [];
+const idxOf = (name) => services.findIndex(x => !x.isCategory && x.name === name);
+const elOf = (name, kind) => { const i = idxOf(name); return i < 0 ? null : document.getElementById(`${kind}_${i}`); };
+box.querySelectorAll('.accordion-category').forEach(c => {
+const t = c.querySelector('.accordion-header > div:first-child > span');
+if (t && snap.openCats.includes(t.textContent)) c.classList.add('open');
+});
+snap.fields.forEach(f => {
+const el = elOf(f.name, f.kind);
+if (!el) return;
+if (f.kind === 'select_unit' && ![...el.options].some(o => o.value === f.value)) return;
+el.value = f.value;
+if (f.measure) el.dataset.measure = f.measure;
+});
+window.scrollTo(0, snap.y);
+if (snap.focus) {
+const el = elOf(snap.focus.name, snap.focus.kind);
+if (el) {
+el.focus({ preventScroll: true });
+try { if (snap.focus.start != null) el.setSelectionRange(snap.focus.start, snap.focus.end); } catch (e) { /* у числового поля выделения нет */ }
+}
+}
+}
+
+// opts.keepForm — тихое обновление при возврате на вкладку: ничего не мигает, а введённое не теряется
+async function loadCloudData(opts = {}) {
 if (!authToken) return;
-const loader = document.getElementById('loader');
+const quiet = !!opts.keepForm;
+const snap = quiet ? snapshotServiceForms() : null;
+const prevServices = quiet ? JSON.stringify((cloudData && cloudData.services) || null) : null;
+const loader = quiet ? null : document.getElementById('loader');
 const maxAttempts = 3;
 try {
 for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -138,7 +190,11 @@ await new Promise(r => setTimeout(r, 600 * attempt));
 }
 } finally {
 if (loader) loader.style.display = 'none';
+// прайс не изменился — экран не трогаем, иначе пропадёт фокус и введённое
+if (!quiet || prevServices !== JSON.stringify((cloudData && cloudData.services) || null)) {
 renderServices();
+if (quiet) restoreServiceForms(snap);
+}
 }
 }
 
@@ -616,7 +672,7 @@ card.innerHTML = `
 <select id="select_unit_${idx}">${unitsOptions}</select>
 <button type="button" class="mp-mini" onclick="openMeasure({ kind: 'service', idx: ${idx} })" aria-label="Посчитать замером"><svg class="ic"><use href="#i-ruler"/></svg></button>
 </div>
-<input type="text" id="input_loc_${idx}" class="location-input" placeholder="Где на объекте (необязательно, например: кухня)">
+<div class="loc-box"><input type="text" id="input_loc_${idx}" class="location-input" placeholder="Где на объекте (необязательно, например: кухня)" autocomplete="off" onfocus="locOpen(${idx})" oninput="if (!document.getElementById('loc_pop_${idx}').hidden) renderLocPop(${idx})"><div class="loc-pop" id="loc_pop_${idx}" hidden></div></div>
 <button type="button" class="add-to-cart-btn" data-idx="${idx}" onclick="addToInvoice(${idx})">Добавить в счёт</button>
 `;
 contentEl.appendChild(card);

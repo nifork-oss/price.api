@@ -723,3 +723,72 @@ ${canEdit ? `<button type="button" class="measure-open-btn ai-btn" onclick="star
 ${canEdit ? `<button type="button" class="measure-open-btn" onclick="openPlanFile('${obj.id}')">План в файле (.json): сохранить или загрузить</button>` : ''}
 ${canEdit && rooms.length > 1 ? `<button type="button" class="btn btn-danger plan-btn" onclick="deleteAllRooms('${obj.id}')">Удалить все помещения</button>` : ''}`;
 }
+
+/* ---------- поле «Где на объекте»: помещения объекта списком ---------- */
+// В поле — обычный текст через запятую: помещения, что именно в них («стены, потолок») и любые свои слова.
+// Нажатие на помещение или «часть» добавляет её в поле, повторное — убирает. Новое помещение создаётся
+// в выбранном объекте прямо здесь (пустое, без замера — размеры можно добавить позже в «Помещениях»).
+// Список не отнимает фокус у поля (на телефоне не закрывается клавиатура); закрывается по нажатию вне поля.
+const LOC_PARTS = ['стены', 'потолок', 'пол', 'откосы', 'углы', 'окна', 'двери', 'радиаторы', 'балкон'];
+function locTokens(input) { return input.value.split(',').map(s => s.trim()).filter(Boolean); }
+function locHas(input, word) { const w = word.toLowerCase(); return locTokens(input).some(t => t.toLowerCase() === w); }
+function locToggle(idx, word) {
+const input = document.getElementById(`input_loc_${idx}`);
+if (!input) return;
+const w = word.toLowerCase();
+const list = locTokens(input);
+const has = list.some(t => t.toLowerCase() === w);
+input.value = (has ? list.filter(t => t.toLowerCase() !== w) : [...list, word]).join(', ');
+renderLocPop(idx);
+}
+function locOpen(idx) {
+document.querySelectorAll('.loc-pop').forEach(p => { if (p.id !== `loc_pop_${idx}`) p.hidden = true; });
+renderLocPop(idx);
+}
+function renderLocPop(idx) {
+const pop = document.getElementById(`loc_pop_${idx}`), input = document.getElementById(`input_loc_${idx}`);
+if (!pop || !input) return;
+const keepNew = pop.querySelector('.loc-new-input'), draft = keepNew ? keepNew.value : '', hadFocus = keepNew && document.activeElement === keepNew;
+const obj = typeof calcObject === 'function' ? calcObject() : null;
+const rooms = objectRooms(obj);
+const chip = (label, on, call) => `<button type="button" class="loc-chip${on ? ' on' : ''}" onmousedown="event.preventDefault()" onclick="${call}">${escapeHtml(label)}</button>`;
+pop.innerHTML = `
+<div class="loc-h">${obj ? 'Помещения объекта' : 'Помещения'}</div>
+${obj ? `<div class="loc-chips">${rooms.map(r => chip(roomName(r), locHas(input, roomName(r)), `locToggle(${idx}, ${escapeHtml(JSON.stringify(roomName(r)))})`)).join('') || '<span class="loc-empty">Пока нет — добавьте ниже</span>'}</div>
+<div class="loc-new"><input type="text" class="loc-new-input" maxlength="60" placeholder="Новое помещение" autocomplete="off" onkeydown="if (event.key === 'Enter') { event.preventDefault(); locAddRoom(${idx}); }"><button type="button" class="loc-add" onmousedown="event.preventDefault()" onclick="locAddRoom(${idx})">+ Добавить</button></div>`
+: '<div class="loc-empty">Выберите объект выше — тогда здесь появятся его помещения, и можно добавлять новые.</div>'}
+<div class="loc-h">Что именно</div>
+<div class="loc-chips">${LOC_PARTS.map(p => chip(p, locHas(input, p), `locToggle(${idx}, ${escapeHtml(JSON.stringify(p))})`)).join('')}</div>
+<button type="button" class="loc-done" onmousedown="event.preventDefault()" onclick="locClose(${idx})">Готово</button>`;
+pop.hidden = false;
+if (draft) { const n = pop.querySelector('.loc-new-input'); if (n) { n.value = draft; if (hadFocus) n.focus(); } }
+}
+function locClose(idx) { const pop = document.getElementById(`loc_pop_${idx}`); if (pop) pop.hidden = true; }
+async function locAddRoom(idx) {
+const pop = document.getElementById(`loc_pop_${idx}`), input = document.getElementById(`input_loc_${idx}`);
+const nameEl = pop && pop.querySelector('.loc-new-input');
+const obj = typeof calcObject === 'function' ? calcObject() : null;
+if (!nameEl || !input || !obj) return;
+const name = nameEl.value.trim().slice(0, 60);
+if (!name) { nameEl.focus(); return; }
+// такое помещение уже есть — просто выбираем его, второе с тем же именем не заводим
+const same = objectRooms(obj).find(r => roomName(r).toLowerCase() === name.toLowerCase());
+if (!same) {
+const m = newMeasure(obj.id);
+m.room = name;
+if (!Array.isArray(obj.rooms)) obj.rooms = [];
+obj.rooms.push({ id: 'r_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6), measure: m });
+try { await saveCloudData(); } catch (e) { /* сохранение повторится при следующей правке */ }
+if (typeof renderRooms === 'function') renderRooms();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === obj.id) renderObjectDetail();
+}
+const rn = same ? roomName(same) : name;
+if (!locHas(input, rn)) input.value = [...locTokens(input), rn].join(', ');
+nameEl.value = '';
+renderLocPop(idx);
+}
+// нажали вне поля и его списка — список закрываем
+document.addEventListener('pointerdown', (e) => {
+if (e.target.closest && e.target.closest('.loc-box')) return;
+document.querySelectorAll('.loc-pop').forEach(p => { p.hidden = true; });
+});
