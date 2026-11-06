@@ -2468,6 +2468,51 @@ btn.textContent = originalText;
 }
 }
 
+// Откат всей базы на момент в прошлом (Cloudflare хранит историю 30 дней).
+async function pitrCall(method, body, query) {
+const res = await fetch(`${WORKER_URL}/pitr${query || ''}`, {
+method,
+headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+body: body ? JSON.stringify(body) : undefined
+});
+const data = await res.json().catch(() => null);
+if (!res.ok) throw new Error((data && data.error) || ('ошибка ' + res.status));
+return data;
+}
+
+async function pitrRollback() {
+const input = document.getElementById('pitrAt');
+const info = document.getElementById('pitrInfo');
+if (!input.value) { alert('Выберите дату и время.'); return; }
+const at = new Date(input.value);
+if (isNaN(at) || at > new Date()) { alert('Время должно быть в прошлом.'); return; }
+try {
+const preview = await pitrCall('GET', null, '?at=' + encodeURIComponent(at.toISOString()));
+if (!confirm('Откатить ВСЮ базу на ' + at.toLocaleString('ru-RU') + '?\nВсё, что сохранили позже, пропадёт. Вы скачали резервную копию?')) return;
+const done = await pitrCall('POST', { bookmark: preview.bookmark, confirm: true });
+try { localStorage.setItem('pitrUndo', done.undo); } catch (e) {}
+info.textContent = 'Откат выполнен. Код отмены: ' + done.undo;
+alert('Откат выполнен. Код отмены записан на странице — сохраните его. Сейчас страница перезагрузится.');
+setTimeout(() => location.reload(), 2500);
+} catch (e) {
+alert('Не получилось: ' + e.message);
+}
+}
+
+async function pitrUndo() {
+let code = '';
+try { code = localStorage.getItem('pitrUndo') || ''; } catch (e) {}
+code = prompt('Код отмены отката:', code);
+if (!code) return;
+try {
+await pitrCall('POST', { bookmark: code, confirm: true });
+alert('Откат отменён. Страница перезагрузится.');
+setTimeout(() => location.reload(), 2500);
+} catch (e) {
+alert('Не получилось: ' + e.message);
+}
+}
+
 async function downloadBackup(opts = {}) {
 const btn = document.getElementById('backupBtn');
 const originalText = btn.textContent;
