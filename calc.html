@@ -645,6 +645,9 @@
 <button type="button" id="backupBtn" onclick="downloadBackup()" style="background:#14181f; color:#fff; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">⬇️ Скачать резервную копию</button>
 <button type="button" id="restoreBtn" onclick="document.getElementById('restoreFileInput').click()" style="background:#fff; color:#c2361f; border:1px solid #efc6bb; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">Восстановить из файла</button>
 </div>
+<button type="button" id="mergeBackupBtn" onclick="document.getElementById('mergeFileInput').click()" style="background:#fff; color:#14181f; border:1px solid #dfe3e8; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer; margin-top:8px;">Добавить недостающее из файла</button>
+<p style="font-size:12px; color:#8d97a5; margin:6px 0 0;">Берёт из копии только те объекты и счета, которых сейчас нет, и добавляет их. Существующие данные не меняются.</p>
+<input type="file" id="mergeFileInput" accept=".json,application/json" style="display:none;" onchange="mergeFromBackup(this)">
 <input type="file" id="restoreFileInput" accept=".json,application/json" style="display:none;" onchange="restoreFromBackup(this)">
 <p style="font-size:12px; color:#8d97a5; margin:8px 0 0;">Восстановление заменит <b>все</b> текущие данные содержимым файла. Перед этим текущие данные автоматически скачаются отдельной копией.</p>
 </div>
@@ -692,7 +695,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=e7473f8b"></script>
+<script src="calc-app.js?v=6aea48f3"></script>
 <script src="calc-geo.js?v=7519180b"></script>
 
 <script src="calc-measure.js?v=b19af441"></script>

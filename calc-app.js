@@ -2513,6 +2513,31 @@ alert('Не получилось: ' + e.message);
 }
 }
 
+// Добавить из резервной копии объекты и счета, которых сейчас нет (по id).
+// Ничего существующего не меняет — для возврата записей, потерянных при откате.
+async function mergeFromBackup(input) {
+const file = input.files && input.files[0];
+input.value = '';
+if (!file) return;
+let rec;
+try { rec = JSON.parse(await file.text()).record; } catch (e) { alert('Файл повреждён — это не JSON.'); return; }
+if (!rec || typeof rec !== 'object') { alert('Это не резервная копия сайта.'); return; }
+const space = currentUserMode === 'company' ? ((rec.companyData || {})[currentUser] || {}) : rec;
+const missing = (name) => {
+const have = new Set((cloudData[name] || []).map(x => x && String(x.id)));
+return (Array.isArray(space[name]) ? space[name] : []).filter(x => x && x.id != null && !have.has(String(x.id)));
+};
+const objs = missing('objects');
+const hist = missing('history');
+if (!objs.length && !hist.length) { alert('В копии нет ничего, чего не было бы сейчас.'); return; }
+const names = objs.map(o => '• ' + (o.name || o.title || o.address || o.id)).slice(0, 10).join('\n');
+if (!confirm(`Добавить из копии: объектов — ${objs.length}, счетов — ${hist.length}?` + (names ? '\n\n' + names : ''))) return;
+cloudData.objects = [...(cloudData.objects || []), ...objs];
+cloudData.history = [...hist, ...(cloudData.history || [])];
+const ok = await saveCloudData();
+if (ok) { refreshViewsAfterReload(); alert('Добавлено.'); }
+}
+
 async function downloadBackup(opts = {}) {
 const btn = document.getElementById('backupBtn');
 const originalText = btn.textContent;
