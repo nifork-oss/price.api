@@ -510,6 +510,37 @@ function bumpRev(record, key, fields = []) {
   return next.rev;
 }
 
+// Сохранение по записям: страница присылает не весь список, а только
+// изменения — { upsert: [записи], delete: [id] }. Сервер применяет их к
+// тому, что лежит у него, поэтому чужие записи затереть нельзя, а
+// одновременная работа нескольких людей не даёт конфликтов.
+// Новые записи встают в начало (счета) или в конец (объекты) — как на странице.
+const OPS_LIMIT = 5000;
+function readOps(incoming, name) {
+  const all = incoming && incoming.ops;
+  const op = all && typeof all === "object" ? all[name] : null;
+  if (!op || typeof op !== "object") return null;
+  const upsert = (Array.isArray(op.upsert) ? op.upsert : []).filter((x) => x && typeof x === "object" && x.id != null).slice(0, OPS_LIMIT);
+  const del = (Array.isArray(op.delete) ? op.delete : []).filter((x) => x != null).map(String).slice(0, OPS_LIMIT);
+  return { upsert, delete: del };
+}
+function applyOps(list, op, prepend) {
+  let out = Array.isArray(list) ? list.slice() : [];
+  if (!op) return out;
+  if (op.delete.length) {
+    const del = new Set(op.delete);
+    out = out.filter((x) => !(x && x.id != null && del.has(String(x.id))));
+  }
+  const pos = new Map(out.map((x, i) => [x && x.id != null ? String(x.id) : null, i]));
+  const fresh = [];
+  for (const item of op.upsert) {
+    const i = pos.get(String(item.id));
+    if (i !== undefined) out[i] = item;
+    else { fresh.push(item); pos.set(String(item.id), -1); }
+  }
+  return prepend ? [...fresh, ...out] : [...out, ...fresh];
+}
+
 // Есть ли среди сохраняемых полей те, что изменили после baseRev.
 function hasConflict(record, key, baseRev, fields) {
   const r = getSpaceRev(record, key);
@@ -1323,15 +1354,19 @@ const handler = {
         if (auth.mode === "company") {
           if (!record.companyData[auth.login]) record.companyData[auth.login] = { services: [], objects: [], history: [] };
           const cd = record.companyData[auth.login];
-          const fields = ["services", "objects", "history"].filter((f) => Array.isArray(incoming[f]));
+          const cdOps = { objects: readOps(incoming, "objects"), history: readOps(incoming, "history") };
+          const fields = ["services", "objects", "history"].filter((f) => Array.isArray(incoming[f]) && !cdOps[f]);
           if (baseRev !== null && hasConflict(record, key, baseRev, fields)) return conflictResponse();
+          if (cdOps.objects) cd.objects = applyOps(cd.objects, cdOps.objects, false);
+          if (cdOps.history) cd.history = applyOps(cd.history, cdOps.history, true);
+          const opFields = ["objects", "history"].filter((f) => cdOps[f]);
           for (const f of fields) {
             if (baseRev === null && (f === "objects" || f === "history")) {
               const ids = new Set(incoming[f].map((x) => x && x.id));
               cd[f] = [...incoming[f], ...(cd[f] || []).filter((x) => x && x.id && !ids.has(x.id))];
             } else cd[f] = incoming[f];
           }
-          const rev = bumpRev(record, key, fields);
+          const rev = bumpRev(record, key, [...fields, ...opFields]);
           await writeBin(env, record);
           return json({
             data: { services: cd.services, users: [], objects: cd.objects, history: cd.history, pirogHistory: [] },
@@ -1346,10 +1381,14 @@ const handler = {
         const fields = [];
         if (isAdmin && Array.isArray(incoming.services)) fields.push("services");
         if (isAdmin && Array.isArray(incoming.users)) fields.push("users");
-        if (Array.isArray(incoming.history)) fields.push("history");
-        if (Array.isArray(incoming.objects)) fields.push("objects");
+        const mainOps = { objects: readOps(incoming, "objects"), history: readOps(incoming, "history") };
+        if (Array.isArray(incoming.history) && !mainOps.history) fields.push("history");
+        if (Array.isArray(incoming.objects) && !mainOps.objects) fields.push("objects");
         if (isAdmin && Array.isArray(incoming.pirogHistory)) fields.push("pirogHistory");
+        // Изменения по записям сливаются с чужими, поэтому в проверку
+        // конфликта не входят; после отката базы hasConflict всё равно скажет «да».
         if (baseRev !== null && hasConflict(record, "main", baseRev, fields)) return conflictResponse();
+        const opFields = ["objects", "history"].filter((f) => mainOps[f]);
 
         if (Array.isArray(incoming.services)) {
           // Клиент всегда отправляет весь cloudData целиком, включая services,
@@ -1425,8 +1464,10 @@ const handler = {
           const ids = new Set(inc.map((x) => x && x.id));
           return [...inc, ...(cur || []).filter((x) => x && x.id && !ids.has(x.id))];
         };
-        if (Array.isArray(incoming.history)) record.history = keepMissing(record.history, incoming.history);
-        if (Array.isArray(incoming.objects)) record.objects = keepMissing(record.objects, incoming.objects);
+        if (mainOps.history) record.history = applyOps(record.history, mainOps.history, true);
+        else if (Array.isArray(incoming.history)) record.history = keepMissing(record.history, incoming.history);
+        if (mainOps.objects) record.objects = applyOps(record.objects, mainOps.objects, false);
+        else if (Array.isArray(incoming.objects)) record.objects = keepMissing(record.objects, incoming.objects);
         if (Array.isArray(incoming.pirogHistory)) {
           // Как и с services: мастер обычно просто пересылает то, что получил
           // через GET /appdata, не редактируя это поле сам. Раньше здесь стоял
@@ -1444,7 +1485,7 @@ const handler = {
           }
         }
 
-        const rev = bumpRev(record, "main", fields);
+        const rev = bumpRev(record, "main", [...fields, ...opFields]);
         await writeBin(env, record);
         return json({ data: stripPasswords(record), rev });
       }
