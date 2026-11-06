@@ -648,6 +648,16 @@
 <input type="file" id="restoreFileInput" accept=".json,application/json" style="display:none;" onchange="restoreFromBackup(this)">
 <p style="font-size:12px; color:#8d97a5; margin:8px 0 0;">Восстановление заменит <b>все</b> текущие данные содержимым файла. Перед этим текущие данные автоматически скачаются отдельной копией.</p>
 </div>
+<div style="margin-top:20px; padding-top:16px; border-top:1px solid #dfe3e8;">
+<h2 style="font-size:16px; margin:0 0 6px;">Откат на момент в прошлом</h2>
+<p style="font-size:13px; color:#5d6878; margin:0 0 10px;">Вся база возвращается к состоянию на выбранное время (до 30 дней назад). Всё, что сохранили позже, пропадёт, поэтому сначала скачайте резервную копию. Откат можно отменить по коду, который покажется после него.</p>
+<input type="datetime-local" id="pitrAt" style="padding:10px; border:1px solid #dfe3e8; border-radius:8px; font-size:14px; max-width:100%;">
+<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+<button type="button" id="pitrBtn" onclick="pitrRollback()" style="background:#fff; color:#c2361f; border:1px solid #efc6bb; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">Откатить базу на это время</button>
+<button type="button" id="pitrUndoBtn" onclick="pitrUndo()" style="background:#fff; color:#14181f; border:1px solid #dfe3e8; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer;">Отменить откат</button>
+</div>
+<p id="pitrInfo" style="font-size:12px; color:#5d6878; margin:8px 0 0; word-break:break-all;"></p>
+</div>
 </div>
 
 <!-- Модалка записи оплаты -->
@@ -682,7 +692,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=82e39681"></script>
+<script src="calc-app.js?v=e7473f8b"></script>
 <script src="calc-geo.js?v=7519180b"></script>
 
 <script src="calc-measure.js?v=b19af441"></script>
