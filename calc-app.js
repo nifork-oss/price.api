@@ -31,6 +31,8 @@ let cloudRev = null;
 // То, что последний раз пришло с сервера (id → запись в виде JSON). При
 // сохранении сравниваем с текущим и отправляем только изменения.
 let cloudBase = null;
+let cloudBaseRaw = null; // то же, что cloudBase, строкой — для копии на устройстве
+let offlineSyncing = false;
 let cloudLoaded = false; // данные с сервера получены; до этого сохранять нельзя — запись затёрла бы чужие
 let editingRecordId = null;
 let editingReturnContext = null;
@@ -182,6 +184,7 @@ currentUserHasTriedCompanyMode = result.hasTriedCompanyMode;
 localStorage.setItem('currentUserHasTriedCompanyMode', String(currentUserHasTriedCompanyMode));
 }
 if (result.access) setUserAccess(result.access);
+afterCloudLoaded();
 return;
 }
 if (res.status === 401) {
@@ -191,10 +194,10 @@ localStorage.removeItem('currentUser');
 return;
 }
 // Другие коды (перегрузка, лимиты облака и т.п.) — есть смысл повторить.
-if (attempt === maxAttempts) return;
+if (attempt === maxAttempts) { useOfflineCopy(); return; }
 } catch (e) {
 console.error(`Ошибка загрузки (попытка ${attempt}/${maxAttempts}):`, e);
-if (attempt === maxAttempts) return;
+if (attempt === maxAttempts) { useOfflineCopy(); return; }
 }
 await new Promise(r => setTimeout(r, 600 * attempt));
 }
@@ -218,19 +221,159 @@ map.set(String(item.id), JSON.stringify(item));
 return map;
 }
 
-function rememberCloudBase() {
-cloudBase = cloudData ? {
-objects: indexById(cloudData.objects),
-history: indexById(cloudData.history),
-whole: Object.fromEntries(['services', 'users', 'pirogHistory'].map(k => [k, JSON.stringify(cloudData[k] ?? null)])),
+const WHOLE_FIELDS = ['services', 'users', 'pirogHistory'];
+
+function makeBase(src) {
+return src ? {
+objects: indexById(src.objects),
+history: indexById(src.history),
+whole: Object.fromEntries(WHOLE_FIELDS.map(k => [k, JSON.stringify(src[k] ?? null)])),
 } : null;
 }
+
+function rememberCloudBase() {
+cloudBase = makeBase(cloudData);
+cloudBaseRaw = cloudData ? JSON.stringify(offlinePick(cloudData)) : null;
+}
+
+/* ---------- работа без связи ----------
+Копия данных лежит на устройстве (своя для каждого логина и режима): data —
+как сейчас на экране, base — как было на сервере при последней связи.
+Нет связи — изменения сохраняются в копию; связь появилась — страница берёт
+свежие данные с сервера, накладывает на них изменения (data против base) и
+отправляет их как обычное сохранение по записям. */
+
+function offlinePick(d) {
+const out = {};
+for (const k of ['objects', 'history', ...WHOLE_FIELDS]) out[k] = d ? d[k] : undefined;
+return out;
+}
+
+function offlineKey() {
+return 'calcOffline:' + (currentUser || '') + ':' + (currentUserMode || 'employee');
+}
+
+function readOfflineCopy() {
+try { return JSON.parse(localStorage.getItem(offlineKey()) || 'null'); } catch (e) { return null; }
+}
+
+function writeOfflineCopy(dirty) {
+if (!currentUser || !cloudData) return true;
+try {
+localStorage.setItem(offlineKey(), JSON.stringify({ v: 1, at: Date.now(), rev: cloudRev, dirty: !!dirty, base: cloudBaseRaw, data: offlinePick(cloudData) }));
+updateOfflineBadge();
+return true;
+} catch (e) {
+console.warn('Копия на устройстве не записалась:', e);
+return false;
+}
+}
+
+function hasUnsentChanges() {
+const c = readOfflineCopy();
+return !!(c && c.dirty);
+}
+
+function updateOfflineBadge() {
+let el = document.getElementById('offlineBadge');
+const dirty = hasUnsentChanges();
+const offline = cloudLoaded === 'offline';
+if (!dirty && !offline) { if (el) el.remove(); return; }
+if (!el) {
+el = document.createElement('button');
+el.type = 'button';
+el.id = 'offlineBadge';
+el.style.cssText = 'position:fixed; left:50%; transform:translateX(-50%); bottom:calc(14px + env(safe-area-inset-bottom)); z-index:9998; background:#14181f; color:#fff; border:none; border-radius:999px; padding:8px 14px; font-size:12px; font-weight:600; box-shadow:0 4px 14px rgba(0,0,0,.25); max-width:calc(100% - 32px);';
+el.onclick = () => syncOffline(true);
+document.body.appendChild(el);
+}
+el.textContent = dirty
+? '⏳ Изменения на устройстве, ещё не отправлены — отправлю при связи'
+: '📴 Нет связи — показаны данные с устройства';
+}
+
+// Загрузка с сервера не удалась — берём копию с устройства, если она есть.
+function useOfflineCopy() {
+const c = readOfflineCopy();
+if (!c || !c.data || !c.base) return;
+const self = (cloudData && cloudData.self) || { login: currentUser, email: '', companyName: '' };
+cloudData = { ...c.data, self };
+if (!Array.isArray(cloudData.objects)) cloudData.objects = [];
+if (!Array.isArray(cloudData.history)) cloudData.history = [];
+cloudRev = typeof c.rev === 'number' ? c.rev : null;
+cloudBaseRaw = c.base;
+try { cloudBase = makeBase(JSON.parse(c.base)); } catch (e) { cloudBase = null; }
+cloudLoaded = 'offline';
+setTimeout(updateOfflineBadge, 0);
+}
+
+function applyLocalOps(list, d, prepend) {
+let out = Array.isArray(list) ? list.slice() : [];
+if (d.delete.length) { const del = new Set(d.delete); out = out.filter(x => !(x && x.id != null && del.has(String(x.id)))); }
+const pos = new Map(out.map((x, i) => [x && x.id != null ? String(x.id) : null, i]));
+const fresh = [];
+for (const item of d.upsert) {
+const i = pos.get(String(item.id));
+if (i !== undefined) out[i] = item; else fresh.push(item);
+}
+return prepend ? [...fresh, ...out] : [...out, ...fresh];
+}
+
+// Данные с сервера только что загрузились: если на устройстве остались
+// неотправленные изменения — накладываем их и отправляем.
+function afterCloudLoaded() {
+const c = readOfflineCopy();
+if (!c || !c.dirty || !c.data || !c.base) { writeOfflineCopy(false); return; }
+let base;
+try { base = makeBase(JSON.parse(c.base)); } catch (e) { base = null; }
+if (!base) { writeOfflineCopy(false); return; }
+let changed = false;
+for (const name of ['objects', 'history']) {
+const d = diffAgainst(c.data[name], base[name]);
+if (d === null) { if (JSON.stringify(c.data[name]) !== JSON.stringify(cloudData[name])) { cloudData[name] = c.data[name]; changed = true; } continue; }
+if (d.upsert.length || d.delete.length) { cloudData[name] = applyLocalOps(cloudData[name], d, name === 'history'); changed = true; }
+}
+for (const k of WHOLE_FIELDS) {
+if (JSON.stringify(c.data[k] ?? null) !== base.whole[k]) { cloudData[k] = c.data[k]; changed = true; }
+}
+if (!changed) { writeOfflineCopy(false); return; }
+// Отправляем уже после того, как экран отрисуется с загруженными данными.
+setTimeout(async () => {
+refreshViewsAfterReload();
+const ok = await saveCloudData();
+if (ok && !hasUnsentChanges()) showAddToast('Изменения, сделанные без связи, отправлены');
+}, 0);
+}
+
+async function syncOffline(manual) {
+if (offlineSyncing || !authToken || !currentUser) return;
+if (!manual && navigator.onLine === false) return;
+offlineSyncing = true;
+try {
+if (cloudLoaded === 'offline') {
+await loadCloudData({ keepForm: true });
+if (cloudLoaded === true) refreshViewsAfterReload();
+} else if (cloudLoaded === true && hasUnsentChanges()) {
+await saveCloudData();
+}
+} finally {
+offlineSyncing = false;
+updateOfflineBadge();
+}
+}
+
+window.addEventListener('online', () => syncOffline(false));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncOffline(false); });
+setInterval(() => { if (cloudLoaded === 'offline' || hasUnsentChanges()) syncOffline(false); }, 30000);
 
 // Изменения по сравнению с тем, что пришло с сервера: { upsert, delete }.
 // null — если сравнить нельзя (нет базы или у записи нет id): тогда список уходит целиком.
 function diffList(name) {
-const base = cloudBase && cloudBase[name];
-const list = Array.isArray(cloudData[name]) ? cloudData[name] : [];
+return diffAgainst(cloudData[name], cloudBase && cloudBase[name]);
+}
+
+function diffAgainst(listIn, base) {
+const list = Array.isArray(listIn) ? listIn : [];
 if (!base) return null;
 const upsert = [];
 const seen = new Set();
@@ -262,7 +405,22 @@ if (JSON.stringify(cloudData[k] ?? null) === cloudBase.whole[k]) delete body[k];
 return body;
 }
 
+// Нет связи: изменения остаются на устройстве и уйдут, когда связь появится.
+function saveOffline() {
+hideSyncStatus(0);
+if (!writeOfflineCopy(true)) {
+alert('Нет связи, а сохранить на устройстве не удалось (мало места). Изменения не сохранены.');
+return false;
+}
+showAddToast('Нет связи — сохранено на устройстве, отправлю позже');
+return true;
+}
+
 async function saveCloudData() {
+if (cloudLoaded === 'offline') {
+if (typeof stampRoomSurfaces === 'function') stampRoomSurfaces();
+return saveOffline();
+}
 if (!cloudLoaded) {
 // Данные при входе не загрузились — у страницы пустой список. Сохранение
 // перезаписало бы общие объекты и счета, поэтому сначала грузим заново.
@@ -305,6 +463,7 @@ cloudData = result ? result.data : cloudData;
 if (cloudData && !cloudData.self) cloudData.self = keepSelf;
 if (result && result.data) rememberCloudBase();
 if (result && typeof result.rev === 'number') cloudRev = result.rev;
+writeOfflineCopy(false);
 showSyncStatus('Сохранено');
 hideSyncStatus();
 return true;
@@ -316,17 +475,15 @@ handleLogout();
 return false;
 }
 if (attempt === maxAttempts) {
+// Сервер недоступен (5xx, перегрузка) — как без связи: храним на устройстве.
+if (res.status >= 500 || res.status === 429) return saveOffline();
 hideSyncStatus(0);
 alert('Не удалось сохранить данные' + (result && result.error ? (': ' + result.error) : (' (ошибка ' + res.status + ')')) + '. Попробуйте ещё раз — изменения могли не сохраниться в облаке.');
 return false;
 }
 } catch (e) {
 console.error(`Ошибка сохранения (попытка ${attempt}/${maxAttempts}):`, e);
-if (attempt === maxAttempts) {
-hideSyncStatus(0);
-alert('Не удалось сохранить данные: нет соединения с сервером. Изменения не сохранены в облаке, попробуйте ещё раз.');
-return false;
-}
+if (attempt === maxAttempts) return saveOffline();
 }
 await new Promise(r => setTimeout(r, 600 * attempt));
 }
@@ -562,7 +719,13 @@ btns.forEach(b => b.disabled = false);
 }
 }
 
-function handleLogout() {
+function handleLogout(ask) {
+const unsent = hasUnsentChanges();
+if (ask && unsent && !confirm('Есть изменения, которые ещё не отправлены (не было связи). Они останутся на этом устройстве и уйдут, когда вы снова войдёте здесь. Выйти?')) return;
+// Копию данных на устройстве без неотправленного удаляем — чтобы после
+// выхода на чужом телефоне не оставалось объектов и счетов.
+if (!unsent) { try { localStorage.removeItem(offlineKey()); } catch (e) {} }
+cloudLoaded = false;
 currentUser = null;
 currentUserRole = null;
 currentUserMode = 'employee';
