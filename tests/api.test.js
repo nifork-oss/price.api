@@ -536,9 +536,9 @@ function pageSaver() {
     return src.slice(start, i + 1);
   };
   const vm = require('vm');
-  const ctx = { cloudData: null, cloudRev: null, cloudBase: null };
+  const ctx = { cloudData: null, cloudRev: null, cloudBase: null, cloudBaseRaw: null, WHOLE_FIELDS: ['services', 'users', 'pirogHistory'] };
   vm.createContext(ctx);
-  vm.runInContext(['indexById', 'rememberCloudBase', 'diffList', 'buildSaveBody'].map(pick).join('\n'), ctx);
+  vm.runInContext(['indexById', 'makeBase', 'offlinePick', 'rememberCloudBase', 'diffList', 'diffAgainst', 'buildSaveBody'].map(pick).join('\n'), ctx);
   return ctx;
 }
 
