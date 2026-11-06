@@ -446,3 +446,13 @@ test('прораб: ссылка-приглашение, одобрение и �
   assert.strictEqual((await call('GET', '/foreman?t=' + again.data.invite.token)).status, 404);
   assert.strictEqual((await call('GET', '/foreman-invite?objectId=o1', { token })).data.invite, null);
 });
+
+test('сохранение без baseRev не стирает чужие объекты (слияние по id)', async () => {
+  const { call, token } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [{ id: 'a', name: 'Старый' }, { id: 'b', name: 'Второй' }] } });
+  // «пустая» страница, не загрузившая данные, добавляет один новый объект
+  await call('PUT', '/appdata', { token, body: { objects: [{ id: 'c', name: 'Новый' }] } });
+  const after = await call('GET', '/appdata', { token });
+  assert.deepStrictEqual(after.data.data.objects.map(o => o.id).sort(), ['a', 'b', 'c']);
+});
