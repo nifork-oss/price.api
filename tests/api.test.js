@@ -480,3 +480,47 @@ test('после отката базы страница с версией нов
   const stale = await call('PUT', '/appdata', { token, body: { baseRev: fresh.data.rev, objects: [] } });
   assert.strictEqual(stale.status, 409);
 });
+
+test('доступ аккаунта: новая регистрация — только своя компания; админ включает выбор или только сотрудника', async () => {
+  const { call, token, env } = await setup();
+  // ivan зарегистрирован в setup(): просит «сотрудник» — всё равно своя компания
+  const l1 = await call('POST', '/login', { body: { login: 'ivan', password: 'pw', mode: 'employee' } });
+  assert.strictEqual(l1.data.mode, 'company');
+  assert.strictEqual(l1.data.access, 'company');
+  const sw = await call('POST', '/switch-mode', { token, body: { mode: 'employee' } });
+  assert.strictEqual(sw.status, 403);
+  // админ добавляет в команду
+  const users = env.STORAGE.map.get('users');
+  users.find(u => u.login === 'ivan').access = 'both';
+  env.STORAGE.map.set('users', users);
+  const l2 = await call('POST', '/login', { body: { login: 'ivan', password: 'pw', mode: 'employee' } });
+  assert.strictEqual(l2.data.mode, 'employee');
+  // админ отключает свою компанию: старый токен «своя компания» больше не действует
+  users.find(u => u.login === 'ivan').access = 'staff';
+  env.STORAGE.map.set('users', users);
+  const old = await call('GET', '/appdata', { token });
+  assert.strictEqual(old.status, 401);
+  const l3 = await call('POST', '/login', { body: { login: 'ivan', password: 'pw', mode: 'company' } });
+  assert.strictEqual(l3.data.mode, 'employee');
+});
+
+test('перенос объекта со счетами из общего пространства в компанию мастера', async () => {
+  const { call, env } = await setup();
+  env.STORAGE.map.set('users', [...env.STORAGE.map.get('users').map(u => u.login === 'admin' ? { ...u, pass: 'x' } : u)]);
+  env.STORAGE.map.set('objects', [{ id: 'o1', name: 'Квартира', visibleTo: ['ivan'] }, { id: 'o2', name: 'Дом' }]);
+  env.STORAGE.map.set('history', [{ id: 1, objectId: 'o1' }, { id: 2, objectId: 'o2' }]);
+  const admin = await call('POST', '/login', { body: { login: 'admin', password: 'x' } });
+  const tok = admin.data.token;
+  assert.ok(tok, 'вход админа');
+  const r = await call('POST', '/move-object', { token: tok, body: { objectId: 'o1', toLogin: 'ivan' } });
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.docs, 1);
+  assert.deepStrictEqual(env.STORAGE.map.get('objects').map(o => o.id), ['o2']);
+  assert.deepStrictEqual(env.STORAGE.map.get('history').map(h => h.id), [2]);
+  const cd = env.STORAGE.map.get('cd:ivan');
+  assert.deepStrictEqual(cd.objects.map(o => o.id), ['o1']);
+  assert.strictEqual(cd.objects[0].visibleTo, undefined);
+  assert.deepStrictEqual(cd.history.map(h => h.id), [1]);
+  const ivanTok = (await call('POST', '/login', { body: { login: 'ivan', password: 'pw' } })).data.token;
+  assert.strictEqual((await call('POST', '/move-object', { token: ivanTok, body: { objectId: 'o2', toLogin: 'ivan' } })).status, 403);
+});

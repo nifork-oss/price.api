@@ -75,13 +75,6 @@
 <label>Пароль</label>
 <input type="password" id="passInput" placeholder="••••••••" autocomplete="current-password" onkeydown="if (event.key === 'Enter') handleLogin(document.getElementById('loginBtn'))">
 </div>
-<div class="form-group">
-<label>Войти как</label>
-<div style="display:flex; gap:8px;">
-<button type="button" id="loginModeEmployeeBtn" class="role-toggle-btn active" onclick="setLoginMode('employee')">Сотрудник</button>
-<button type="button" id="loginModeCompanyBtn" class="role-toggle-btn" onclick="setLoginMode('company')">Своя компания</button>
-</div>
-</div>
 <button type="button" class="btn btn-primary" id="loginBtn" onclick="handleLogin(this)">Войти</button>
 <div id="authError" style="color:#b23a26; font-size:12px; margin-top:10px; display:none; font-weight: 500;">Неверный логин/email или пароль</div>
 <div style="display: flex; justify-content: space-between; margin-top: 12px; gap: 8px;">
@@ -695,7 +688,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=6aea48f3"></script>
+<script src="calc-app.js?v=c589aec8"></script>
 <script src="calc-geo.js?v=7519180b"></script>
 
 <script src="calc-measure.js?v=b19af441"></script>

@@ -17,6 +17,8 @@ let currentUser = null;
 let currentUserRole = null;
 let currentUserMode = 'employee';
 let currentUserHasTriedCompanyMode = false;
+// Доступные режимы: 'company' — только своя компания, 'both' — выбор, 'staff' — только сотрудник
+let currentUserAccess = 'both';
 let authToken = null;
 let invoiceCart = [];
 // Скидка на весь счёт: { kind: 'pct' | 'rub', value } — процент или рубли; null — без скидки
@@ -46,6 +48,7 @@ const savedUser = localStorage.getItem('currentUser');
 currentUserRole = localStorage.getItem('currentUserRole');
 currentUserMode = localStorage.getItem('currentUserMode') || 'employee';
 currentUserHasTriedCompanyMode = localStorage.getItem('currentUserHasTriedCompanyMode') === 'true';
+currentUserAccess = localStorage.getItem('currentUserAccess') || 'both';
 if (authToken && savedUser) {
 currentUser = savedUser;
 await loadCloudData();
@@ -174,6 +177,7 @@ if (typeof result.hasTriedCompanyMode === 'boolean') {
 currentUserHasTriedCompanyMode = result.hasTriedCompanyMode;
 localStorage.setItem('currentUserHasTriedCompanyMode', String(currentUserHasTriedCompanyMode));
 }
+if (result.access) setUserAccess(result.access);
 return;
 }
 if (res.status === 401) {
@@ -317,7 +321,7 @@ try {
 const res = await authFetch(`${WORKER_URL}/login`, {
 method: "POST",
 headers: { "Content-Type": "application/json" },
-body: JSON.stringify({ login: inputVal, password: p, mode: selectedLoginMode })
+body: JSON.stringify({ login: inputVal, password: p })
 });
 const result = await res.json();
 if (!res.ok) {
@@ -335,6 +339,7 @@ localStorage.setItem('currentUserRole', currentUserRole);
 localStorage.setItem('currentUserMode', currentUserMode);
 currentUserHasTriedCompanyMode = !!result.hasTriedCompanyMode;
 localStorage.setItem('currentUserHasTriedCompanyMode', String(currentUserHasTriedCompanyMode));
+setUserAccess(result.access || 'both');
 if (result.role === 'admin') {
 localStorage.setItem('isAdminAuthorized', 'true');
 } else {
@@ -349,10 +354,10 @@ errDiv.style.display = 'block';
 }
 }
 
+// Выбор «Сотрудник / Своя компания» на экране входа убран: режим задаёт
+// доступ аккаунта, а у кого есть выбор — переключается в меню.
 function setLoginMode(mode) {
 selectedLoginMode = mode;
-document.getElementById('loginModeEmployeeBtn').classList.toggle('active', mode === 'employee');
-document.getElementById('loginModeCompanyBtn').classList.toggle('active', mode === 'company');
 }
 
 function setDocType(type) {
@@ -400,9 +405,12 @@ return;
 authToken = result.token;
 currentUser = result.login;
 currentUserRole = result.role;
+currentUserMode = result.mode || 'employee';
 localStorage.setItem('authToken', authToken);
 localStorage.setItem('currentUser', currentUser);
 localStorage.setItem('currentUserRole', currentUserRole);
+localStorage.setItem('currentUserMode', currentUserMode);
+setUserAccess(result.access || 'company');
 localStorage.removeItem('isAdminAuthorized');
 await loadCloudData();
 showAppScreen();
@@ -429,7 +437,7 @@ document.getElementById('authScreen').style.display = 'none';
 document.getElementById('appScreen').style.display = 'block';
 document.getElementById('userBadge').textContent = currentUser + (isCompanyMode() ? ' · своя компания' : '');
 document.getElementById('companyModePromo').style.display =
-(!isCurrentClient() && !isCompanyMode() && !currentUserHasTriedCompanyMode) ? 'block' : 'none';
+(!isCurrentClient() && !isCompanyMode() && !currentUserHasTriedCompanyMode && currentUserAccess === 'both') ? 'block' : 'none';
 document.getElementById('tabUsersBtn').style.display = (isCurrentAdmin() && !isCompanyMode()) ? 'block' : 'none';
 document.getElementById('tabStatsBtn').style.display = (isCurrentAdmin() && !isCompanyMode()) ? 'block' : 'none';
 paidPendingBadge();
@@ -448,10 +456,16 @@ offerDraftRestore();
 }
 }
 
+function setUserAccess(access) {
+currentUserAccess = access;
+try { localStorage.setItem('currentUserAccess', access); } catch (e) {}
+}
+
 function updateModeSwitch() {
 const box = document.getElementById('userModeSwitch');
 if (!box) return;
-box.style.display = isCurrentClient() ? 'none' : 'block';
+// Выбор режима — только у тех, кого админ добавил в команду (и у самого админа)
+box.style.display = (!isCurrentClient() && currentUserAccess === 'both') ? 'block' : 'none';
 document.getElementById('menuModeEmployeeBtn').classList.toggle('active', !isCompanyMode());
 document.getElementById('menuModeCompanyBtn').classList.toggle('active', isCompanyMode());
 }
@@ -1962,9 +1976,39 @@ openSheet(`Напоминание об оплате · осталось ${getBal
 
 function openObjectActions(id) {
 const obj = (cloudData.objects || []).find(o => o.id === id);
-openSheet(obj ? obj.name : 'Объект', [
-{ icon: '🗑️', label: 'Удалить объект', danger: true, onClick: () => deleteObject(id) },
-]);
+const items = [];
+if (isCurrentAdmin() && !isCompanyMode()) {
+items.push({ icon: '📦', label: 'Перенести в компанию мастера…', onClick: () => setTimeout(() => chooseMoveTarget(id), 0) });
+}
+items.push({ icon: '🗑️', label: 'Удалить объект', danger: true, onClick: () => deleteObject(id) });
+openSheet(obj ? obj.name : 'Объект', items);
+}
+
+// Админ переносит объект (вместе со счетами и расчётами) в «свою компанию» мастера.
+function chooseMoveTarget(id) {
+const masters = (cloudData.users || []).filter(u => u.role !== 'admin' && u.role !== 'client' && u.login !== currentUser);
+if (!masters.length) { alert('Нет мастеров, которым можно перенести объект.'); return; }
+openSheet('В чью компанию перенести?', masters.map(u => ({ icon: '👤', label: u.login + (u.companyName ? ' · ' + u.companyName : ''), onClick: () => moveObjectTo(id, u.login) })));
+}
+
+async function moveObjectTo(id, login) {
+const obj = (cloudData.objects || []).find(o => o.id === id);
+const docs = (cloudData.history || []).filter(r => r && r.objectId === id).length;
+if (!confirm(`Перенести «${obj ? obj.name : id}» и документы (${docs}) в компанию ${login}? Из общего списка объект пропадёт.`)) return;
+try {
+const res = await fetch(`${WORKER_URL}/move-object`, {
+method: 'POST',
+headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+body: JSON.stringify({ objectId: id, toLogin: login })
+});
+const result = await res.json().catch(() => null);
+if (!res.ok) { alert((result && result.error) || ('Не удалось перенести (ошибка ' + res.status + ')')); return; }
+await loadCloudData();
+refreshViewsAfterReload();
+showAddToast('Перенесено в компанию ' + login);
+} catch (e) {
+alert('Ошибка сети — объект не перенесён.');
+}
 }
 
 function openCalcActions() {
@@ -2363,6 +2407,11 @@ list.innerHTML += `
 <div style="display: flex; gap: 4px; flex-shrink: 0; align-items: center; flex-wrap: wrap;">
 <button type="button" class="btn btn-warning btn-sm" onclick="resetUserPassword(${idx})">Сброс пароля</button>
 ${!isSelf ? `
+${role === 'master' ? `<select title="Вход" onchange="setUserAccessFor(${idx}, this.value)" style="font-size:12px; padding:6px 8px; border-radius:8px; border:1px solid #cfd5dd; background:#fff;">
+<option value="company" ${(u.access || 'both') === 'company' ? 'selected' : ''}>Только своя компания</option>
+<option value="both" ${(u.access || 'both') === 'both' ? 'selected' : ''}>В команде + своя компания</option>
+<option value="staff" ${(u.access || 'both') === 'staff' ? 'selected' : ''}>Только сотрудник</option>
+</select>` : ''}
 <select onchange="setUserRole(${idx}, this.value)" style="font-size:12px; padding:6px 8px; border-radius:8px; border:1px solid #cfd5dd; background:#fff;">
 <option value="master" ${role === 'master' ? 'selected' : ''}>Мастер</option>
 <option value="client" ${role === 'client' ? 'selected' : ''}>Заказчик</option>
@@ -2580,6 +2629,14 @@ if (!newPass || !newPass.trim()) return;
 u.pass = newPass.trim();
 await saveCloudData();
 alert(`Пароль для ${u.login} обновлён!`);
+}
+
+async function setUserAccessFor(idx, access) {
+const u = cloudData.users[idx];
+if (!u) return;
+u.access = access;
+await saveCloudData();
+renderUsersList();
 }
 
 async function setUserRole(idx, role) {

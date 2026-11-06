@@ -261,6 +261,25 @@ async function getAuthUser(request, env) {
   return await verifyToken(token, env);
 }
 
+// Какие режимы входа доступны аккаунту. Админ отмечает это во вкладке
+// «Мастера»: "company" — только своя компания (без выбора), "both" —
+// сотрудник и своя компания (выбор в меню), "staff" — только сотрудник.
+// Новые регистрации получают "company". У старых аккаунтов поля нет —
+// для них "both", как было до появления настройки, чтобы никого не выкинуло.
+// Админу доступны оба режима всегда, у заказчика режим один.
+const ACCESS_VALUES = ["company", "both", "staff"];
+function userAccess(user) {
+  if (!user) return "company";
+  if (user.role === "admin" || user.login === "admin") return "both";
+  return ACCESS_VALUES.includes(user.access) ? user.access : "both";
+}
+function allowedMode(user, requested) {
+  const a = userAccess(user);
+  if (a === "staff") return "employee";
+  if (a === "company") return "company";
+  return requested === "company" ? "company" : "employee";
+}
+
 /* ============== доступ к JSONBin ============== */
 
 // JSONBin (бесплатный тариф) иногда отвечает с задержкой, ошибкой или
@@ -449,6 +468,7 @@ function stripPasswords(record) {
     login: u.login,
     email: u.email || "",
     role: u.role || "master",
+    access: userAccess(u),
     companyName: u.companyName || "",
   }));
   return clone;
@@ -793,12 +813,13 @@ const handler = {
         if (record.users.some((u) => u.email && u.email.toLowerCase() === email.toLowerCase()))
           return json({ error: "Этот email уже используется другим аккаунтом!" }, 400);
         const pass = await hashPassword(password);
-        const mode = role !== "client" && body.mode === "company" ? "company" : "employee";
+        // Новый аккаунт — только своя компания; в команду его добавляет админ.
+        const mode = role !== "client" ? "company" : "employee";
         const hasTriedCompanyMode = mode === "company";
-        record.users.push({ login, email, pass, role, hasTriedCompanyMode, _rev: bumpRev(record, "main") });
+        record.users.push({ login, email, pass, role, access: "company", hasTriedCompanyMode, _rev: bumpRev(record, "main") });
         await writeBin(env, record);
         const token = await signToken({ login, role, mode, exp: Date.now() + TOKEN_LIFETIME_MS }, env);
-        return json({ token, login, role, mode, hasTriedCompanyMode });
+        return json({ token, login, role, mode, hasTriedCompanyMode, access: "company" });
       }
 
       // Вход
@@ -834,7 +855,7 @@ const handler = {
         // Режим ("сотрудник"/"своя компания") выбирается заново при каждом
         // входе, это не свойство аккаунта. Для заказчика режим не имеет
         // смысла и всегда игнорируется — у него единственный, свой кабинет.
-        const mode = role !== "client" && body.mode === "company" ? "company" : "employee";
+        const mode = role === "client" ? "employee" : allowedMode(user, body.mode);
         // Запоминаем на аккаунте сам факт, что человек хоть раз пробовал
         // режим "своя компания" — по этому флагу на клиенте перестаёт
         // показываться подсказка про новую возможность.
@@ -845,7 +866,7 @@ const handler = {
           await writeBin(env, record);
         }
         const token = await signToken({ login: user.login, role, mode, exp: Date.now() + TOKEN_LIFETIME_MS }, env);
-        return json({ token, login: user.login, role, mode, hasTriedCompanyMode });
+        return json({ token, login: user.login, role, mode, hasTriedCompanyMode, access: role === "client" ? "client" : userAccess(user) });
       }
 
       // Восстановление пароля по email — убрано намеренно: отправка временного
@@ -856,6 +877,15 @@ const handler = {
       // Всё, что ниже, требует действительного токена входа
       const auth = await getAuthUser(request, env);
       if (!auth) return json({ error: "Требуется вход" }, 401);
+      // Админ мог изменить доступ аккаунта уже после входа: токен с режимом,
+      // который теперь закрыт, больше не действует — человек входит заново.
+      if (auth.role === "master" && env.STORAGE) {
+        const users = (await env.STORAGE.get("users")) || [];
+        const u = users.find((x) => x && x.login === auth.login);
+        if (u && allowedMode(u, auth.mode) !== (auth.mode === "company" ? "company" : "employee")) {
+          return json({ error: "Доступ аккаунта изменён — войдите заново", accessChanged: true }, 401);
+        }
+      }
 
       // Приглашение для прораба: создать (или выпустить заново), посмотреть вместе с решениями, отозвать
       if (path === "/foreman-invite") {
@@ -1162,7 +1192,9 @@ const handler = {
         if (!user) return json({ error: "Требуется вход" }, 401);
         const role = user.role === "admin" || user.login === "admin" ? "admin" : (user.role === "client" ? "client" : "master");
         if (role === "client") return json({ error: "У заказчика один режим" }, 403);
-        const mode = body && body.mode === "company" ? "company" : "employee";
+        const wanted = body && body.mode === "company" ? "company" : "employee";
+        const mode = allowedMode(user, wanted);
+        if (mode !== wanted) return json({ error: wanted === "company" ? "Вход в свою компанию для этого аккаунта отключён" : "Этот аккаунт не добавлен в команду" }, 403);
         let hasTriedCompanyMode = !!user.hasTriedCompanyMode;
         if (mode === "company" && !hasTriedCompanyMode) {
           user.hasTriedCompanyMode = true;
@@ -1170,7 +1202,7 @@ const handler = {
           await writeBin(env, record);
         }
         const token = await signToken({ login: user.login, role, mode, exp: Date.now() + TOKEN_LIFETIME_MS }, env);
-        return json({ token, login: user.login, role, mode, hasTriedCompanyMode });
+        return json({ token, login: user.login, role, mode, hasTriedCompanyMode, access: userAccess(user) });
       }
 
       if (path === "/appdata" && request.method === "GET") {
@@ -1199,7 +1231,7 @@ const handler = {
             history: cd.history || [],
             pirogHistory: [],
           };
-          return json({ data, role: auth.role, login: auth.login, mode: "company", hasTriedCompanyMode, self, rev: getSpaceRev(record, spaceKey(auth)).rev });
+          return json({ data, role: auth.role, login: auth.login, mode: "company", hasTriedCompanyMode, access: auth.role === "client" ? "client" : userAccess(selfUser), self, rev: getSpaceRev(record, spaceKey(auth)).rev });
         }
         if (auth.role === "client") {
           // Заказчику отдаём только то, что видит он сам: объекты, куда его
@@ -1219,7 +1251,7 @@ const handler = {
           };
           return json({ data, role: auth.role, login: auth.login, self });
         }
-        return json({ data: stripPasswords(record), role: auth.role, login: auth.login, mode: "employee", hasTriedCompanyMode, self, rev: getSpaceRev(record, "main").rev });
+        return json({ data: stripPasswords(record), role: auth.role, login: auth.login, mode: "employee", hasTriedCompanyMode, access: auth.role === "client" ? "client" : userAccess(selfUser), self, rev: getSpaceRev(record, "main").rev });
       }
 
       // Сохранение данных приложения — заказчику доступ только на чтение
@@ -1343,6 +1375,7 @@ const handler = {
             // профиль (смена почты/пароля), не может прислать себе другую
             // роль — иначе не-админ мог бы сам назначить себя админом.
             const safeRole = isAdmin ? (incUser.role || (existing ? existing.role : "master")) : existing ? existing.role : "master";
+            const safeAccess = isAdmin && ACCESS_VALUES.includes(incUser.access) ? incUser.access : existing ? existing.access : undefined;
             if (incUser.pass) {
               const pass = await hashPassword(incUser.pass);
               newUsersList.push({
@@ -1350,6 +1383,7 @@ const handler = {
                 login: incUser.login,
                 email: incUser.email || "",
                 role: safeRole,
+                access: safeAccess,
                 pass,
               });
             } else if (existing) {
@@ -1357,6 +1391,7 @@ const handler = {
                 ...existing,
                 email: incUser.email ?? existing.email,
                 role: safeRole,
+                access: safeAccess,
                 login: incUser.login,
               });
             }
@@ -1446,6 +1481,37 @@ const handler = {
       // Резервная копия всех данных — только для админа. Включает хэши
       // паролей (без них из копии нельзя восстановить вход), поэтому
       // файл стоит хранить так же бережно, как пароли.
+      // Перенос объекта (вместе с его счетами и расчётами) из общего
+      // пространства в «свою компанию» мастера — только для админа.
+      if (path === "/move-object" && request.method === "POST") {
+        if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
+        let body;
+        try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
+        const objectId = String((body && body.objectId) || "");
+        const toLogin = String((body && body.toLogin) || "");
+        const record = await readBin(env);
+        const target = record.users.find((u) => u.login === toLogin);
+        if (!target || target.role === "client") return json({ error: "Мастер не найден" }, 404);
+        const idx = record.objects.findIndex((o) => o && o.id === objectId);
+        if (idx < 0) return json({ error: "Объект не найден" }, 404);
+        if (!record.companyData[toLogin]) record.companyData[toLogin] = { services: [], objects: [], history: [] };
+        const cd = record.companyData[toLogin];
+        if (!Array.isArray(cd.objects)) cd.objects = [];
+        if (!Array.isArray(cd.history)) cd.history = [];
+        const [obj] = record.objects.splice(idx, 1);
+        delete obj.visibleTo; // в своей компании объект видит только владелец
+        const moved = record.history.filter((r) => r && r.objectId === objectId);
+        record.history = record.history.filter((r) => !(r && r.objectId === objectId));
+        cd.objects = cd.objects.filter((o) => !(o && o.id === objectId));
+        cd.objects.push(obj);
+        const have = new Set(cd.history.map((r) => r && String(r.id)));
+        cd.history = [...moved.filter((r) => !have.has(String(r.id))), ...cd.history];
+        bumpRev(record, "main", ["objects", "history"]);
+        bumpRev(record, COMPANY_PREFIX + toLogin, ["objects", "history"]);
+        await writeBin(env, record);
+        return json({ ok: true, docs: moved.length });
+      }
+
       // GET /snapshots — список дат ежедневных копий (хранятся 14 дней);
       // GET /backup?snap=<дата> — скачать такую копию; затем POST /restore.
       if (path === "/snapshots" && request.method === "GET") {
