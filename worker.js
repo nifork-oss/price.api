@@ -343,12 +343,68 @@ async function readStore(env) {
   return normalizeRecord(record);
 }
 
+// Ежедневные копии: перед первой записью за сутки сохраняем то, что лежало
+// в хранилище до неё (то есть состояние на конец прошлого дня). Хранятся
+// последние SNAPSHOT_KEEP дней под ключами "snap:<дата>:<раздел>".
+const SNAPSHOT_KEEP = 14;
+const SNAP_PREFIX = "snap:";
+
+async function maybeSnapshot(env) {
+  const st = env.STORAGE;
+  const day = new Date().toISOString().slice(0, 10);
+  const marker = SNAP_PREFIX + day + ":_done";
+  if (await st.get(marker)) return;
+  const current = await readStore(env);
+  const entries = {};
+  for (const k of STORE_KEYS) entries[SNAP_PREFIX + day + ":" + k] = current[k] || [];
+  entries[SNAP_PREFIX + day + ":revs"] = current.revs || {};
+  for (const login of Object.keys(current.companyData || {})) {
+    entries[SNAP_PREFIX + day + ":" + COMPANY_PREFIX + login] = current.companyData[login];
+  }
+  const keys = Object.keys(entries);
+  for (let i = 0; i < keys.length; i += 128) {
+    const chunk = {};
+    for (const k of keys.slice(i, i + 128)) chunk[k] = entries[k];
+    await st.put(chunk);
+  }
+  await st.put(marker, true); // маркер — последним: неполная копия не считается
+  const all = await st.list({ prefix: SNAP_PREFIX });
+  const days = [...new Set([...all.keys()].map((k) => k.slice(SNAP_PREFIX.length, SNAP_PREFIX.length + 10)))].sort();
+  const drop = new Set(days.slice(0, Math.max(0, days.length - SNAPSHOT_KEEP)));
+  const old = [...all.keys()].filter((k) => drop.has(k.slice(SNAP_PREFIX.length, SNAP_PREFIX.length + 10)));
+  for (let i = 0; i < old.length; i += 128) await st.delete(old.slice(i, i + 128));
+}
+
+async function listSnapshotDays(env) {
+  const all = await env.STORAGE.list({ prefix: SNAP_PREFIX });
+  return [...all.keys()].filter((k) => k.endsWith(":_done")).map((k) => k.slice(SNAP_PREFIX.length, SNAP_PREFIX.length + 10)).sort();
+}
+
+async function readSnapshot(env, day) {
+  const st = env.STORAGE;
+  if (!(await st.get(SNAP_PREFIX + day + ":_done"))) return null;
+  const pre = SNAP_PREFIX + day + ":";
+  const all = await st.list({ prefix: pre });
+  const record = { companyData: {} };
+  for (const [key, value] of all) {
+    const name = key.slice(pre.length);
+    if (name === "_done") continue;
+    if (name.startsWith(COMPANY_PREFIX)) record.companyData[name.slice(COMPANY_PREFIX.length)] = value;
+    else record[name] = value;
+  }
+  return normalizeRecord(record);
+}
+
 async function writeStore(env, record, newMeta) {
   // Последняя линия защиты: пустой список пользователей не записываем никогда.
   if (!Array.isArray(record.users) || record.users.length === 0) {
     throw new Error("Отказ в сохранении: в данных нет ни одного пользователя");
   }
   const st = env.STORAGE;
+  if (!newMeta) {
+    // Копия — страховка: её сбой не должен мешать самому сохранению.
+    try { await maybeSnapshot(env); } catch (e) { console.error("snapshot failed", e); }
+  }
   const entries = {};
   for (const k of STORE_KEYS) entries[k] = Array.isArray(record[k]) ? record[k] : [];
   entries.revs = record.revs && typeof record.revs === "object" ? record.revs : {};
@@ -1383,9 +1439,20 @@ const handler = {
       // Резервная копия всех данных — только для админа. Включает хэши
       // паролей (без них из копии нельзя восстановить вход), поэтому
       // файл стоит хранить так же бережно, как пароли.
+      // GET /snapshots — список дат ежедневных копий (хранятся 14 дней);
+      // GET /backup?snap=<дата> — скачать такую копию; затем POST /restore.
+      if (path === "/snapshots" && request.method === "GET") {
+        if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
+        return json({ days: env.STORAGE ? await listSnapshotDays(env) : [] });
+      }
       if (path === "/backup" && request.method === "GET") {
         if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
-        const record = await readBin(env);
+        const snapDay = new URL(request.url).searchParams.get("snap");
+        let record;
+        if (snapDay) {
+          record = env.STORAGE && /^\d{4}-\d{2}-\d{2}$/.test(snapDay) ? await readSnapshot(env, snapDay) : null;
+          if (!record) return json({ error: "Копии за эту дату нет" }, 404);
+        } else record = await readBin(env);
         const stamp = new Date().toISOString().slice(0, 10);
         return new Response(
           JSON.stringify({ exportedAt: new Date().toISOString(), record }, null, 2),

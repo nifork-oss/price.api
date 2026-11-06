@@ -456,3 +456,14 @@ test('сохранение без baseRev не стирает чужие объ�
   const after = await call('GET', '/appdata', { token });
   assert.deepStrictEqual(after.data.data.objects.map(o => o.id).sort(), ['a', 'b', 'c']);
 });
+
+test('ежедневная копия: делается перед первой записью суток и скачивается через /backup?snap=', async () => {
+  const { call, token, env } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [{ id: 'a', name: 'Первый' }] } });
+  const day = new Date().toISOString().slice(0, 10);
+  assert.ok(env.STORAGE.map.get('snap:' + day + ':_done'));
+  await call('PUT', '/appdata', { token, body: { objects: [{ id: 'b', name: 'Второй' }] } });
+  // копия суток снята один раз и не перезаписывается
+  assert.deepStrictEqual(env.STORAGE.map.get('snap:' + day + ':objects'), []);
+});
