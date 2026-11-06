@@ -467,3 +467,16 @@ test('ежедневная копия: делается перед первой 
   // копия суток снята один раз и не перезаписывается
   assert.deepStrictEqual(env.STORAGE.map.get('snap:' + day + ':objects'), []);
 });
+
+test('после отката базы страница с версией новее серверной получает 409', async () => {
+  const { call, token, env } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [{ id: 'a' }] } });
+  const fresh = await call('GET', '/appdata', { token });
+  // имитация отката: версии на сервере вернулись назад
+  const revs = env.STORAGE.map.get('revs');
+  for (const k of Object.keys(revs)) { revs[k].rev = 1; for (const f of Object.keys(revs[k].fields || {})) revs[k].fields[f] = 1; }
+  env.STORAGE.map.set('revs', revs);
+  const stale = await call('PUT', '/appdata', { token, body: { baseRev: fresh.data.rev, objects: [] } });
+  assert.strictEqual(stale.status, 409);
+});
