@@ -481,7 +481,10 @@ function getSpaceRev(record, key) {
 // проверки конфликтов); у серверных добавлений fields пустой.
 function bumpRev(record, key, fields = []) {
   const r = getSpaceRev(record, key);
-  const next = { rev: (r.rev || 0) + 1, fields: { ...(r.fields || {}) } };
+  // Версия растёт вместе со временем (в мс), а не просто на 1: после отката
+  // базы (/pitr) новые сохранения получают версии новее любой страницы,
+  // открытой до отката, и её устаревшая запись даёт конфликт, а не затирание.
+  const next = { rev: Math.max((r.rev || 0) + 1, Date.now()), fields: { ...(r.fields || {}) } };
   for (const f of fields) next.fields[f] = next.rev;
   record.revs[key] = next;
   return next.rev;
@@ -490,6 +493,10 @@ function bumpRev(record, key, fields = []) {
 // Есть ли среди сохраняемых полей те, что изменили после baseRev.
 function hasConflict(record, key, baseRev, fields) {
   const r = getSpaceRev(record, key);
+  // Версия страницы новее, чем на сервере, — так бывает только после отката
+  // базы (/pitr): страница видела данные, которых уже нет. Её запись затёрла
+  // бы восстановленное, поэтому считаем это конфликтом.
+  if (baseRev > (r.rev || 0)) return true;
   return fields.some((f) => (r.fields && r.fields[f] ? r.fields[f] : 0) > baseRev);
 }
 
