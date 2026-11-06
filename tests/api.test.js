@@ -524,3 +524,66 @@ test('перенос объекта со счетами из общего про
   const ivanTok = (await call('POST', '/login', { body: { login: 'ivan', password: 'pw' } })).data.token;
   assert.strictEqual((await call('POST', '/move-object', { token: ivanTok, body: { objectId: 'o2', toLogin: 'ivan' } })).status, 403);
 });
+
+// Функции страницы, которые считают изменения, берём прямо из calc-app.js.
+function pageSaver() {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'calc-app.js'), 'utf8');
+  const pick = (name) => {
+    const start = src.indexOf('function ' + name + '(');
+    assert.ok(start >= 0, name);
+    let depth = 0, i = src.indexOf('{', start);
+    for (; i < src.length; i++) { if (src[i] === '{') depth++; else if (src[i] === '}' && --depth === 0) break; }
+    return src.slice(start, i + 1);
+  };
+  const vm = require('vm');
+  const ctx = { cloudData: null, cloudRev: null, cloudBase: null };
+  vm.createContext(ctx);
+  vm.runInContext(['indexById', 'rememberCloudBase', 'diffList', 'buildSaveBody'].map(pick).join('\n'), ctx);
+  return ctx;
+}
+
+test('сохранение по записям: две страницы одновременно — ничьи изменения не теряются', async () => {
+  const { call, token, env } = await setup();
+  const first = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: first.data.rev, objects: [{ id: 'a', name: 'А' }, { id: 'b', name: 'Б' }], history: [{ id: 1, objectId: 'a' }] } });
+
+  const open = async () => {
+    const p = pageSaver();
+    const got = await call('GET', '/appdata', { token });
+    p.cloudData = got.data.data; p.cloudRev = got.data.rev;
+    require('vm').runInContext('rememberCloudBase()', p);
+    return p;
+  };
+  const save = (p) => call('PUT', '/appdata', { token, body: JSON.parse(JSON.stringify(require('vm').runInContext('buildSaveBody()', p))) });
+  const p1 = await open();
+  const p2 = await open();
+  // первая страница: новый объект и счёт; вторая (не знает о них): правит «А» и удаляет «Б»
+  p1.cloudData.objects.push({ id: 'c', name: 'Новый' });
+  p1.cloudData.history.unshift({ id: 2, objectId: 'c' });
+  const body1 = require('vm').runInContext('buildSaveBody()', p1);
+  assert.ok(body1.ops && !body1.objects, 'уходят только изменения');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(body1.ops.objects)), { upsert: [{ id: 'c', name: 'Новый' }], delete: [] });
+  assert.strictEqual((await save(p1)).status, 200);
+  p2.cloudData.objects[0].name = 'А-2';
+  p2.cloudData.objects = p2.cloudData.objects.filter(o => o.id !== 'b');
+  const r2 = await save(p2);
+  assert.strictEqual(r2.status, 200);
+  const after = await call('GET', '/appdata', { token });
+  assert.deepStrictEqual(after.data.data.objects.map(o => o.id + ':' + o.name), ['a:А-2', 'c:Новый']);
+  assert.deepStrictEqual(after.data.data.history.map(h => h.id), [2, 1]);
+  // ответ второй странице уже содержит чужой новый объект
+  assert.ok(r2.data.data.objects.some(o => o.id === 'c'));
+});
+
+test('сохранение по записям в общем пространстве: мастер с пустой страницей не стирает объекты', async () => {
+  const { call, env } = await setup();
+  env.STORAGE.map.set('objects', [{ id: 'x', name: 'Чужой' }]);
+  const users = env.STORAGE.map.get('users');
+  users.push({ login: 'petr', role: 'master', pass: 'p', access: 'staff' });
+  env.STORAGE.map.set('users', users);
+  const tok = (await call('POST', '/login', { body: { login: 'petr', password: 'p' } })).data.token;
+  const got = await call('GET', '/appdata', { token: tok });
+  const r = await call('PUT', '/appdata', { token: tok, body: { baseRev: got.data.rev, ops: { objects: { upsert: [{ id: 'y', name: 'Мой' }], delete: [] } } } });
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual(env.STORAGE.map.get('objects').map(o => o.id), ['x', 'y']);
+});

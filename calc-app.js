@@ -28,6 +28,9 @@ let currentObjectId = null;
 // Версия данных с сервера — отправляется при сохранении, чтобы не затереть
 // изменения, которые кто-то сделал после того, как мы загрузили данные.
 let cloudRev = null;
+// То, что последний раз пришло с сервера (id → запись в виде JSON). При
+// сохранении сравниваем с текущим и отправляем только изменения.
+let cloudBase = null;
 let cloudLoaded = false; // данные с сервера получены; до этого сохранять нельзя — запись затёрла бы чужие
 let editingRecordId = null;
 let editingReturnContext = null;
@@ -163,6 +166,7 @@ cloudData = result.data;
 cloudRev = typeof result.rev === 'number' ? result.rev : null;
 cloudLoaded = true;
 if (!Array.isArray(cloudData.objects)) cloudData.objects = [];
+rememberCloudBase();
 cloudData.self = result.self || { login: currentUser, email: '', companyName: '' };
 paidPendingBadge();
 if (result.role) {
@@ -204,6 +208,60 @@ if (quiet) restoreServiceForms(snap);
 }
 }
 
+function indexById(list) {
+if (!Array.isArray(list)) return new Map();
+const map = new Map();
+for (const item of list) {
+if (!item || typeof item !== 'object' || item.id == null) return null; // без id — только целиком
+map.set(String(item.id), JSON.stringify(item));
+}
+return map;
+}
+
+function rememberCloudBase() {
+cloudBase = cloudData ? {
+objects: indexById(cloudData.objects),
+history: indexById(cloudData.history),
+whole: Object.fromEntries(['services', 'users', 'pirogHistory'].map(k => [k, JSON.stringify(cloudData[k] ?? null)])),
+} : null;
+}
+
+// Изменения по сравнению с тем, что пришло с сервера: { upsert, delete }.
+// null — если сравнить нельзя (нет базы или у записи нет id): тогда список уходит целиком.
+function diffList(name) {
+const base = cloudBase && cloudBase[name];
+const list = Array.isArray(cloudData[name]) ? cloudData[name] : [];
+if (!base) return null;
+const upsert = [];
+const seen = new Set();
+for (const item of list) {
+if (!item || typeof item !== 'object' || item.id == null) return null;
+const id = String(item.id);
+seen.add(id);
+if (base.get(id) !== JSON.stringify(item)) upsert.push(item);
+}
+const del = [...base.keys()].filter(id => !seen.has(id));
+return { upsert, delete: del };
+}
+
+function buildSaveBody() {
+const body = { ...cloudData, self: undefined, baseRev: cloudRev ?? undefined };
+const ops = {};
+for (const name of ['objects', 'history']) {
+const d = diffList(name);
+if (d) { ops[name] = d; delete body[name]; }
+}
+if (Object.keys(ops).length) body.ops = ops;
+// Прайс, мастера и расчёты пирога уходят, только если их меняли, — иначе
+// каждое сохранение «трогало» бы их и мешало другим страницам.
+if (cloudBase && cloudBase.whole) {
+for (const k of Object.keys(cloudBase.whole)) {
+if (JSON.stringify(cloudData[k] ?? null) === cloudBase.whole[k]) delete body[k];
+}
+}
+return body;
+}
+
 async function saveCloudData() {
 if (!cloudLoaded) {
 // Данные при входе не загрузились — у страницы пустой список. Сохранение
@@ -225,7 +283,7 @@ try {
 const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify({ ...cloudData, self: undefined, baseRev: cloudRev ?? undefined })
+body: JSON.stringify(buildSaveBody())
 });
 let result = null;
 try { result = await res.json(); } catch (parseErr) { /* ответ мог быть пустым */ }
@@ -245,6 +303,7 @@ if (res.ok) {
 const keepSelf = cloudData.self;
 cloudData = result ? result.data : cloudData;
 if (cloudData && !cloudData.self) cloudData.self = keepSelf;
+if (result && result.data) rememberCloudBase();
 if (result && typeof result.rev === 'number') cloudRev = result.rev;
 showSyncStatus('Сохранено');
 hideSyncStatus();
