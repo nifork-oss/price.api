@@ -26,6 +26,7 @@ let currentObjectId = null;
 // Версия данных с сервера — отправляется при сохранении, чтобы не затереть
 // изменения, которые кто-то сделал после того, как мы загрузили данные.
 let cloudRev = null;
+let cloudLoaded = false; // данные с сервера получены; до этого сохранять нельзя — запись затёрла бы чужие
 let editingRecordId = null;
 let editingReturnContext = null;
 let selectedRegisterRole = 'master';
@@ -157,6 +158,7 @@ if (res.ok) {
 const result = await res.json();
 cloudData = result.data;
 cloudRev = typeof result.rev === 'number' ? result.rev : null;
+cloudLoaded = true;
 if (!Array.isArray(cloudData.objects)) cloudData.objects = [];
 cloudData.self = result.self || { login: currentUser, email: '', companyName: '' };
 paidPendingBadge();
@@ -199,6 +201,18 @@ if (quiet) restoreServiceForms(snap);
 }
 
 async function saveCloudData() {
+if (!cloudLoaded) {
+// Данные при входе не загрузились — у страницы пустой список. Сохранение
+// перезаписало бы общие объекты и счета, поэтому сначала грузим заново.
+await loadCloudData();
+if (!cloudLoaded) {
+alert('Не удалось загрузить данные из облака, ничего не сохранено. Проверьте связь и обновите страницу.');
+return false;
+}
+alert('Данные были загружены заново. Повторите последнее действие.');
+refreshViewsAfterReload();
+return false;
+}
 const maxAttempts = 3;
 if (typeof stampRoomSurfaces === 'function') stampRoomSurfaces();
 for (let attempt = 1; attempt <= maxAttempts; attempt++) {

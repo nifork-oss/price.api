@@ -1230,7 +1230,12 @@ const handler = {
           const cd = record.companyData[auth.login];
           const fields = ["services", "objects", "history"].filter((f) => Array.isArray(incoming[f]));
           if (baseRev !== null && hasConflict(record, key, baseRev, fields)) return conflictResponse();
-          for (const f of fields) cd[f] = incoming[f];
+          for (const f of fields) {
+            if (baseRev === null && (f === "objects" || f === "history")) {
+              const ids = new Set(incoming[f].map((x) => x && x.id));
+              cd[f] = [...incoming[f], ...(cd[f] || []).filter((x) => x && x.id && !ids.has(x.id))];
+            } else cd[f] = incoming[f];
+          }
           const rev = bumpRev(record, key, fields);
           await writeBin(env, record);
           return json({
@@ -1313,8 +1318,17 @@ const handler = {
           }
         }
 
-        if (Array.isArray(incoming.history)) record.history = incoming.history;
-        if (Array.isArray(incoming.objects)) record.objects = incoming.objects;
+        // Страница без baseRev (старая или не загрузившая данные при входе)
+        // не знает, что уже лежит на сервере. Её список нельзя считать
+        // полным: записи, которых в нём нет, остаются, иначе такая страница
+        // с одним новым объектом стирала всё остальное.
+        const keepMissing = (cur, inc) => {
+          if (baseRev !== null) return inc;
+          const ids = new Set(inc.map((x) => x && x.id));
+          return [...inc, ...(cur || []).filter((x) => x && x.id && !ids.has(x.id))];
+        };
+        if (Array.isArray(incoming.history)) record.history = keepMissing(record.history, incoming.history);
+        if (Array.isArray(incoming.objects)) record.objects = keepMissing(record.objects, incoming.objects);
         if (Array.isArray(incoming.pirogHistory)) {
           // Как и с services: мастер обычно просто пересылает то, что получил
           // через GET /appdata, не редактируя это поле сам. Раньше здесь стоял
@@ -1335,6 +1349,35 @@ const handler = {
         const rev = bumpRev(record, "main", fields);
         await writeBin(env, record);
         return json({ data: stripPasswords(record), rev });
+      }
+
+      // Откат всей базы на момент в прошлом (до 30 дней) — только для админа.
+      // GET /pitr?at=<ISO-время> показывает, что будет сделано; POST /pitr
+      // {at | bookmark, confirm:true} откатывает. В ответе — закладка "undo",
+      // по которой откат можно отменить (POST /pitr {bookmark:"<undo>"}).
+      if (path === "/pitr" && (request.method === "GET" || request.method === "POST")) {
+        if (auth.role !== "admin") return json({ error: "Недостаточно прав" }, 403);
+        const st = env.DO_STATE;
+        if (!st || !st.storage || typeof st.storage.getBookmarkForTime !== "function") {
+          return json({ error: "Откат по времени недоступен в этом окружении" }, 400);
+        }
+        let body = {};
+        if (request.method === "POST") { try { body = await request.json(); } catch (e) { body = {}; } }
+        const atRaw = request.method === "GET" ? new URL(request.url).searchParams.get("at") : body.at;
+        let target = typeof body.bookmark === "string" ? body.bookmark : null;
+        if (!target) {
+          const ts = Date.parse(atRaw || "");
+          if (!Number.isFinite(ts) || ts > Date.now()) return json({ error: "Укажите время в прошлом, например at=2026-11-06T09:00:00Z" }, 400);
+          try { target = await st.storage.getBookmarkForTime(ts); }
+          catch (e) { return json({ error: "Нет данных на это время: " + (e && e.message || e) }, 400); }
+        }
+        if (request.method === "GET" || body.confirm !== true) {
+          return json({ bookmark: target, current: await st.storage.getCurrentBookmark(), hint: "Для отката: POST /pitr с confirm:true и этим at или bookmark" });
+        }
+        const undo = await st.storage.onNextSessionRestoreBookmark(target);
+        // Перезапуск после ответа: при старте база откатится на закладку.
+        st.waitUntil(new Promise((r) => setTimeout(() => { try { st.abort("pitr"); } catch (e) {} r(); }, 700)));
+        return json({ ok: true, restoredTo: target, undo });
       }
 
       // Резервная копия всех данных — только для админа. Включает хэши
@@ -3009,6 +3052,7 @@ export class Store {
   async fetch(request) {
     const env = Object.create(this.env);
     env.STORAGE = this.state.storage;
+    env.DO_STATE = this.state;
     const run = () => handler.fetch(request, env);
     const result = this.queue.then(run, run);
     this.queue = result.catch(() => {});
