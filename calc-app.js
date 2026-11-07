@@ -2204,7 +2204,8 @@ openSheet(`Напоминание об оплате · осталось ${getBal
 
 function openObjectActions(id) {
 const obj = (cloudData.objects || []).find(o => o.id === id);
-const items = [];
+const pinned = pinnedObjectIds().has(String(id));
+const items = [{ icon: '📌', label: pinned ? 'Открепить' : 'Закрепить сверху', onClick: () => toggleObjectPin(id) }];
 if (isCurrentAdmin() && !isCompanyMode()) {
 items.push({ icon: '📦', label: 'Перенести в компанию мастера…', onClick: () => setTimeout(() => chooseMoveTarget(id), 0) });
 }
@@ -3008,6 +3009,40 @@ bar.innerHTML = Object.entries(OBJECT_SORTS).map(([k, label]) =>
 ).join('');
 }
 
+/* ---------- закреплённые сверху объекты (личные для аккаунта) ---------- */
+function pinnedObjectIds() {
+const list = cloudData && cloudData.self && Array.isArray(cloudData.self.pinned) ? cloudData.self.pinned : [];
+return new Set(list.map(String));
+}
+
+async function toggleObjectPin(id) {
+const pins = pinnedObjectIds();
+const wasPinned = pins.has(String(id));
+if (wasPinned) pins.delete(String(id)); else pins.add(String(id));
+// Удалённые объекты из списка убираем, чтобы он не копился.
+const alive = new Set((cloudData.objects || []).map(o => String(o.id)));
+const next = [...pins].filter(x => alive.has(x));
+const prev = cloudData.self ? cloudData.self.pinned : undefined;
+if (!cloudData.self) cloudData.self = { login: currentUser };
+cloudData.self.pinned = next;
+renderObjects();
+try {
+const res = await fetch(`${WORKER_URL}/appdata`, {
+method: 'PUT',
+headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { pinned: next } })
+});
+const result = await res.json().catch(() => null);
+if (!res.ok) throw new Error((result && result.error) || ('ошибка ' + res.status));
+if (result && typeof result.rev === 'number') cloudRev = result.rev;
+showAddToast(wasPinned ? 'Откреплено' : 'Закреплено сверху');
+} catch (e) {
+cloudData.self.pinned = prev;
+renderObjects();
+alert('Не удалось ' + (wasPinned ? 'открепить' : 'закрепить') + ': ' + e.message);
+}
+}
+
 function getVisibleObjects() {
 let objects = cloudData.objects || [];
 if (!isCurrentAdmin()) {
@@ -3168,7 +3203,10 @@ renderObjects();
 function renderObjects() {
 const container = document.getElementById('objectsListContainer');
 if (!container) return;
-const objects = sortObjects(getVisibleObjects());
+// Закреплённые — сверху (в том же порядке сортировки), остальные — ниже.
+const pins = pinnedObjectIds();
+const sorted = sortObjects(getVisibleObjects());
+const objects = [...sorted.filter(o => pins.has(String(o.id))), ...sorted.filter(o => !pins.has(String(o.id)))];
 renderObjectSortBar(objects.length);
 setDimLabel('dimObjects', objects.length ? `${objects.length} ${pluralRu(objects.length, 'объект', 'объекта', 'объектов')}` : '');
 const searchEl = document.getElementById('objectsSearch');
@@ -3216,6 +3254,7 @@ moneyHtml = '<div class="obj-money"><span class="obj-pill">Счетов пока
 card.innerHTML = `
 <div class="obj-head">
 <div class="obj-name">${escapeHtml(obj.name)}</div>
+<button type="button" class="obj-pin${pins.has(String(obj.id)) ? ' on' : ''}" onclick="event.stopPropagation(); toggleObjectPin('${String(obj.id).replace(/[^\w-]/g, '')}')" aria-label="${pins.has(String(obj.id)) ? 'Открепить' : 'Закрепить сверху'}" title="${pins.has(String(obj.id)) ? 'Открепить' : 'Закрепить сверху'}">📌</button>
 <span class="obj-chevron" aria-hidden="true">›</span>
 </div>
 <div class="obj-line"><span class="meta-k">Заказчик</span> ${escapeHtml(obj.client)}</div>

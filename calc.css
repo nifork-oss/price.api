@@ -1153,3 +1153,7 @@ body.assistant-open .add-toast { z-index: 99; }
 /* сортировка объектов */
 .obj-sort { align-items: center; margin: -6px 0 14px; white-space: nowrap; }
 .obj-sort .chip { flex-shrink: 0; }
+.obj-pin { margin-left: auto; background: none; border: none; padding: 2px 4px; font-size: 16px; line-height: 1; cursor: pointer; opacity: .25; filter: grayscale(1); }
+.obj-pin.on { opacity: 1; filter: none; }
+.obj-pin:hover { opacity: .7; }
+.obj-pin.on:hover { opacity: 1; }

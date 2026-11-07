@@ -590,3 +590,14 @@ test('сохранение по записям в общем пространс�
   assert.strictEqual(r.status, 200);
   assert.deepStrictEqual(env.STORAGE.map.get('objects').map(o => o.id), ['y', 'x']);
 });
+
+test('закреплённые объекты: личные для аккаунта, сохраняются в профиле', async () => {
+  const { call, token } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  assert.deepStrictEqual(page.data.self.pinned, []);
+  const r = await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, self: { pinned: ['obj_1', 'obj_1', 'obj_2', 5, ''] } } });
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual(r.data.self.pinned, ['obj_1', 'obj_2']);
+  const again = await call('GET', '/appdata', { token });
+  assert.deepStrictEqual(again.data.self.pinned, ['obj_1', 'obj_2']);
+});
