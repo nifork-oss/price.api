@@ -2205,7 +2205,11 @@ openSheet(`Напоминание об оплате · осталось ${getBal
 function openObjectActions(id) {
 const obj = (cloudData.objects || []).find(o => o.id === id);
 const pinned = pinnedObjectIds().has(String(id));
-const items = [{ icon: '📌', label: pinned ? 'Открепить' : 'Закрепить сверху', onClick: () => toggleObjectPin(id) }];
+const obj0 = (cloudData.objects || []).find(o => o.id === id);
+const items = obj0 && obj0.archived
+? [{ icon: '♻️', label: 'Вернуть из архива', onClick: () => setObjectArchived(id, false) }]
+: [{ icon: '📌', label: pinned ? 'Открепить' : 'Закрепить сверху', onClick: () => toggleObjectPin(id) },
+{ icon: '🗄', label: 'В архив', onClick: () => setObjectArchived(id, true) }];
 if (isCurrentAdmin() && !isCompanyMode()) {
 items.push({ icon: '📦', label: 'Перенести в компанию мастера…', onClick: () => setTimeout(() => chooseMoveTarget(id), 0) });
 }
@@ -2988,6 +2992,34 @@ return c ? c * sign : a.i - b.i;
 }).map(x => x.o);
 }
 
+/* ---------- архив объектов (общий: объект уходит из списка у всех) ---------- */
+let showObjectArchive = false;
+
+function toggleObjectArchiveView() {
+showObjectArchive = !showObjectArchive;
+const searchEl = document.getElementById('objectsSearch');
+if (searchEl) searchEl.value = '';
+renderObjects();
+}
+
+async function setObjectArchived(id, archived) {
+const obj = (cloudData.objects || []).find(o => o.id === id);
+if (!obj) return;
+if (archived && !confirm(`Перенести «${obj.name}» в архив? Объект пропадёт из списка, счета останутся в «Истории». Вернуть можно в любой момент.`)) return;
+const prev = { archived: obj.archived, archivedBy: obj.archivedBy };
+if (archived) { obj.archived = Date.now(); obj.archivedBy = currentUser || ''; }
+else { delete obj.archived; delete obj.archivedBy; }
+const ok = await saveCloudData();
+if (!ok) {
+const o = (cloudData.objects || []).find(x => x.id === id);
+if (o) { if (prev.archived) { o.archived = prev.archived; o.archivedBy = prev.archivedBy; } else { delete o.archived; delete o.archivedBy; } }
+}
+if (typeof closeObjectDetail === 'function' && archived) closeObjectDetail();
+renderObjects();
+populateObjectSelect();
+if (ok) showAddToast(archived ? `«${obj.name}» в архиве` : `«${obj.name}» возвращён из архива`);
+}
+
 function setObjectSort(key) {
 if (!OBJECT_SORTS[key]) return;
 if (objectSort.key === key) objectSort.dir = objectSort.dir === 'asc' ? 'desc' : 'asc';
@@ -2997,7 +3029,7 @@ try { localStorage.setItem('objectSort', JSON.stringify(objectSort)); } catch (e
 renderObjects();
 }
 
-function renderObjectSortBar(count) {
+function renderObjectSortBar(count, archivedCount = 0) {
 const bar = document.getElementById('objectsSortBar');
 if (!bar) return;
 bar.style.display = count > 1 ? 'flex' : 'none';
@@ -3007,6 +3039,14 @@ const hint = isText ? (objectSort.dir === 'asc' ? 'А → Я' : 'Я → А') : (
 bar.innerHTML = Object.entries(OBJECT_SORTS).map(([k, label]) =>
 `<button type="button" class="chip${k === objectSort.key ? ' active' : ''}" onclick="setObjectSort('${k}')"${k === objectSort.key ? ` title="${hint} — нажмите ещё раз, чтобы развернуть"` : ''}>${label}${k === objectSort.key ? ' ' + arrow : ''}</button>`
 ).join('');
+const title = document.getElementById('objectsListTitle');
+if (title) title.textContent = showObjectArchive ? 'Архив объектов' : 'Список объектов';
+const arch = document.getElementById('objectsArchiveBtn');
+if (arch) {
+arch.style.display = (archivedCount || showObjectArchive) ? 'inline-flex' : 'none';
+arch.textContent = showObjectArchive ? '← Все объекты' : '🗄 Архив · ' + archivedCount;
+arch.classList.toggle('on', showObjectArchive);
+}
 }
 
 /* ---------- закреплённые сверху объекты (личные для аккаунта) ---------- */
@@ -3069,7 +3109,7 @@ const select = document.getElementById('invoiceObjectSelect');
 if (!select) return;
 const prevValue = select.value;
 select.innerHTML = '<option value="">— Выберите объект —</option><option value="__new__">Создать новый объект</option>';
-getVisibleObjects().forEach(obj => {
+getVisibleObjects().filter(o => !o.archived || o.id === prevValue).forEach(obj => {
 const opt = document.createElement('option');
 opt.value = obj.id;
 opt.textContent = obj.name;
@@ -3203,16 +3243,22 @@ renderObjects();
 function renderObjects() {
 const container = document.getElementById('objectsListContainer');
 if (!container) return;
+const all = getVisibleObjects();
+const archivedCount = all.filter(o => o && o.archived).length;
+if (!archivedCount) showObjectArchive = false;
 // Закреплённые — сверху (в том же порядке сортировки), остальные — ниже.
 const pins = pinnedObjectIds();
-const sorted = sortObjects(getVisibleObjects());
-const objects = [...sorted.filter(o => pins.has(String(o.id))), ...sorted.filter(o => !pins.has(String(o.id)))];
-renderObjectSortBar(objects.length);
-setDimLabel('dimObjects', objects.length ? `${objects.length} ${pluralRu(objects.length, 'объект', 'объекта', 'объектов')}` : '');
+const sorted = sortObjects(all.filter(o => !!(o && o.archived) === showObjectArchive));
+const objects = showObjectArchive ? sorted : [...sorted.filter(o => pins.has(String(o.id))), ...sorted.filter(o => !pins.has(String(o.id)))];
+renderObjectSortBar(objects.length, archivedCount);
+const dim = objects.length ? `${objects.length} ${pluralRu(objects.length, 'объект', 'объекта', 'объектов')}` : '';
+setDimLabel('dimObjects', showObjectArchive ? (dim ? 'В архиве: ' + dim : '') : dim);
 const searchEl = document.getElementById('objectsSearch');
 if (searchEl) searchEl.style.display = objects.length > 3 ? 'block' : 'none';
 if (objects.length === 0) {
-container.innerHTML = '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">Добавьте первый объект — кнопка «Новый объект» выше</div>';
+container.innerHTML = showObjectArchive
+? '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">В архиве пусто</div>'
+: '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">' + (archivedCount ? 'Все объекты в архиве — нажмите «Архив» выше' : 'Добавьте первый объект — кнопка «Новый объект» выше') + '</div>';
 return;
 }
 const query = (searchEl ? searchEl.value : '').trim().toLowerCase();
@@ -3254,9 +3300,10 @@ moneyHtml = '<div class="obj-money"><span class="obj-pill">Счетов пока
 card.innerHTML = `
 <div class="obj-head">
 <div class="obj-name">${escapeHtml(obj.name)}</div>
-<button type="button" class="obj-pin${pins.has(String(obj.id)) ? ' on' : ''}" onclick="event.stopPropagation(); toggleObjectPin('${String(obj.id).replace(/[^\w-]/g, '')}')" aria-label="${pins.has(String(obj.id)) ? 'Открепить' : 'Закрепить сверху'}" title="${pins.has(String(obj.id)) ? 'Открепить' : 'Закрепить сверху'}">📌</button>
+${obj.archived ? `<button type="button" class="obj-unarchive" onclick="event.stopPropagation(); setObjectArchived('${String(obj.id).replace(/[^\w-]/g, '')}', false)">Вернуть</button>` : `<button type="button" class="obj-pin${pins.has(String(obj.id)) ? ' on' : ''}" onclick="event.stopPropagation(); toggleObjectPin('${String(obj.id).replace(/[^\w-]/g, '')}')" aria-label="${pins.has(String(obj.id)) ? 'Открепить' : 'Закрепить сверху'}" title="${pins.has(String(obj.id)) ? 'Открепить' : 'Закрепить сверху'}">📌</button>`}
 <span class="obj-chevron" aria-hidden="true">›</span>
 </div>
+${obj.archived ? `<div class="obj-line obj-archived-note">🗄 В архиве с ${new Date(Number(obj.archived)).toLocaleDateString('ru-RU')}${obj.archivedBy ? ' · ' + escapeHtml(obj.archivedBy) : ''}</div>` : ''}
 <div class="obj-line"><span class="meta-k">Заказчик</span> ${escapeHtml(obj.client)}</div>
 ${obj.address || (typeof geoHas === 'function' && geoHas(obj)) ? `<div class="obj-line"><span class="meta-k">Адрес</span> ${escapeHtml(obj.address || 'точка на карте')}${typeof geoRouteUrl === 'function' && geoRouteUrl(obj) ? ` <a class="geo-mini" href="${geoRouteUrl(obj)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" aria-label="Маршрут в Яндекс Картах"><svg class="ic"><use href="#i-route"/></svg>Маршрут</a>` : ''}</div>` : ''}
 ${moneyHtml}

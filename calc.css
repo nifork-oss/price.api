@@ -1157,3 +1157,8 @@ body.assistant-open .add-toast { z-index: 99; }
 .obj-pin.on { opacity: 1; filter: none; }
 .obj-pin:hover { opacity: .7; }
 .obj-pin.on:hover { opacity: 1; }
+.obj-list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.obj-archive-btn { flex-shrink: 0; background: #fff; border: 1px solid #cfd5dd; border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; color: #14181f; cursor: pointer; }
+.obj-archive-btn.on { background: #14181f; color: #fff; border-color: #14181f; }
+.obj-unarchive { margin-left: auto; background: #fff; border: 1px solid #cfd5dd; border-radius: 8px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; color: #14181f; }
+.obj-archived-note { font-size: 12px; color: #8d97a5; }
