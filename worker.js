@@ -343,6 +343,8 @@ async function writeJsonBin(env, data) {
 const STORE_KEYS = ["services", "users", "history", "objects", "pirogHistory"];
 const COMPANY_PREFIX = "cd:";
 
+const READ_SNAPSHOT = Symbol("readSnapshot");
+
 async function readStore(env) {
   const st = env.STORAGE;
   const meta = await st.get("meta");
@@ -359,7 +361,15 @@ async function readStore(env) {
   record.companyData = {};
   const companies = await st.list({ prefix: COMPANY_PREFIX });
   for (const [key, value] of companies) record.companyData[key.slice(COMPANY_PREFIX.length)] = value;
-  return normalizeRecord(record);
+  const out = normalizeRecord(record);
+  // Запоминаем, что прочитали: при записи ключи без изменений пропускаются —
+  // иначе каждое сохранение переписывало всю базу (все «свои компании»).
+  const seen = new Map();
+  for (const k of STORE_KEYS) seen.set(k, JSON.stringify(out[k] ?? []));
+  seen.set("revs", JSON.stringify(out.revs ?? {}));
+  for (const login of Object.keys(out.companyData || {})) seen.set(COMPANY_PREFIX + login, JSON.stringify(out.companyData[login]));
+  Object.defineProperty(out, READ_SNAPSHOT, { value: seen, enumerable: false });
+  return out;
 }
 
 // Ежедневные копии: перед первой записью за сутки сохраняем то, что лежало
@@ -434,6 +444,14 @@ async function writeStore(env, record, newMeta) {
   // Компании, которых больше нет (например, после смены логина), удаляем.
   const existing = await st.list({ prefix: COMPANY_PREFIX });
   const stale = [...existing.keys()].filter((k) => !(k in entries));
+
+  // Ключи, которые не изменились с чтения, не переписываем.
+  const seen = record[READ_SNAPSHOT];
+  if (seen && !newMeta) {
+    for (const k of Object.keys(entries)) {
+      if (seen.has(k) && seen.get(k) === JSON.stringify(entries[k])) delete entries[k];
+    }
+  }
 
   // Пишем пачками (не больше 128 ключей за раз — ограничение Cloudflare).
   const keys = Object.keys(entries);

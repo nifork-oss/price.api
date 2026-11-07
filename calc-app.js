@@ -439,16 +439,25 @@ alert('Данные были загружены заново. Повторите
 refreshViewsAfterReload();
 return false;
 }
-const maxAttempts = 3;
+// Сохранение не ждёт бесконечно: 20 с на попытку, две попытки, дальше —
+// на устройство (уйдёт само, когда связь наладится). Повтор безопасен:
+// изменения по записям применяются по id, двойная отправка ничего не портит.
+const maxAttempts = 2;
+const SAVE_TIMEOUT_MS = 20000;
 if (typeof stampRoomSurfaces === 'function') stampRoomSurfaces();
 for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-showSyncStatus(attempt === 1 ? 'Сохраняю в облако…' : `Не получилось, пробую ещё раз (${attempt}/${maxAttempts})…`);
+const label = attempt === 1 ? 'Сохраняю в облако…' : 'Связь плохая, пробую ещё раз…';
+showSyncStatus(label);
+const ctrl = new AbortController();
+const slowTimer = setTimeout(() => showSyncStatus(label.replace('…', '') + ' — связь медленная, жду…'), 6000);
+const abortTimer = setTimeout(() => ctrl.abort(), SAVE_TIMEOUT_MS);
 try {
 const res = await fetch(`${WORKER_URL}/appdata`, {
 method: "PUT",
 headers: { "Content-Type": "application/json", "Authorization": "Bearer " + authToken },
-body: JSON.stringify(buildSaveBody())
-});
+body: JSON.stringify(buildSaveBody()),
+signal: ctrl.signal
+}).finally(() => { clearTimeout(slowTimer); clearTimeout(abortTimer); });
 let result = null;
 try { result = await res.json(); } catch (parseErr) { /* ответ мог быть пустым */ }
 if (res.status === 409) {
