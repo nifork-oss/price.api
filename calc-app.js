@@ -331,7 +331,7 @@ let changed = false;
 for (const name of ['objects', 'history']) {
 const d = diffAgainst(c.data[name], base[name]);
 if (d === null) { if (JSON.stringify(c.data[name]) !== JSON.stringify(cloudData[name])) { cloudData[name] = c.data[name]; changed = true; } continue; }
-if (d.upsert.length || d.delete.length) { cloudData[name] = applyLocalOps(cloudData[name], d, name === 'history'); changed = true; }
+if (d.upsert.length || d.delete.length) { cloudData[name] = applyLocalOps(cloudData[name], d, true); changed = true; }
 }
 for (const k of WHOLE_FIELDS) {
 if (JSON.stringify(c.data[k] ?? null) !== base.whole[k]) { cloudData[k] = c.data[k]; changed = true; }
@@ -390,9 +390,15 @@ return { upsert, delete: del };
 function buildSaveBody() {
 const body = { ...cloudData, self: undefined, baseRev: cloudRev ?? undefined };
 const ops = {};
+const now = Date.now();
 for (const name of ['objects', 'history']) {
 const d = diffList(name);
-if (d) { ops[name] = d; delete body[name]; }
+if (!d) continue;
+// Время изменения ставим тем записям, что реально меняются, — по нему
+// сортируются объекты («Дата изменения»).
+for (const item of d.upsert) item.updatedAt = now;
+ops[name] = d;
+delete body[name];
 }
 if (Object.keys(ops).length) body.ops = ops;
 // Прайс, мастера и расчёты пирога уходят, только если их меняли, — иначе
@@ -2198,7 +2204,12 @@ openSheet(`Напоминание об оплате · осталось ${getBal
 
 function openObjectActions(id) {
 const obj = (cloudData.objects || []).find(o => o.id === id);
-const items = [];
+const pinned = pinnedObjectIds().has(String(id));
+const obj0 = (cloudData.objects || []).find(o => o.id === id);
+const items = obj0 && obj0.archived
+? [{ icon: '♻️', label: 'Вернуть из архива', onClick: () => setObjectArchived(id, false) }]
+: [{ icon: '📌', label: pinned ? 'Открепить' : 'Закрепить сверху', onClick: () => toggleObjectPin(id) },
+{ icon: '🗄', label: 'В архив', onClick: () => setObjectArchived(id, true) }];
 if (isCurrentAdmin() && !isCompanyMode()) {
 items.push({ icon: '📦', label: 'Перенести в компанию мастера…', onClick: () => setTimeout(() => chooseMoveTarget(id), 0) });
 }
@@ -2924,6 +2935,154 @@ function getObjectVisibleTo(obj) {
 return Array.isArray(obj.visibleTo) ? obj.visibleTo : (obj.author ? [obj.author] : []);
 }
 
+/* ---------- сортировка объектов (как в проводнике Windows) ---------- */
+const OBJECT_SORTS = {
+updated: 'Изменён',
+created: 'Добавлен',
+name: 'Название',
+client: 'Заказчик',
+};
+let objectSort = { key: 'updated', dir: 'desc' };
+try {
+const saved = JSON.parse(localStorage.getItem('objectSort') || 'null');
+if (saved && OBJECT_SORTS[saved.key] && (saved.dir === 'asc' || saved.dir === 'desc')) objectSort = saved;
+} catch (e) {}
+
+// «07.11.2026, 10:15:00» → мс
+function parseRuDateTime(str) {
+const m = /(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(String(str || ''));
+return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() : 0;
+}
+
+function objectCreatedTime(o) {
+const m = /^obj_(\d{12,})/.exec(String(o.id || ''));
+return m ? Number(m[1]) : parseRuDateTime(o.createdAt);
+}
+
+// Изменение объекта — правка самого объекта или его документов (счета, расчёты).
+function objectUpdatedTimes() {
+const map = new Map();
+for (const r of cloudData.history || []) {
+if (!r || !r.objectId) continue;
+const t = Number(r.updatedAt) || Number(r.id) || 0;
+if (t > (map.get(r.objectId) || 0)) map.set(r.objectId, t);
+}
+return map;
+}
+
+function sortObjects(list) {
+const { key, dir } = objectSort;
+const sign = dir === 'asc' ? 1 : -1;
+const docs = key === 'updated' ? objectUpdatedTimes() : null;
+const val = o => {
+if (key === 'name') return String(o.name || '').trim();
+if (key === 'client') return String(o.client || '').trim();
+const created = objectCreatedTime(o);
+if (key === 'created') return created;
+return Math.max(Number(o.updatedAt) || 0, docs.get(o.id) || 0, created);
+};
+return list.map((o, i) => ({ o, i, v: val(o) })).sort((a, b) => {
+let c;
+if (typeof a.v === 'string') {
+// пустые названия — всегда в конце
+if (!a.v !== !b.v) return a.v ? -1 : 1;
+c = a.v.localeCompare(b.v, 'ru', { numeric: true, sensitivity: 'base' });
+} else c = a.v - b.v;
+return c ? c * sign : a.i - b.i;
+}).map(x => x.o);
+}
+
+/* ---------- архив объектов (общий: объект уходит из списка у всех) ---------- */
+let showObjectArchive = false;
+
+function toggleObjectArchiveView() {
+showObjectArchive = !showObjectArchive;
+const searchEl = document.getElementById('objectsSearch');
+if (searchEl) searchEl.value = '';
+renderObjects();
+}
+
+async function setObjectArchived(id, archived) {
+const obj = (cloudData.objects || []).find(o => o.id === id);
+if (!obj) return;
+if (archived && !confirm(`Перенести «${obj.name}» в архив? Объект пропадёт из списка, счета останутся в «Истории». Вернуть можно в любой момент.`)) return;
+const prev = { archived: obj.archived, archivedBy: obj.archivedBy };
+if (archived) { obj.archived = Date.now(); obj.archivedBy = currentUser || ''; }
+else { delete obj.archived; delete obj.archivedBy; }
+const ok = await saveCloudData();
+if (!ok) {
+const o = (cloudData.objects || []).find(x => x.id === id);
+if (o) { if (prev.archived) { o.archived = prev.archived; o.archivedBy = prev.archivedBy; } else { delete o.archived; delete o.archivedBy; } }
+}
+if (typeof closeObjectDetail === 'function' && archived) closeObjectDetail();
+renderObjects();
+populateObjectSelect();
+if (ok) showAddToast(archived ? `«${obj.name}» в архиве` : `«${obj.name}» возвращён из архива`);
+}
+
+function setObjectSort(key) {
+if (!OBJECT_SORTS[key]) return;
+if (objectSort.key === key) objectSort.dir = objectSort.dir === 'asc' ? 'desc' : 'asc';
+// по умолчанию: даты — сначала новые, буквы — от А до Я
+else objectSort = { key, dir: key === 'name' || key === 'client' ? 'asc' : 'desc' };
+try { localStorage.setItem('objectSort', JSON.stringify(objectSort)); } catch (e) {}
+renderObjects();
+}
+
+function renderObjectSortBar(count, archivedCount = 0) {
+const bar = document.getElementById('objectsSortBar');
+if (!bar) return;
+bar.style.display = count > 1 ? 'flex' : 'none';
+const isText = objectSort.key === 'name' || objectSort.key === 'client';
+const arrow = objectSort.dir === 'asc' ? '↑' : '↓';
+const hint = isText ? (objectSort.dir === 'asc' ? 'А → Я' : 'Я → А') : (objectSort.dir === 'desc' ? 'сначала новые' : 'сначала старые');
+bar.innerHTML = Object.entries(OBJECT_SORTS).map(([k, label]) =>
+`<button type="button" class="chip${k === objectSort.key ? ' active' : ''}" onclick="setObjectSort('${k}')"${k === objectSort.key ? ` title="${hint} — нажмите ещё раз, чтобы развернуть"` : ''}>${label}${k === objectSort.key ? ' ' + arrow : ''}</button>`
+).join('');
+const title = document.getElementById('objectsListTitle');
+if (title) title.textContent = showObjectArchive ? 'Архив объектов' : 'Список объектов';
+const arch = document.getElementById('objectsArchiveBtn');
+if (arch) {
+arch.style.display = (archivedCount || showObjectArchive) ? 'inline-flex' : 'none';
+arch.textContent = showObjectArchive ? '← Все объекты' : '🗄 Архив · ' + archivedCount;
+arch.classList.toggle('on', showObjectArchive);
+}
+}
+
+/* ---------- закреплённые сверху объекты (личные для аккаунта) ---------- */
+function pinnedObjectIds() {
+const list = cloudData && cloudData.self && Array.isArray(cloudData.self.pinned) ? cloudData.self.pinned : [];
+return new Set(list.map(String));
+}
+
+async function toggleObjectPin(id) {
+const pins = pinnedObjectIds();
+const wasPinned = pins.has(String(id));
+if (wasPinned) pins.delete(String(id)); else pins.add(String(id));
+// Удалённые объекты из списка убираем, чтобы он не копился.
+const alive = new Set((cloudData.objects || []).map(o => String(o.id)));
+const next = [...pins].filter(x => alive.has(x));
+const prev = cloudData.self ? cloudData.self.pinned : undefined;
+if (!cloudData.self) cloudData.self = { login: currentUser };
+cloudData.self.pinned = next;
+renderObjects();
+try {
+const res = await fetch(`${WORKER_URL}/appdata`, {
+method: 'PUT',
+headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+body: JSON.stringify({ baseRev: cloudRev ?? undefined, self: { pinned: next } })
+});
+const result = await res.json().catch(() => null);
+if (!res.ok) throw new Error((result && result.error) || ('ошибка ' + res.status));
+if (result && typeof result.rev === 'number') cloudRev = result.rev;
+showAddToast(wasPinned ? 'Откреплено' : 'Закреплено сверху');
+} catch (e) {
+cloudData.self.pinned = prev;
+renderObjects();
+alert('Не удалось ' + (wasPinned ? 'открепить' : 'закрепить') + ': ' + e.message);
+}
+}
+
 function getVisibleObjects() {
 let objects = cloudData.objects || [];
 if (!isCurrentAdmin()) {
@@ -2950,7 +3109,7 @@ const select = document.getElementById('invoiceObjectSelect');
 if (!select) return;
 const prevValue = select.value;
 select.innerHTML = '<option value="">— Выберите объект —</option><option value="__new__">Создать новый объект</option>';
-getVisibleObjects().forEach(obj => {
+getVisibleObjects().filter(o => !o.archived || o.id === prevValue).forEach(obj => {
 const opt = document.createElement('option');
 opt.value = obj.id;
 opt.textContent = obj.name;
@@ -3084,12 +3243,22 @@ renderObjects();
 function renderObjects() {
 const container = document.getElementById('objectsListContainer');
 if (!container) return;
-const objects = getVisibleObjects();
-setDimLabel('dimObjects', objects.length ? `${objects.length} ${pluralRu(objects.length, 'объект', 'объекта', 'объектов')}` : '');
+const all = getVisibleObjects();
+const archivedCount = all.filter(o => o && o.archived).length;
+if (!archivedCount) showObjectArchive = false;
+// Закреплённые — сверху (в том же порядке сортировки), остальные — ниже.
+const pins = pinnedObjectIds();
+const sorted = sortObjects(all.filter(o => !!(o && o.archived) === showObjectArchive));
+const objects = showObjectArchive ? sorted : [...sorted.filter(o => pins.has(String(o.id))), ...sorted.filter(o => !pins.has(String(o.id)))];
+renderObjectSortBar(objects.length, archivedCount);
+const dim = objects.length ? `${objects.length} ${pluralRu(objects.length, 'объект', 'объекта', 'объектов')}` : '';
+setDimLabel('dimObjects', showObjectArchive ? (dim ? 'В архиве: ' + dim : '') : dim);
 const searchEl = document.getElementById('objectsSearch');
 if (searchEl) searchEl.style.display = objects.length > 3 ? 'block' : 'none';
 if (objects.length === 0) {
-container.innerHTML = '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">Добавьте первый объект — кнопка «Новый объект» выше</div>';
+container.innerHTML = showObjectArchive
+? '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">В архиве пусто</div>'
+: '<div style="text-align:center; color:#8d97a5; padding: 20px 0; font-size:13px;">' + (archivedCount ? 'Все объекты в архиве — нажмите «Архив» выше' : 'Добавьте первый объект — кнопка «Новый объект» выше') + '</div>';
 return;
 }
 const query = (searchEl ? searchEl.value : '').trim().toLowerCase();
@@ -3131,8 +3300,10 @@ moneyHtml = '<div class="obj-money"><span class="obj-pill">Счетов пока
 card.innerHTML = `
 <div class="obj-head">
 <div class="obj-name">${escapeHtml(obj.name)}</div>
+${obj.archived ? `<button type="button" class="obj-unarchive" onclick="event.stopPropagation(); setObjectArchived('${String(obj.id).replace(/[^\w-]/g, '')}', false)">Вернуть</button>` : `<button type="button" class="obj-pin${pins.has(String(obj.id)) ? ' on' : ''}" onclick="event.stopPropagation(); toggleObjectPin('${String(obj.id).replace(/[^\w-]/g, '')}')" aria-label="${pins.has(String(obj.id)) ? 'Открепить' : 'Закрепить сверху'}" title="${pins.has(String(obj.id)) ? 'Открепить' : 'Закрепить сверху'}">📌</button>`}
 <span class="obj-chevron" aria-hidden="true">›</span>
 </div>
+${obj.archived ? `<div class="obj-line obj-archived-note">🗄 В архиве с ${new Date(Number(obj.archived)).toLocaleDateString('ru-RU')}${obj.archivedBy ? ' · ' + escapeHtml(obj.archivedBy) : ''}</div>` : ''}
 <div class="obj-line"><span class="meta-k">Заказчик</span> ${escapeHtml(obj.client)}</div>
 ${obj.address || (typeof geoHas === 'function' && geoHas(obj)) ? `<div class="obj-line"><span class="meta-k">Адрес</span> ${escapeHtml(obj.address || 'точка на карте')}${typeof geoRouteUrl === 'function' && geoRouteUrl(obj) ? ` <a class="geo-mini" href="${geoRouteUrl(obj)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" aria-label="Маршрут в Яндекс Картах"><svg class="ic"><use href="#i-route"/></svg>Маршрут</a>` : ''}</div>` : ''}
 ${moneyHtml}

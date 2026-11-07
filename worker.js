@@ -514,7 +514,7 @@ function bumpRev(record, key, fields = []) {
 // изменения — { upsert: [записи], delete: [id] }. Сервер применяет их к
 // тому, что лежит у него, поэтому чужие записи затереть нельзя, а
 // одновременная работа нескольких людей не даёт конфликтов.
-// Новые записи встают в начало (счета) или в конец (объекты) — как на странице.
+// Новые записи встают в начало списка — как на странице (unshift).
 const OPS_LIMIT = 5000;
 function readOps(incoming, name) {
   const all = incoming && incoming.ops;
@@ -1247,8 +1247,8 @@ const handler = {
         const aiSelf = selfUser ? aiStatus(record, selfUser) : null;
         const aiPending = auth.role === "admin" ? record.users.filter((u) => typeof u.aiReq === "number").length : 0;
         const self = selfUser
-          ? { ai: aiSelf, aiOffer: aiSettings(record).offer, aiEffort: aiSettings(record).effort, aiPending, login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "" }
-          : { login: auth.login, email: "", companyName: "", publicPriceEnabled: false, pieNote: "", invoiceNote: "", planHints: "" };
+          ? { ai: aiSelf, aiOffer: aiSettings(record).offer, aiEffort: aiSettings(record).effort, aiPending, login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "", pinned: Array.isArray(selfUser.pinned) ? selfUser.pinned : [] }
+          : { login: auth.login, email: "", companyName: "", publicPriceEnabled: false, pieNote: "", invoiceNote: "", planHints: "", pinned: [] };
         // Режим "своя компания" — полностью личное пространство: свой
         // прайс-лист, свои объекты и своя история, невидимые админу
         // (кроме сводной статистики через /stats). Общий прайс, общие
@@ -1316,6 +1316,10 @@ const handler = {
           if (typeof incoming.self.pieNote === "string") selfUser.pieNote = incoming.self.pieNote.trim().slice(0, 1000);
           if (typeof incoming.self.invoiceNote === "string") selfUser.invoiceNote = incoming.self.invoiceNote.trim().slice(0, 1000);
           if (typeof incoming.self.planHints === "string") selfUser.planHints = incoming.self.planHints.trim().slice(0, PLAN_HINTS_MAX);
+          // Закреплённые сверху объекты — личные для аккаунта (id объектов).
+          if (Array.isArray(incoming.self.pinned)) {
+            selfUser.pinned = [...new Set(incoming.self.pinned.filter((x) => typeof x === "string" && x && x.length <= 100))].slice(0, 300);
+          }
           if (incoming.self.password) selfUser.pass = await hashPassword(incoming.self.password);
           // Логин сменился — личное пространство "своей компании" переносим
           // на новый логин-ключ, иначе данные "потеряются" из вида.
@@ -1342,7 +1346,7 @@ const handler = {
           await writeBin(env, record);
           const newToken = await signToken({ login: newLogin, role: auth.role, mode: auth.mode, exp: Date.now() + TOKEN_LIFETIME_MS }, env);
           return json({
-            self: { login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "" },
+            self: { login: selfUser.login, email: selfUser.email || "", companyName: selfUser.companyName || "", publicPriceEnabled: !!selfUser.publicPriceEnabled, pieNote: selfUser.pieNote || "", invoiceNote: selfUser.invoiceNote || "", planHints: selfUser.planHints || "", pinned: Array.isArray(selfUser.pinned) ? selfUser.pinned : [] },
             token: newToken,
             rev: newRev,
           });
@@ -1357,7 +1361,7 @@ const handler = {
           const cdOps = { objects: readOps(incoming, "objects"), history: readOps(incoming, "history") };
           const fields = ["services", "objects", "history"].filter((f) => Array.isArray(incoming[f]) && !cdOps[f]);
           if (baseRev !== null && hasConflict(record, key, baseRev, fields)) return conflictResponse();
-          if (cdOps.objects) cd.objects = applyOps(cd.objects, cdOps.objects, false);
+          if (cdOps.objects) cd.objects = applyOps(cd.objects, cdOps.objects, true);
           if (cdOps.history) cd.history = applyOps(cd.history, cdOps.history, true);
           const opFields = ["objects", "history"].filter((f) => cdOps[f]);
           for (const f of fields) {
@@ -1466,7 +1470,7 @@ const handler = {
         };
         if (mainOps.history) record.history = applyOps(record.history, mainOps.history, true);
         else if (Array.isArray(incoming.history)) record.history = keepMissing(record.history, incoming.history);
-        if (mainOps.objects) record.objects = applyOps(record.objects, mainOps.objects, false);
+        if (mainOps.objects) record.objects = applyOps(record.objects, mainOps.objects, true);
         else if (Array.isArray(incoming.objects)) record.objects = keepMissing(record.objects, incoming.objects);
         if (Array.isArray(incoming.pirogHistory)) {
           // Как и с services: мастер обычно просто пересылает то, что получил

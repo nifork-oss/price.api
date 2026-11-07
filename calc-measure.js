@@ -1188,7 +1188,7 @@ renderMeasure();
 
 function fillMeasureObjectSelect() {
 const sel = document.getElementById('mpObject');
-const objs = typeof getVisibleObjects === 'function' ? getVisibleObjects() : [];
+const objs = (typeof getVisibleObjects === 'function' ? getVisibleObjects() : []).filter(o => !o.archived || o.id === measure.objectId);
 sel.innerHTML = `<option value="">Без объекта (на этом телефоне)</option>` +
 objs.map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)}</option>`).join('');
 sel.value = objs.some(o => o.id === measure.objectId) ? measure.objectId : '';
