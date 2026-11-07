@@ -601,3 +601,16 @@ test('закреплённые объекты: личные для аккаун�
   const again = await call('GET', '/appdata', { token });
   assert.deepStrictEqual(again.data.self.pinned, ['obj_1', 'obj_2']);
 });
+
+test('сохранение переписывает только изменившиеся ключи хранилища', async () => {
+  const { call, token, env } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [{ id: 'a' }] } });
+  const written = [];
+  const put = env.STORAGE.put.bind(env.STORAGE);
+  env.STORAGE.put = async (k, v) => { written.push(...(typeof k === 'string' ? [k] : Object.keys(k))); return put(k, v); };
+  const again = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: again.data.rev, ops: { objects: { upsert: [{ id: 'b' }], delete: [] } } } });
+  // своя компания ivan и версии — да; общий прайс, пользователи, история — нет
+  assert.deepStrictEqual(written.filter(k => !k.startsWith('snap:')).sort(), ['cd:ivan', 'revs']);
+});
