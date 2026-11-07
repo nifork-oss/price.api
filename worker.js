@@ -514,7 +514,7 @@ function bumpRev(record, key, fields = []) {
 // изменения — { upsert: [записи], delete: [id] }. Сервер применяет их к
 // тому, что лежит у него, поэтому чужие записи затереть нельзя, а
 // одновременная работа нескольких людей не даёт конфликтов.
-// Новые записи встают в начало (счета) или в конец (объекты) — как на странице.
+// Новые записи встают в начало списка — как на странице (unshift).
 const OPS_LIMIT = 5000;
 function readOps(incoming, name) {
   const all = incoming && incoming.ops;
@@ -1357,7 +1357,7 @@ const handler = {
           const cdOps = { objects: readOps(incoming, "objects"), history: readOps(incoming, "history") };
           const fields = ["services", "objects", "history"].filter((f) => Array.isArray(incoming[f]) && !cdOps[f]);
           if (baseRev !== null && hasConflict(record, key, baseRev, fields)) return conflictResponse();
-          if (cdOps.objects) cd.objects = applyOps(cd.objects, cdOps.objects, false);
+          if (cdOps.objects) cd.objects = applyOps(cd.objects, cdOps.objects, true);
           if (cdOps.history) cd.history = applyOps(cd.history, cdOps.history, true);
           const opFields = ["objects", "history"].filter((f) => cdOps[f]);
           for (const f of fields) {
@@ -1466,7 +1466,7 @@ const handler = {
         };
         if (mainOps.history) record.history = applyOps(record.history, mainOps.history, true);
         else if (Array.isArray(incoming.history)) record.history = keepMissing(record.history, incoming.history);
-        if (mainOps.objects) record.objects = applyOps(record.objects, mainOps.objects, false);
+        if (mainOps.objects) record.objects = applyOps(record.objects, mainOps.objects, true);
         else if (Array.isArray(incoming.objects)) record.objects = keepMissing(record.objects, incoming.objects);
         if (Array.isArray(incoming.pirogHistory)) {
           // Как и с services: мастер обычно просто пересылает то, что получил

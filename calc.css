@@ -1149,3 +1149,7 @@ body.assistant-open .add-toast { z-index: 99; }
 .fm-doc-info small { font-size: 12px; color: #8a929c; overflow-wrap: anywhere; }
 .fm-chip { font-size: 11px; font-weight: 700; padding: 3px 8px; border: 1px solid currentColor; border-radius: 2px; white-space: nowrap; }
 .fm-wait { color: #85600f; background: #fff7dc; } .fm-ok { color: #1d7a4c; background: #eef6f1; } .fm-bad { color: #c2361f; background: #fbeeea; }
+
+/* сортировка объектов */
+.obj-sort { align-items: center; margin: -6px 0 14px; white-space: nowrap; }
+.obj-sort .chip { flex-shrink: 0; }

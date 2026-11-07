@@ -562,14 +562,17 @@ test('сохранение по записям: две страницы одно
   p1.cloudData.history.unshift({ id: 2, objectId: 'c' });
   const body1 = require('vm').runInContext('buildSaveBody()', p1);
   assert.ok(body1.ops && !body1.objects, 'уходят только изменения');
-  assert.deepStrictEqual(JSON.parse(JSON.stringify(body1.ops.objects)), { upsert: [{ id: 'c', name: 'Новый' }], delete: [] });
+  const sent = JSON.parse(JSON.stringify(body1.ops.objects));
+  assert.deepStrictEqual(sent.upsert.map(o => o.id + ':' + o.name), ['c:Новый']);
+  assert.ok(sent.upsert[0].updatedAt > 0, 'изменённой записи ставится время изменения');
+  assert.deepStrictEqual(sent.delete, []);
   assert.strictEqual((await save(p1)).status, 200);
   p2.cloudData.objects[0].name = 'А-2';
   p2.cloudData.objects = p2.cloudData.objects.filter(o => o.id !== 'b');
   const r2 = await save(p2);
   assert.strictEqual(r2.status, 200);
   const after = await call('GET', '/appdata', { token });
-  assert.deepStrictEqual(after.data.data.objects.map(o => o.id + ':' + o.name), ['a:А-2', 'c:Новый']);
+  assert.deepStrictEqual(after.data.data.objects.map(o => o.id + ':' + o.name), ['c:Новый', 'a:А-2']);
   assert.deepStrictEqual(after.data.data.history.map(h => h.id), [2, 1]);
   // ответ второй странице уже содержит чужой новый объект
   assert.ok(r2.data.data.objects.some(o => o.id === 'c'));
@@ -585,5 +588,5 @@ test('сохранение по записям в общем пространс�
   const got = await call('GET', '/appdata', { token: tok });
   const r = await call('PUT', '/appdata', { token: tok, body: { baseRev: got.data.rev, ops: { objects: { upsert: [{ id: 'y', name: 'Мой' }], delete: [] } } } });
   assert.strictEqual(r.status, 200);
-  assert.deepStrictEqual(env.STORAGE.map.get('objects').map(o => o.id), ['x', 'y']);
+  assert.deepStrictEqual(env.STORAGE.map.get('objects').map(o => o.id), ['y', 'x']);
 });

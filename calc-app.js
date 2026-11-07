@@ -331,7 +331,7 @@ let changed = false;
 for (const name of ['objects', 'history']) {
 const d = diffAgainst(c.data[name], base[name]);
 if (d === null) { if (JSON.stringify(c.data[name]) !== JSON.stringify(cloudData[name])) { cloudData[name] = c.data[name]; changed = true; } continue; }
-if (d.upsert.length || d.delete.length) { cloudData[name] = applyLocalOps(cloudData[name], d, name === 'history'); changed = true; }
+if (d.upsert.length || d.delete.length) { cloudData[name] = applyLocalOps(cloudData[name], d, true); changed = true; }
 }
 for (const k of WHOLE_FIELDS) {
 if (JSON.stringify(c.data[k] ?? null) !== base.whole[k]) { cloudData[k] = c.data[k]; changed = true; }
@@ -390,9 +390,15 @@ return { upsert, delete: del };
 function buildSaveBody() {
 const body = { ...cloudData, self: undefined, baseRev: cloudRev ?? undefined };
 const ops = {};
+const now = Date.now();
 for (const name of ['objects', 'history']) {
 const d = diffList(name);
-if (d) { ops[name] = d; delete body[name]; }
+if (!d) continue;
+// Время изменения ставим тем записям, что реально меняются, — по нему
+// сортируются объекты («Дата изменения»).
+for (const item of d.upsert) item.updatedAt = now;
+ops[name] = d;
+delete body[name];
 }
 if (Object.keys(ops).length) body.ops = ops;
 // Прайс, мастера и расчёты пирога уходят, только если их меняли, — иначе
@@ -2924,6 +2930,84 @@ function getObjectVisibleTo(obj) {
 return Array.isArray(obj.visibleTo) ? obj.visibleTo : (obj.author ? [obj.author] : []);
 }
 
+/* ---------- сортировка объектов (как в проводнике Windows) ---------- */
+const OBJECT_SORTS = {
+updated: 'Изменён',
+created: 'Добавлен',
+name: 'Название',
+client: 'Заказчик',
+};
+let objectSort = { key: 'updated', dir: 'desc' };
+try {
+const saved = JSON.parse(localStorage.getItem('objectSort') || 'null');
+if (saved && OBJECT_SORTS[saved.key] && (saved.dir === 'asc' || saved.dir === 'desc')) objectSort = saved;
+} catch (e) {}
+
+// «07.11.2026, 10:15:00» → мс
+function parseRuDateTime(str) {
+const m = /(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(String(str || ''));
+return m ? new Date(+m[3], +m[2] - 1, +m[1], +(m[4] || 0), +(m[5] || 0), +(m[6] || 0)).getTime() : 0;
+}
+
+function objectCreatedTime(o) {
+const m = /^obj_(\d{12,})/.exec(String(o.id || ''));
+return m ? Number(m[1]) : parseRuDateTime(o.createdAt);
+}
+
+// Изменение объекта — правка самого объекта или его документов (счета, расчёты).
+function objectUpdatedTimes() {
+const map = new Map();
+for (const r of cloudData.history || []) {
+if (!r || !r.objectId) continue;
+const t = Number(r.updatedAt) || Number(r.id) || 0;
+if (t > (map.get(r.objectId) || 0)) map.set(r.objectId, t);
+}
+return map;
+}
+
+function sortObjects(list) {
+const { key, dir } = objectSort;
+const sign = dir === 'asc' ? 1 : -1;
+const docs = key === 'updated' ? objectUpdatedTimes() : null;
+const val = o => {
+if (key === 'name') return String(o.name || '').trim();
+if (key === 'client') return String(o.client || '').trim();
+const created = objectCreatedTime(o);
+if (key === 'created') return created;
+return Math.max(Number(o.updatedAt) || 0, docs.get(o.id) || 0, created);
+};
+return list.map((o, i) => ({ o, i, v: val(o) })).sort((a, b) => {
+let c;
+if (typeof a.v === 'string') {
+// пустые названия — всегда в конце
+if (!a.v !== !b.v) return a.v ? -1 : 1;
+c = a.v.localeCompare(b.v, 'ru', { numeric: true, sensitivity: 'base' });
+} else c = a.v - b.v;
+return c ? c * sign : a.i - b.i;
+}).map(x => x.o);
+}
+
+function setObjectSort(key) {
+if (!OBJECT_SORTS[key]) return;
+if (objectSort.key === key) objectSort.dir = objectSort.dir === 'asc' ? 'desc' : 'asc';
+// по умолчанию: даты — сначала новые, буквы — от А до Я
+else objectSort = { key, dir: key === 'name' || key === 'client' ? 'asc' : 'desc' };
+try { localStorage.setItem('objectSort', JSON.stringify(objectSort)); } catch (e) {}
+renderObjects();
+}
+
+function renderObjectSortBar(count) {
+const bar = document.getElementById('objectsSortBar');
+if (!bar) return;
+bar.style.display = count > 1 ? 'flex' : 'none';
+const isText = objectSort.key === 'name' || objectSort.key === 'client';
+const arrow = objectSort.dir === 'asc' ? '↑' : '↓';
+const hint = isText ? (objectSort.dir === 'asc' ? 'А → Я' : 'Я → А') : (objectSort.dir === 'desc' ? 'сначала новые' : 'сначала старые');
+bar.innerHTML = Object.entries(OBJECT_SORTS).map(([k, label]) =>
+`<button type="button" class="chip${k === objectSort.key ? ' active' : ''}" onclick="setObjectSort('${k}')"${k === objectSort.key ? ` title="${hint} — нажмите ещё раз, чтобы развернуть"` : ''}>${label}${k === objectSort.key ? ' ' + arrow : ''}</button>`
+).join('');
+}
+
 function getVisibleObjects() {
 let objects = cloudData.objects || [];
 if (!isCurrentAdmin()) {
@@ -3084,7 +3168,8 @@ renderObjects();
 function renderObjects() {
 const container = document.getElementById('objectsListContainer');
 if (!container) return;
-const objects = getVisibleObjects();
+const objects = sortObjects(getVisibleObjects());
+renderObjectSortBar(objects.length);
 setDimLabel('dimObjects', objects.length ? `${objects.length} ${pluralRu(objects.length, 'объект', 'объекта', 'объектов')}` : '');
 const searchEl = document.getElementById('objectsSearch');
 if (searchEl) searchEl.style.display = objects.length > 3 ? 'block' : 'none';
