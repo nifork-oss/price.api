@@ -1066,12 +1066,60 @@ renderInvoice();
 
 /* ===================== ФОТО/ФАЙЛЫ ОТЧЁТА (R2) ===================== */
 
-async function handleReportFileSelect(event) {
+// Файлы грузятся по два одновременно: зависший файл не держит остальные.
+const UPLOAD_CONCURRENCY = 2;
+const uploadQueue = [];
+let uploadsRunning = 0;
+const uploadJobs = new Map(); // tempId → { file, xhr, cancelled }
+
+function handleReportFileSelect(event) {
 const files = Array.from(event.target.files || []);
 event.target.value = ''; // чтобы можно было выбрать тот же файл повторно
 for (const file of files) {
-await uploadReportFile(file);
+const tempId = 'tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+uploadJobs.set(tempId, { file });
+invoiceAttachments.push({ tempId, name: file.name, size: file.size, type: file.type, uploading: true, progress: 0, stage: 'wait' });
+uploadQueue.push(tempId);
 }
+renderReportAttachments();
+pumpUploads();
+}
+
+function pumpUploads() {
+while (uploadsRunning < UPLOAD_CONCURRENCY && uploadQueue.length) {
+const tempId = uploadQueue.shift();
+if (!uploadJobs.has(tempId)) continue; // отменён, пока ждал
+uploadsRunning++;
+uploadReportFile(tempId).finally(() => { uploadsRunning--; pumpUploads(); });
+}
+}
+
+function findAttachment(tempId) {
+return invoiceAttachments.find(a => a.tempId === tempId);
+}
+
+function setAttachmentState(tempId, patch) {
+const att = findAttachment(tempId);
+if (!att) return;
+Object.assign(att, patch);
+// перерисовываем только полоску, если меняется лишь процент — без мигания списка
+if (Object.keys(patch).length === 1 && 'progress' in patch) {
+const bar = document.querySelector(`[data-upload="${tempId}"] .upload-bar i`);
+const pct = document.querySelector(`[data-upload="${tempId}"] .upload-pct`);
+if (bar) bar.style.width = Math.round(patch.progress * 100) + '%';
+if (pct) pct.textContent = Math.round(patch.progress * 100) + '%';
+if (bar) return;
+}
+renderReportAttachments();
+}
+
+// Сжатие на некоторых телефонах может зависнуть — ждём не больше 15 с,
+// потом отправляем оригинал.
+function compressImageWithTimeout(file, ms = 15000) {
+return Promise.race([
+compressImageIfNeeded(file),
+new Promise(resolve => setTimeout(() => resolve(file), ms)),
+]);
 }
 
 async function compressImageIfNeeded(file) {
@@ -1107,52 +1155,94 @@ return file;
 }
 }
 
-async function uploadFileToServer(file) {
+// Отправка через XMLHttpRequest — у него есть ход загрузки (для шкалы) и
+// отмена. Если 60 с не уходит ни байта (или сервер молчит 90 с после
+// отправки) — считаем, что загрузка зависла, и обрываем её.
+function uploadFileToServer(file, onProgress, job) {
+return new Promise((resolve, reject) => {
+const xhr = new XMLHttpRequest();
+if (job) job.xhr = xhr;
+let stallTimer = null;
+let reason = 'stall';
+const arm = (ms) => { clearTimeout(stallTimer); stallTimer = setTimeout(() => { reason = 'stall'; xhr.abort(); }, ms); };
+xhr.open('POST', `${WORKER_URL}/upload`);
+xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
+xhr.upload.onprogress = (e) => {
+if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
+arm(60000);
+};
+xhr.upload.onload = () => { if (onProgress) onProgress(1); arm(90000); };
+xhr.onload = () => {
+clearTimeout(stallTimer);
+let result = null;
+try { result = JSON.parse(xhr.responseText); } catch (e) { /* пусто */ }
+resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, result });
+};
+xhr.onerror = () => { clearTimeout(stallTimer); reject(new Error('network')); };
+xhr.onabort = () => { clearTimeout(stallTimer); reject(new Error(job && job.cancelled ? 'cancelled' : reason)); };
 const formData = new FormData();
 formData.append('file', file);
-return fetch(`${WORKER_URL}/upload`, {
-method: 'POST',
-headers: { 'Authorization': 'Bearer ' + authToken },
-body: formData
+arm(60000);
+xhr.send(formData);
 });
 }
 
-async function uploadReportFile(originalFile) {
-const tempId = 'tmp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
-invoiceAttachments.push({ tempId, name: originalFile.name, size: originalFile.size, type: originalFile.type, uploading: true });
-renderReportAttachments();
-const file = await compressImageIfNeeded(originalFile);
+async function uploadReportFile(tempId) {
+const job = uploadJobs.get(tempId);
+if (!job) return;
+job.cancelled = false;
+setAttachmentState(tempId, { uploading: true, failed: false, error: '', progress: 0, stage: 'compress' });
+const file = await compressImageWithTimeout(job.file);
+if (job.cancelled || !uploadJobs.has(tempId)) return;
+setAttachmentState(tempId, { stage: 'send', size: file.size });
 const maxAttempts = 2;
 for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 try {
-const res = await uploadFileToServer(file);
-let result = null;
-try { result = await res.json(); } catch (e) { /* пусто */ }
-const idx = invoiceAttachments.findIndex(a => a.tempId === tempId);
-if (!res.ok) {
-if (idx !== -1) invoiceAttachments.splice(idx, 1);
-renderReportAttachments();
-alert(`Не удалось загрузить файл «${originalFile.name}»${result && result.error ? ': ' + result.error : ''}.`);
+const { ok, status, result } = await uploadFileToServer(file, (p) => setAttachmentState(tempId, { progress: p }), job);
+if (!ok) {
+// Ошибка от сервера (размер, тип файла, вход) — повтор не поможет сам, но кнопка «Повторить» есть.
+if (status >= 500 && attempt < maxAttempts) { await new Promise(r => setTimeout(r, 1000)); continue; }
+setAttachmentState(tempId, { uploading: false, failed: true, error: (result && result.error) || ('ошибка ' + status) });
 return;
 }
+const idx = invoiceAttachments.findIndex(a => a.tempId === tempId);
 if (idx !== -1) {
 invoiceAttachments[idx] = { url: result.url, publicId: result.publicId, resourceType: result.resourceType, name: result.name, size: result.size, type: result.type };
 }
+uploadJobs.delete(tempId);
 renderReportAttachments();
-showAddToast(`Загружено: ${originalFile.name}`);
+saveDraftNow && saveDraftNow();
 return;
 } catch (e) {
+if (e.message === 'cancelled' || !uploadJobs.has(tempId)) return;
 console.error(`Ошибка загрузки файла (попытка ${attempt}/${maxAttempts}):`, e);
 if (attempt === maxAttempts) {
+setAttachmentState(tempId, { uploading: false, failed: true, error: e.message === 'stall' ? 'загрузка зависла' : 'нет связи' });
+return;
+}
+setAttachmentState(tempId, { progress: 0 });
+await new Promise(r => setTimeout(r, 1000));
+}
+}
+}
+
+function retryReportUpload(tempId) {
+if (!uploadJobs.has(tempId)) return;
+setAttachmentState(tempId, { uploading: true, failed: false, error: '', progress: 0, stage: 'wait' });
+uploadQueue.push(tempId);
+pumpUploads();
+}
+
+function cancelReportUpload(tempId) {
+const job = uploadJobs.get(tempId);
+if (job) {
+job.cancelled = true;
+if (job.xhr) { try { job.xhr.abort(); } catch (e) {} }
+uploadJobs.delete(tempId);
+}
 const idx = invoiceAttachments.findIndex(a => a.tempId === tempId);
 if (idx !== -1) invoiceAttachments.splice(idx, 1);
 renderReportAttachments();
-alert(`Не удалось загрузить файл «${originalFile.name}»: нет соединения с сервером.`);
-return;
-}
-await new Promise(r => setTimeout(r, 800));
-}
-}
 }
 
 async function removeReportAttachment(idx) {
@@ -1182,11 +1272,29 @@ const sizeKb = att.size ? Math.round(att.size / 1024) : 0;
 const thumb = isImage && att.url
 ? `<img src="${att.url}" class="attachment-thumb" alt="">`
 : `<span class="attachment-thumb" style="display:flex; align-items:center; justify-content:center; font-size:16px;">📄</span>`;
+if (att.tempId) {
+// Файл ещё не загружен: ход загрузки, ошибка и кнопки «Повторить» / «Отмена»
+const pct = Math.round((att.progress || 0) * 100);
+const stage = att.failed ? `<span class="upload-err">Не загрузилось: ${escapeHtml(att.error || 'ошибка')}</span>`
+: att.stage === 'wait' ? 'в очереди…'
+: att.stage === 'compress' ? 'сжатие…'
+: `<span class="upload-pct">${pct}%</span>`;
+const retryable = att.failed && uploadJobs.has(att.tempId);
 return `
-<div class="attachment-chip${att.uploading ? ' attachment-uploading' : ''}">
+<div class="attachment-chip attachment-pending${att.failed ? ' attachment-failed' : ''}" data-upload="${att.tempId}">
 ${thumb}
-<span class="attachment-name">${escapeHtml(att.name)}${sizeKb ? ` (${sizeKb} КБ)` : ''}${att.uploading ? ' — загрузка…' : ''}</span>
-${!att.uploading ? `<button type="button" class="btn-delete-item" onclick="removeReportAttachment(${idx})">✕</button>` : ''}
+<span class="attachment-name">${escapeHtml(att.name)}${sizeKb ? ` (${sizeKb} КБ)` : ''}<br><small>${stage}</small>
+${!att.failed ? `<span class="upload-bar"><i style="width:${att.stage === 'send' ? pct : 0}%"></i></span>` : ''}</span>
+${retryable ? `<button type="button" class="btn-retry-upload" onclick="retryReportUpload('${att.tempId}')" title="Повторить">↻</button>` : ''}
+<button type="button" class="btn-delete-item" onclick="cancelReportUpload('${att.tempId}')" title="${att.failed ? 'Убрать' : 'Отменить загрузку'}">✕</button>
+</div>
+`;
+}
+return `
+<div class="attachment-chip">
+${thumb}
+<span class="attachment-name">${escapeHtml(att.name)}${sizeKb ? ` (${sizeKb} КБ)` : ''}</span>
+<button type="button" class="btn-delete-item" onclick="removeReportAttachment(${idx})">✕</button>
 </div>
 `;
 }).join('');
@@ -1257,7 +1365,7 @@ objectId,
 client: (document.getElementById('clientName').value || '').trim(),
 address: (document.getElementById('objectAddress').value || '').trim(),
 note: (document.getElementById('invoiceNote').value || '').trim(),
-attachments: invoiceAttachments,
+attachments: invoiceAttachments.filter(a => a.url), // незагруженные в черновик не попадают
 roomSel: [...selectedRoomIds],
 discount: invoiceDiscount
 };
@@ -1357,7 +1465,8 @@ el.dataset.autofilled = '';
 invoiceCart = d.cart;
 if (migrateLegacyRooms(d.rooms, invoiceCart, d.objectId)) saveCloudData();
 selectedRoomIds = new Set(Array.isArray(d.roomSel) ? d.roomSel : []);
-invoiceAttachments = Array.isArray(d.attachments) ? d.attachments : [];
+// В старых черновиках могли остаться «вечно загружающиеся» файлы — убираем их.
+invoiceAttachments = Array.isArray(d.attachments) ? d.attachments.filter(a => a && a.url) : [];
 invoiceDiscount = d.discount && Number(d.discount.value) > 0 ? d.discount : null;
 syncDiscountUI();
 renderReportAttachments();
@@ -1962,9 +2071,11 @@ const totals = docTotals(invoiceCart, invoiceDiscount);
 const total = totals.total;
 const discount = totals.discount > 0 ? { ...invoiceDiscount } : null;
 if (invoiceAttachments.some(a => a.uploading)) {
-alert('Дождитесь окончания загрузки файлов отчёта.');
+alert('Дождитесь окончания загрузки файлов отчёта (или отмените зависший — крестик рядом с ним).');
 return false;
 }
+const failedFiles = invoiceAttachments.filter(a => a.tempId && a.failed);
+if (failedFiles.length && !confirm(`Не загрузились файлы: ${failedFiles.map(a => a.name).join(', ')}. Сохранить без них?`)) return false;
 const attachments = invoiceAttachments.filter(a => a.url).map(a => ({ url: a.url, publicId: a.publicId, resourceType: a.resourceType, name: a.name, size: a.size, type: a.type }));
 
 if (editingRecordId) {
