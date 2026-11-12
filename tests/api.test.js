@@ -614,3 +614,20 @@ test('сохранение переписывает только изменив�
   // своя компания ivan и версии — да; общий прайс, пользователи, история — нет
   assert.deepStrictEqual(written.filter(k => !k.startsWith('snap:')).sort(), ['cd:ivan', 'revs']);
 });
+
+test('закупка по ссылке: открывается без входа по ключу, без сумм и чеков; короткий или чужой ключ — 404', async () => {
+  const { call, token } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  const share = 'k'.repeat(20) + 'abc123';
+  const obj = { id: 'o-pur', name: 'Квартира', address: 'ул. Ленина, 5', client: 'Анна', purchases: [{ id: 'p1', share, title: 'Черновые материалы', to: 'Олег', note: 'к пятнице', createdAt: 5, delivered: true,
+    total: 9000, files: [{ url: 'https://files.test/chek.jpg', name: 'чек' }], items: [{ id: 'i1', name: 'Грунтовка', qty: '10', unit: 'л', done: true, price: 1250 }, { id: 'i2', name: 'Валик', qty: '', unit: 'шт.' }] }] };
+  const put = await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, ops: { objects: { upsert: [obj], delete: [] } } } });
+  assert.strictEqual(put.status, 200, JSON.stringify(put.data));
+  const got = await call('GET', '/purchase?k=' + share);
+  assert.strictEqual(got.status, 200);
+  assert.deepStrictEqual(got.data, { title: 'Черновые материалы', to: 'Олег', note: 'к пятнице', createdAt: 5, delivered: true, deliveredAt: 0, objectName: 'Квартира', address: 'ул. Ленина, 5',
+    items: [{ name: 'Грунтовка', qty: '10', unit: 'л', done: true }, { name: 'Валик', qty: '', unit: 'шт.', done: false }] });
+  assert.ok(!JSON.stringify(got.data).includes('1250') && !JSON.stringify(got.data).includes('chek'), 'суммы и чеки по ссылке не отдаются');
+  assert.strictEqual((await call('GET', '/purchase?k=' + 'z'.repeat(26))).status, 404);
+  assert.strictEqual((await call('GET', '/purchase?k=p1')).status, 404, 'по номеру закупки — нельзя, только по ключу ссылки');
+});

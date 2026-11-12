@@ -4,7 +4,9 @@
 // за весь закуп или за отдельные позиции, прикладывают фото товаров и чеки, в конце — «Доставлено на объект».
 // Суммы (если отмечено) идут в статистику объекта: «На материал потрачено».
 // Хранится в самом объекте: obj.purchases = [{ id, title, to, note, createdAt, author, items: [{ id, name, qty, unit,
-// done, price }], total, files: [{ url, name, type, … }], delivered, deliveredAt, inStats }].
+// done, price }], total, files: [{ url, name, type, … }], delivered, deliveredAt, inStats, share }].
+// «Отправить список» добавляет в сообщение ссылку на purchase.html?k=<share> — страницу закупки без входа
+// (только список и объект, без сумм и чеков; сервер — GET /purchase). У ссылки своя картинка-превью (og-purchase.png).
 // Подключается из calc.html после calc-foreman.js.
 
 const PURCHASE_UNITS = ['шт.', 'уп.', 'кг', 'л', 'м', 'м²', 'м³', 'пог. м', 'меш.', 'компл.'];
@@ -35,14 +37,26 @@ if (!m || !m[1].trim()) return { name: t.slice(0, 120), qty: '', unit: 'шт.' }
 return { name: m[1].trim().slice(0, 120), qty: m[2].replace(',', '.'), unit: (m[3] || 'шт.').slice(0, 8) };
 }
 
-// текст для отправки снабженцу или прорабу
-function purchaseMessageText(obj, p) {
+// ссылка на закупку для того, кому её отправляют (ключ создаётся при первой отправке)
+function purchaseUrl(p) {
+if (!p || !p.share) return '';
+const base = window.location.href.replace(/calc\.html.*$/, '').replace(/[?#].*$/, '');
+return `${base}purchase.html?k=${encodeURIComponent(p.share)}`;
+}
+function purchaseShareKey() {
+const a = new Uint8Array(15);
+(window.crypto || crypto).getRandomValues(a);
+return Array.from(a, (b) => (b % 36).toString(36)).join('') + Date.now().toString(36);
+}
+// текст для отправки снабженцу или прорабу; url — ссылка на страницу закупки (с неё мессенджер берёт превью)
+function purchaseMessageText(obj, p, url) {
 const lines = [`Закупка: ${p.title || 'материалы'}`];
 if (obj && obj.name) lines.push(`Объект: ${obj.name}${obj.address ? ', ' + obj.address : ''}`);
 if (p.to) lines.push(`Кому: ${p.to}`);
 lines.push('');
 (p.items || []).forEach((it, i) => lines.push(`${i + 1}. ${it.name}${it.qty ? ' — ' + it.qty + ' ' + (it.unit || '') : ''}`.trim()));
 if (p.note) lines.push('', p.note);
+if (url) lines.push('', 'Список по ссылке: ' + url);
 return lines.join('\n');
 }
 
@@ -200,18 +214,25 @@ purchaseChanged(true);
 }
 
 /* ---- отправить снабженцу или прорабу ---- */
-function purchaseSend() {
+async function purchaseSend() {
 const obj = purchaseObj(), p = purchaseCur();
 if (!p) return;
 if (!(p.items || []).length) { showAddToast('Сначала добавьте материалы'); return; }
-const text = purchaseMessageText(obj, p);
-const copy = async () => { try { await navigator.clipboard.writeText(text); showAddToast('Список скопирован'); } catch (e) { prompt('Скопируйте список:', text); } };
+// ссылка откроется у получателя, только когда закупка уже на сервере: сохраняем до отправки
+if (!p.share) p.share = purchaseShareKey();
+clearTimeout(purchaseSaveTimer);
+const saved = await saveCloudData();
+const url = saved && cloudLoaded === true && !(typeof hasUnsentChanges === 'function' && hasUnsentChanges()) ? purchaseUrl(p) : '';
+if (!url) showAddToast('Нет связи — отправляю список без ссылки');
+const text = purchaseMessageText(obj, p, url), plain = purchaseMessageText(obj, p, '');
+const copy = async (value, done) => { try { await navigator.clipboard.writeText(value); showAddToast(done); } catch (e) { prompt('Скопируйте:', value); } };
 const items = [
 { icon: '💬', label: 'WhatsApp', onClick: () => window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank', 'noopener') },
-{ icon: '📤', label: 'Telegram', onClick: () => window.open('https://t.me/share/url?url=' + encodeURIComponent(' ') + '&text=' + encodeURIComponent(text), '_blank', 'noopener') },
+{ icon: '📤', label: 'Telegram', onClick: () => window.open('https://t.me/share/url?url=' + encodeURIComponent(url || ' ') + '&text=' + encodeURIComponent(plain), '_blank', 'noopener') },
 ];
 if (navigator.share) items.push({ icon: '📤', label: 'Другое приложение…', onClick: () => navigator.share({ text }).catch(() => {}) });
-items.push({ icon: '📋', label: 'Скопировать список', onClick: copy });
+items.push({ icon: '📋', label: 'Скопировать список', onClick: () => copy(text, 'Список скопирован') });
+if (url) items.push({ icon: '🔗', label: 'Скопировать только ссылку', onClick: () => copy(url, 'Ссылка скопирована') });
 openSheet(`Отправить закупку${p.to ? ' · ' + p.to : ''}`, items);
 }
 
