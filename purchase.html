@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<meta name="description" content="Список материалов для закупки по объекту: что и сколько купить. Открывается без регистрации.">
+<meta name="description" content="Список материалов для закупки по объекту: отмечайте купленное, суммы и чеки. Открывается без регистрации.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Кабинет мастера">
 <meta property="og:title" content="Список закупки">
-<meta property="og:description" content="Материалы по объекту: что и сколько купить. Открывается с телефона, без регистрации.">
+<meta property="og:description" content="Материалы по объекту: что и сколько купить. Отмечайте купленное, суммы и чеки — с телефона, без регистрации.">
 <meta property="og:image" content="https://moysite.duckdns.org/og-purchase.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -38,13 +38,37 @@ body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
 .sum-chip { font-size: 12.5px; font-weight: 600; border: 1px solid var(--line); padding: 5px 10px; border-radius: 999px; color: var(--ink2); }
 .sum-chip b { color: var(--ink); }
 .sum-chip.ok { color: var(--ok); border-color: #b9dcc8; background: #eef6f1; }
-.item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
-.item:last-child { border-bottom: none; }
-.item-n { flex: 0 0 1.6rem; color: var(--ink3); font-size: 13px; padding-top: 2px; }
-.item-name { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
-.item-qty { font-weight: 700; white-space: nowrap; }
+.item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.item-check { flex: 0 0 30px; width: 30px; height: 30px; border-radius: 8px; border: 2px solid var(--ink); background: #fff; color: #fff; font-size: 18px; font-weight: 800; line-height: 1; cursor: pointer; padding: 0; display: grid; place-items: center; }
+.item.done .item-check { background: var(--ok); border-color: var(--ok); }
+.item-main { flex: 1; min-width: 0; cursor: pointer; padding-top: 4px; }
+.item-name { font-weight: 500; overflow-wrap: anywhere; }
+.item-qty { display: block; font-size: 13px; color: var(--ink2); font-weight: 600; margin-top: 2px; }
 .item.done .item-name { text-decoration: line-through; color: var(--ink3); }
-.item.done .item-qty { color: var(--ok); }
+.money { flex: 0 0 6.2rem; width: 6.2rem; min-height: 38px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 14px; text-align: right; background: #fff; color: var(--ink); }
+.money::placeholder { color: var(--ink3); font-size: 12.5px; }
+.money:focus { outline: 2px solid var(--acc); border-color: var(--ink); }
+.total { margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.total-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.total-row + .total-row { margin-top: 10px; }
+.total-row b { font-size: 16px; }
+.total-row .money { flex-basis: 8rem; width: 8rem; }
+.total-hint { font-size: 12px; color: var(--ink3); margin-top: 6px; }
+.files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.file { position: relative; width: 84px; height: 84px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--paper); display: grid; place-items: center; font-size: 11px; color: var(--ink2); text-align: center; text-decoration: none; padding: 4px; overflow-wrap: anywhere; }
+.file img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.file-x { position: absolute; top: 2px; right: 2px; width: 24px; height: 24px; border-radius: 50%; border: none; background: rgba(20,24,31,.75); color: #fff; font-size: 14px; line-height: 1; cursor: pointer; z-index: 1; }
+.file.busy { opacity: .6; }
+.sec-title { margin: 20px 0 0; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--ink2); text-transform: uppercase; }
+.deliver { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 18px; padding: 14px 12px; border: 2px solid var(--ink); border-radius: 8px; background: #fff; font: inherit; font-size: 16px; font-weight: 700; color: var(--ink); cursor: pointer; text-align: left; }
+.deliver i { flex: 0 0 30px; height: 30px; border-radius: 8px; border: 2px solid var(--ink); display: grid; place-items: center; font-style: normal; color: #fff; font-size: 18px; }
+.deliver small { display: block; font-size: 12px; font-weight: 500; color: var(--ink2); }
+.deliver.on { background: #eef6f1; border-color: var(--ok); }
+.deliver.on i { background: var(--ok); border-color: var(--ok); }
+.status { position: sticky; bottom: 8px; margin: 14px auto 0; width: fit-content; max-width: 100%; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; background: var(--ink); color: #fff; opacity: 0; transition: opacity .25s; pointer-events: none; }
+.status.show { opacity: 1; }
+.status.warn { background: #b3261e; }
+.btn.ghost { background: #fff; color: var(--ink); }
 .note { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); background: var(--paper); font-size: 13.5px; color: #33404f; border-radius: 8px; white-space: pre-wrap; }
 .actions { display: grid; gap: 10px; margin-top: 16px; }
 .btn { min-height: 50px; border-radius: 8px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; border: 2px solid var(--ink); background: var(--ink); color: #fff; }
@@ -59,7 +83,7 @@ body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
   <div id="errorState" class="error-box" style="display:none;"></div>
   <div id="app" style="display:none;"></div>
   <div class="ruler"></div>
-  <div class="foot">Список составлен в «Кабинете мастера». Отметки «куплено» ставит мастер.</div>
+  <div class="foot">Список составлен в «Кабинете мастера». Отметки, суммы и фото сохраняются сами — мастер увидит их в своём кабинете.</div>
 </div>
 <script>
 // Сервер: на moysite.duckdns.org — через nginx этого же VPS (/price-api/ →
@@ -90,33 +114,218 @@ async function copyList(btn) {
   try { await navigator.clipboard.writeText(listText()); btn.textContent = 'Скопировано ✓'; }
   catch (e) { prompt('Скопируйте список:', listText()); }
 }
+function num(v) { const n = Number(String(v ?? '').replace(/\s/g, '').replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : 0; }
+function money(n) { return (Math.round(n * 100) / 100).toLocaleString('ru-RU') + ' ₽'; }
+function itemsSum() { return (state.items || []).reduce((a, it) => a + num(it.price), 0); }
+
+// ---- Сохранение: правки копятся и уходят одной пачкой; нет связи или «слишком часто» — повторяем сами ----
+let pending = null, saveTimer = 0, saving = false, statusTimer = 0;
+function setStatus(text, warn, keep) {
+  const el = document.getElementById('saveStatus');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'status show' + (warn ? ' warn' : '');
+  clearTimeout(statusTimer);
+  if (!keep) statusTimer = setTimeout(() => { el.className = 'status'; }, 1800);
+}
+function queue(change, delay) {
+  if (!pending) pending = { items: {} };
+  if (change.item) pending.items[change.item.id] = { ...(pending.items[change.item.id] || {}), ...change.item };
+  if ('total' in change) pending.total = change.total;
+  if ('delivered' in change) pending.delivered = change.delivered;
+  setStatus('Сохраняю…', false, true);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flush, delay || 900);
+}
+async function flush() {
+  if (saving || !pending) return;
+  const sent = pending;
+  pending = null; saving = true;
+  let ok = false, fatal = '';
+  try {
+    const body = { items: Object.entries(sent.items).map(([id, v]) => ({ id, ...v })) };
+    if ('total' in sent) body.total = sent.total;
+    if ('delivered' in sent) body.delivered = sent.delivered;
+    const res = await fetch(`${WORKER_URL}/purchase?k=${encodeURIComponent(KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true });
+    let data = null; try { data = await res.json(); } catch (e) { /* пусто */ }
+    if (res.ok && data) { ok = true; if (!pending) adopt(data); }
+    else if (res.status === 404) fatal = (data && data.error) || 'Закупка не найдена.';
+  } catch (e) { /* нет связи — повторим */ }
+  saving = false;
+  if (fatal) { showError(fatal); return; }
+  if (!ok) {
+    // возвращаем неотправленное в очередь (то, что успели изменить позже, важнее)
+    const later = pending || { items: {} };
+    pending = { ...sent, ...later, items: { ...sent.items } };
+    Object.entries(later.items).forEach(([id, v]) => { pending.items[id] = { ...(pending.items[id] || {}), ...v }; });
+    setStatus('Не сохранилось — повторю через несколько секунд', true, true);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flush, 8000);
+    return;
+  }
+  if (pending) { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 300); }
+  else setStatus('Сохранено ✓');
+}
+// Свежие данные с сервера: поля, в которых человек сейчас печатает, не трогаем
+function adopt(data) {
+  state = data;
+  const a = document.activeElement;
+  if (a && a.classList && a.classList.contains('money')) refreshTotals(); else render();
+}
+window.addEventListener('beforeunload', (e) => { if (pending || saving) { flush(); e.preventDefault(); e.returnValue = ''; } });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { if (pending) { clearTimeout(saveTimer); flush(); } }
+  else if (state && !pending && !saving && !uploading) load(true);
+});
+
+function toggleItem(id) {
+  const it = state.items.find(x => x.id === id);
+  if (!it) return;
+  it.done = !it.done;
+  const row = document.querySelector(`.item[data-id="${CSS.escape(id)}"]`);
+  if (row) { row.classList.toggle('done', it.done); row.querySelector('.item-check').setAttribute('aria-checked', it.done ? 'true' : 'false'); }
+  refreshTotals();
+  queue({ item: { id, done: it.done } }, 700);
+}
+function setPrice(id, value) {
+  const it = state.items.find(x => x.id === id);
+  if (!it) return;
+  it.price = value.trim() === '' ? '' : num(value);
+  refreshTotals();
+  queue({ item: { id, price: it.price } }, 1200);
+}
+function setTotal(value) {
+  state.total = value.trim() === '' ? '' : num(value);
+  refreshTotals();
+  queue({ total: state.total }, 1200);
+}
+function toggleDelivered() {
+  state.delivered = !state.delivered;
+  state.deliveredAt = state.delivered ? Date.now() : 0;
+  renderDeliver(); refreshTotals();
+  queue({ delivered: state.delivered }, 400);
+}
+function summaryHtml() {
+  const items = state.items || [], done = items.filter(it => it.done).length;
+  return `<span class="sum-chip">Позиций <b>${items.length}</b></span><span class="sum-chip${items.length && done === items.length ? ' ok' : ''}">Куплено <b>${done}</b> из ${items.length}</span>${state.delivered ? '<span class="sum-chip ok">Доставлено на объект</span>' : ''}`;
+}
+function refreshTotals() {
+  const sum = document.getElementById('summary'); if (sum) sum.innerHTML = summaryHtml();
+  const el = document.getElementById('itemsSum'); if (el) el.textContent = money(itemsSum());
+  const hint = document.getElementById('totalHint');
+  if (hint) hint.textContent = num(state.total) ? 'В расходы на материал пойдёт сумма за весь закуп: ' + money(num(state.total)) + '.' : 'Суммы необязательны. Если сумму за весь закуп не указать, посчитается по позициям.';
+}
+function renderDeliver() {
+  const b = document.getElementById('deliverBtn'); if (!b) return;
+  b.className = 'deliver' + (state.delivered ? ' on' : '');
+  b.setAttribute('aria-pressed', state.delivered ? 'true' : 'false');
+  b.innerHTML = `<i>✓</i><span>Доставлено на объект<small>${state.delivered ? (state.deliveredAt ? 'отмечено ' + new Date(state.deliveredAt).toLocaleDateString('ru-RU') : 'отмечено') : 'нажмите, когда материал привезён'}</small></span>`;
+}
+
+// ---- Фото товаров и чеки ----
+let uploading = 0;
+function filesHtml() {
+  const list = (state.files || []).map(f => {
+    const img = /^image\//.test(f.type || '') || /\.(jpe?g|png|webp|gif)$/i.test(f.url);
+    return `<a class="file" href="${esc(f.url)}" target="_blank" rel="noopener">${img ? `<img src="${esc(f.url)}" alt="${esc(f.name || 'фото')}" loading="lazy">` : esc(f.name || 'файл')}${f.mine && f.id ? `<button type="button" class="file-x" aria-label="Убрать файл" onclick="event.preventDefault();removeFile('${esc(f.id)}')">×</button>` : ''}</a>`;
+  }).join('');
+  return list + Array.from({ length: uploading }, () => '<span class="file busy">Загружаю…</span>').join('');
+}
+function renderFiles() { const el = document.getElementById('files'); if (el) el.innerHTML = filesHtml(); }
+// Фото с телефона весят по 5–10 МБ — уменьшаем до 1600 px перед отправкой
+function shrink(file) {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 600 * 1024) return Promise.resolve(file);
+  return new Promise((resolve) => {
+    const img = new Image(), src = URL.createObjectURL(file);
+    const fail = () => { URL.revokeObjectURL(src); resolve(file); };
+    setTimeout(fail, 8000);
+    img.onerror = fail;
+    img.onload = () => {
+      try {
+        const k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob((blob) => { URL.revokeObjectURL(src); resolve(blob && blob.size < file.size ? new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : file); }, 'image/jpeg', 0.82);
+      } catch (e) { fail(); }
+    };
+    img.src = src;
+  });
+}
+async function filesPicked(input) {
+  const files = [...(input.files || [])].slice(0, 5);
+  input.value = '';
+  for (const raw of files) {
+    uploading++; renderFiles();
+    let err = '';
+    try {
+      const form = new FormData();
+      form.append('file', await shrink(raw));
+      const res = await fetch(`${WORKER_URL}/purchase/upload?k=${encodeURIComponent(KEY)}`, { method: 'POST', body: form });
+      let data = null; try { data = await res.json(); } catch (e) { /* пусто */ }
+      if (res.ok && data) state.files = data.files; else err = (data && data.error) || 'Не удалось загрузить файл.';
+    } catch (e) { err = 'Не удалось загрузить файл — проверьте интернет.'; }
+    uploading--; renderFiles();
+    if (err) { setStatus(err, true); break; }
+    setStatus('Файл добавлен ✓');
+  }
+}
+async function removeFile(id) {
+  if (!confirm('Убрать этот файл?')) return;
+  try {
+    const res = await fetch(`${WORKER_URL}/purchase?k=${encodeURIComponent(KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ removeFile: id }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error();
+    state.files = data.files; renderFiles(); setStatus('Файл убран');
+  } catch (e) { setStatus('Не удалось убрать файл', true); }
+}
+
 function render() {
-  const s = state, items = s.items || [], done = items.filter(it => it.done).length;
+  const s = state, items = s.items || [];
   document.getElementById('loadingState').style.display = 'none';
   document.title = (s.title || 'Список закупки') + ' — Кабинет мастера';
   const app = document.getElementById('app');
   app.style.display = 'block';
+  const val = (v) => (v === '' || v === null || v === undefined || !num(v) ? '' : String(num(v)));
   app.innerHTML = `<div class="hello">
       <small>СПИСОК ЗАКУПКИ</small>
       <h1>${esc(s.title || 'Материалы')}</h1>
       ${s.objectName ? `<p>Объект: ${esc(s.objectName)}${s.address ? ', ' + esc(s.address) : ''}</p>` : ''}
       ${s.to ? `<p>Кому: ${esc(s.to)}</p>` : ''}
-      <div class="summary"><span class="sum-chip">Позиций <b>${items.length}</b></span>${done ? `<span class="sum-chip">Куплено <b>${done}</b></span>` : ''}${s.delivered ? '<span class="sum-chip ok">Доставлено на объект</span>' : ''}</div>
+      <div class="summary" id="summary">${summaryHtml()}</div>
     </div>
-    ${items.length ? items.map((it, i) => `<div class="item${it.done ? ' done' : ''}"><span class="item-n">${i + 1}.</span><span class="item-name">${esc(it.name)}</span><span class="item-qty">${it.done ? '✓ ' : ''}${it.qty ? esc(it.qty) + ' ' + esc(it.unit || '') : ''}</span></div>`).join('') : '<div class="loader">В списке пока нет материалов.</div>'}
     ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
-    ${items.length ? '<div class="actions"><button type="button" class="btn" onclick="copyList(this)">Скопировать список</button></div>' : ''}`;
+    ${items.length ? items.map((it) => `<div class="item${it.done ? ' done' : ''}" data-id="${esc(it.id)}">
+        <button type="button" class="item-check" role="checkbox" aria-checked="${it.done ? 'true' : 'false'}" aria-label="Куплено: ${esc(it.name)}" onclick="toggleItem('${esc(it.id)}')">✓</button>
+        <span class="item-main" onclick="toggleItem('${esc(it.id)}')"><span class="item-name">${esc(it.name)}</span>${it.qty ? `<span class="item-qty">${esc(it.qty)} ${esc(it.unit || '')}</span>` : ''}</span>
+        <input class="money" type="text" inputmode="decimal" placeholder="сумма, ₽" aria-label="Сумма за «${esc(it.name)}»" value="${val(it.price)}" oninput="setPrice('${esc(it.id)}', this.value)">
+      </div>`).join('') : '<div class="loader">В списке пока нет материалов.</div>'}
+    <div class="total">
+      <div class="total-row"><span>Сумма по позициям</span><b id="itemsSum">${money(itemsSum())}</b></div>
+      <div class="total-row"><label for="totalInput">Сумма за весь закуп</label><input id="totalInput" class="money" type="text" inputmode="decimal" placeholder="необязательно" value="${val(s.total)}" oninput="setTotal(this.value)"></div>
+      <div class="total-hint" id="totalHint"></div>
+    </div>
+    <div class="sec-title">Фото товаров и чеки</div>
+    <div class="files" id="files">${filesHtml()}</div>
+    <div class="actions">
+      <button type="button" class="btn ghost" onclick="document.getElementById('fileInput').click()">Добавить фото или чек</button>
+      <input id="fileInput" type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="filesPicked(this)">
+    </div>
+    <button type="button" id="deliverBtn" onclick="toggleDelivered()"></button>
+    ${items.length ? '<div class="actions"><button type="button" class="btn ghost" onclick="copyList(this)">Скопировать список</button></div>' : ''}
+    <div class="status" id="saveStatus" role="status" aria-live="polite"></div>`;
+  renderDeliver(); refreshTotals();
 }
-async function load() {
+async function load(quiet) {
   if (!KEY) { showError('Ссылка некорректна. Попросите мастера прислать её заново.'); return; }
   try {
     const res = await fetch(`${WORKER_URL}/purchase?k=${encodeURIComponent(KEY)}`);
     let data = null; try { data = await res.json(); } catch (e) { /* пусто */ }
-    if (!res.ok || !data) { showError((data && data.error) || 'Не удалось открыть закупку.'); return; }
+    if (!res.ok || !data) { if (!quiet || res.status === 404) showError((data && data.error) || 'Не удалось открыть закупку.'); return; }
+    if (quiet) { if (!pending && !saving) adopt(data); return; }
     state = data;
     render();
   } catch (e) {
-    showError('Не удалось загрузить список — проверьте интернет и обновите страницу.');
+    if (!quiet) showError('Не удалось загрузить список — проверьте интернет и обновите страницу.');
   }
 }
 load();
