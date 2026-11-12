@@ -1169,3 +1169,38 @@ body.assistant-open .add-toast { z-index: 99; }
 .attachment-failed { border-color: #efc6bb; background: #fff6f4; }
 .upload-err { color: #b23a26; font-weight: 600; }
 .btn-retry-upload { flex-shrink: 0; background: #fff; border: 1px solid #cfd5dd; border-radius: 6px; padding: 4px 9px; font-size: 15px; font-weight: 700; cursor: pointer; }
+
+/* ---- закупки по объекту (calc-purchases.js) ---- */
+.purchase-spent { margin: 12px 0 4px; padding: 8px 10px; background: #eef2fb; border: 1px solid #dfe3e8; border-radius: 8px; font-size: 13px; color: #33404f; }
+.purchase-card { display: block; width: 100%; text-align: left; margin-top: 10px; padding: 10px 12px; border: 1px solid #dfe3e8; border-radius: 10px; background: #fff; cursor: pointer; font: inherit; }
+.purchase-card-title { display: block; font-weight: 700; color: #1d2733; font-size: 14px; }
+.purchase-card-sub { display: block; font-size: 12px; color: #6b7684; margin-top: 2px; }
+.purchase-badge { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 999px; background: #eef6f1; color: #1d7a4c; font-size: 11px; font-weight: 700; }
+.purchase-editor { margin-top: 10px; }
+.purchase-row { display: flex; align-items: center; gap: 5px; padding: 5px 0; border-bottom: 1px solid #eef1f4; flex-wrap: wrap; }
+.purchase-row input[type="text"], .purchase-row select { margin: 0; padding: 6px 7px; font-size: 14px; min-height: 36px; }
+.purchase-check { width: 22px; height: 22px; flex: 0 0 22px; accent-color: #1d7a4c; }
+.purchase-name { flex: 1 1 0; min-width: 0; width: 0; order: 1; box-sizing: border-box; }
+.purchase-row::after { content: ''; flex: 0 0 100%; order: 2; height: 0; }
+.purchase-qty { flex: 1 1 4.2rem; width: 4.2rem; text-align: right; order: 3; margin-left: 27px !important; }
+.purchase-unit { flex: 1 1 4.6rem; width: 4.6rem; order: 4; }
+.purchase-price { flex: 1 1 5.5rem; width: 5.5rem; text-align: right; order: 5; }
+.purchase-row .purchase-del { order: 1; }
+.purchase-del, .purchase-file-del { flex: 0 0 30px; width: 30px; height: 30px; border: 0; background: none; color: #8d97a5; font-size: 14px; cursor: pointer; }
+.purchase-row.done .purchase-name { text-decoration: line-through; color: #8d97a5; }
+.purchase-empty, .purchase-hint { font-size: 12px; color: #8d97a5; padding: 6px 0; }
+.purchase-add { display: flex; gap: 6px; margin-top: 8px; align-items: flex-start; }
+.purchase-add textarea { flex: 1; margin: 0; min-height: 42px; resize: vertical; }
+.purchase-add .hc-btn { flex: 0 0 auto; }
+.purchase-files { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 8px; }
+.purchase-file { position: relative; border: 1px solid #dfe3e8; border-radius: 8px; overflow: hidden; background: #f4f6f8; }
+.purchase-file img { display: block; width: 84px; height: 84px; object-fit: cover; }
+.purchase-file-doc { display: block; padding: 10px 34px 10px 10px; font-size: 12px; color: #33404f; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.purchase-file .purchase-file-del { position: absolute; top: 0; right: 0; background: rgba(255,255,255,.85); border-radius: 0 0 0 8px; }
+.purchase-file-up { padding: 8px 10px; font-size: 12px; color: #33404f; display: flex; gap: 8px; align-items: center; max-width: 100%; }
+.purchase-up-err { color: #c2361f; padding-right: 26px; }
+.purchase-upload-btn { display: inline-flex; align-items: center; justify-content: center; }
+.purchase-flag { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; font-weight: 400; text-transform: none; letter-spacing: 0; color: #33404f; }
+.purchase-flag input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: #1d7a4c; }
+.purchase-delivered { padding: 10px 12px; border: 1px solid #dfe3e8; border-radius: 10px; font-weight: 700; }
+.purchase-delivered.on { background: #eef6f1; border-color: #b9dcc8; color: #1d7a4c; }
