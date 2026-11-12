@@ -3221,7 +3221,8 @@ const info = getBalanceInfo(r);
 if (info.status === 'owes') owed += info.balance;
 if (info.status === 'over') overpaid += info.balance;
 });
-return { count: records.length, total, paid, owed, overpaid };
+const materials = typeof objectMaterialsSpent === 'function' ? objectMaterialsSpent((cloudData.objects || []).find(o => o.id === objectId)) : 0;
+return { count: records.length, total, paid, owed, overpaid, materials };
 }
 
 function populateObjectSelect() {
@@ -3436,6 +3437,7 @@ container.appendChild(card);
 function openObjectDetail(id) {
 currentObjectId = id;
 objectHistorySubTab = 'invoice';
+if (typeof purchaseOpenId !== 'undefined') purchaseOpenId = null;
 document.getElementById('objectsListView').style.display = 'none';
 document.getElementById('objectDetailView').style.display = 'block';
 renderObjectDetail();
@@ -3509,6 +3511,7 @@ ${obj.materials ? escapeHtml(obj.materials).replace(/\n/g, '<br>') : '<span styl
 <div class="object-stat-box" style="background:#eef6f1;">Оплачено<b style="color:#1d7a4c;">${stats.paid.toLocaleString('ru-RU')} ₽</b></div>
 ${stats.owed > 0 ? `<div class="object-stat-box" style="background:#fbeeea;">Должен<b style="color:#c2361f;">${stats.owed.toLocaleString('ru-RU')} ₽</b></div>` : ''}
 ${stats.overpaid > 0 ? `<div class="object-stat-box" style="background:#fff4d1;">Переплата<b style="color:#14181f;">${stats.overpaid.toLocaleString('ru-RU')} ₽</b></div>` : ''}
+${stats.materials > 0 && !isCurrentClient() ? `<div class="object-stat-box" id="objectMaterialsStat" style="background:#eef2fb;">На материал потрачено<b>${stats.materials.toLocaleString('ru-RU')} ₽</b></div>` : ''}
 </div>
 
 ${!isCurrentClient() ? `<button type="button" class="btn btn-primary" style="margin-top:14px;" onclick="goToCalcForObject('${obj.id}')">Выставить счёт по объекту</button>
@@ -3525,9 +3528,11 @@ ${(obj.measurements || []).length ? `<details style="margin:8px 0;"><summary sty
 <div class="tab-menu" style="margin-top:16px;">
 <button type="button" class="tab-btn ${objectHistorySubTab === 'invoice' ? 'active' : ''}" onclick="switchObjectHistoryTab('invoice')">Счета (${invoiceRecords.length})</button>
 <button type="button" class="tab-btn ${objectHistorySubTab === 'estimate' ? 'active' : ''}" onclick="switchObjectHistoryTab('estimate')">Расчёты (${estimateRecords.length})</button>
+${typeof purchasesTabHtml === 'function' && !isCurrentClient() ? `<button type="button" class="tab-btn ${objectHistorySubTab === 'purchase' ? 'active' : ''}" id="objectPurchasesTabBtn" onclick="switchObjectHistoryTab('purchase')">Закупки (${(obj.purchases || []).length})</button>` : ''}
 </div>
 <div id="objectHistoryList" style="display:${objectHistorySubTab === 'invoice' ? 'block' : 'none'};">${invoiceHtml}</div>
 <div id="objectEstimateList" style="display:${objectHistorySubTab === 'estimate' ? 'block' : 'none'};">${estimateHtml}</div>
+${typeof purchasesTabHtml === 'function' && !isCurrentClient() && objectHistorySubTab === 'purchase' ? `<div id="objectPurchaseList">${purchasesTabHtml(obj)}</div>` : ''}
 `;
 }
 

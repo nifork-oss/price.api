@@ -760,6 +760,37 @@ const handler = {
         });
       }
 
+      // Закупка по ссылке (без входа) — для purchase.html: список материалов для снабженца или прораба.
+      // Ищем по ключу ссылки (purchase.share, его создаёт кабинет при отправке). Отдаём только сам список
+      // и название объекта — без сумм, чеков и остальных данных аккаунта.
+      if (path === "/purchase" && request.method === "GET") {
+        if (await isRateLimited(env.PUBLIC_LIMITER, "purchase:" + clientIp(request))) return tooManyRequests();
+        const key = url.searchParams.get("k") || "";
+        if (key.length < 16) return json({ error: "Ссылка не действует." }, 404);
+        const record = await readBin(env);
+        const spaces = [record.objects || [], ...Object.values(record.companyData || {}).map((cd) => (cd && Array.isArray(cd.objects) ? cd.objects : []))];
+        let obj = null, p = null;
+        for (const objects of spaces) {
+          for (const o of objects) {
+            const found = (o && Array.isArray(o.purchases) ? o.purchases : []).find((x) => x && x.share === key);
+            if (found) { obj = o; p = found; break; }
+          }
+          if (p) break;
+        }
+        if (!p) return json({ error: "Закупка не найдена. Возможно, её удалили или ссылку отозвали." }, 404);
+        return json({
+          title: String(p.title || ""),
+          to: String(p.to || ""),
+          note: String(p.note || ""),
+          createdAt: Number(p.createdAt) || 0,
+          delivered: !!p.delivered,
+          deliveredAt: Number(p.deliveredAt) || 0,
+          objectName: String(obj.name || ""),
+          address: String(obj.address || ""),
+          items: (Array.isArray(p.items) ? p.items : []).map((it) => ({ name: String((it && it.name) || ""), qty: String((it && it.qty) ?? ""), unit: String((it && it.unit) || ""), done: !!(it && it.done) })),
+        });
+      }
+
       // Страница прораба по ссылке-приглашению (без входа): объект и его счета с решениями
       if (path === "/foreman" && request.method === "GET") {
         if (await isRateLimited(env.PUBLIC_LIMITER, "foreman:" + clientIp(request))) return tooManyRequests();

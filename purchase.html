@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<meta name="description" content="Список материалов для закупки по объекту: что и сколько купить. Открывается без регистрации.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Кабинет мастера">
+<meta property="og:title" content="Список закупки">
+<meta property="og:description" content="Материалы по объекту: что и сколько купить. Открывается с телефона, без регистрации.">
+<meta property="og:image" content="https://moysite.duckdns.org/og-purchase.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://moysite.duckdns.org/og-purchase.png">
+<title>Список закупки — Кабинет мастера</title>
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink: #14181f; --ink2: #5a6470; --ink3: #8a929c; --line: #d9dde2; --paper: #f4f6f8; --acc: #ffc93c; --ok: #1d7a4c; }
+* { box-sizing: border-box; }
+body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; margin: 0; padding: 16px 16px 40px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.container { max-width: 640px; margin: 0 auto; }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.brand-logo { width: 36px; height: 36px; border-radius: 9px; background: var(--ink); color: var(--acc); display: grid; place-items: center; font-weight: 800; font-size: 20px; }
+.brand b { display: block; font-size: 15px; line-height: 1.1; }
+.brand span { font-size: 12px; color: var(--ink3); }
+.loader { text-align: center; color: var(--ink2); padding: 60px 0; font-size: 14px; }
+.error-box { border: 2px solid var(--ink); padding: 22px; text-align: center; font-size: 14px; margin-top: 30px; line-height: 1.5; }
+.hello { border-top: 2px solid var(--ink); border-bottom: 1px solid var(--line); padding: 14px 0 16px; margin-bottom: 6px; }
+.hello small { display: inline-block; background: var(--acc); font-size: 11px; font-weight: 700; padding: 3px 8px; letter-spacing: .02em; }
+.hello h1 { margin: 8px 0 4px; font-size: 26px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.15; }
+.hello p { margin: 2px 0; font-size: 13.5px; color: var(--ink2); }
+.summary { display: flex; gap: 8px; margin: 12px 0 2px; flex-wrap: wrap; }
+.sum-chip { font-size: 12.5px; font-weight: 600; border: 1px solid var(--line); padding: 5px 10px; border-radius: 999px; color: var(--ink2); }
+.sum-chip b { color: var(--ink); }
+.sum-chip.ok { color: var(--ok); border-color: #b9dcc8; background: #eef6f1; }
+.item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.item:last-child { border-bottom: none; }
+.item-n { flex: 0 0 1.6rem; color: var(--ink3); font-size: 13px; padding-top: 2px; }
+.item-name { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.item-qty { font-weight: 700; white-space: nowrap; }
+.item.done .item-name { text-decoration: line-through; color: var(--ink3); }
+.item.done .item-qty { color: var(--ok); }
+.note { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); background: var(--paper); font-size: 13.5px; color: #33404f; border-radius: 8px; white-space: pre-wrap; }
+.actions { display: grid; gap: 10px; margin-top: 16px; }
+.btn { min-height: 50px; border-radius: 8px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; border: 2px solid var(--ink); background: var(--ink); color: #fff; }
+.ruler { height: 12px; margin-top: 30px; background: repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 10px); opacity: .25; }
+.foot { text-align: center; font-size: 12px; color: var(--ink3); margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="brand"><div class="brand-logo">₽</div><div><b>Кабинет мастера</b><span>Сметы и счета онлайн</span></div></div>
+  <div id="loadingState" class="loader">Загружаю список закупки…</div>
+  <div id="errorState" class="error-box" style="display:none;"></div>
+  <div id="app" style="display:none;"></div>
+  <div class="ruler"></div>
+  <div class="foot">Список составлен в «Кабинете мастера». Отметки «куплено» ставит мастер.</div>
+</div>
+<script>
+// Сервер: на moysite.duckdns.org — через nginx этого же VPS (/price-api/ →
+// price-api.nifork.workers.dev), на остальных адресах (github.io) — напрямую
+const WORKER_URL = location.hostname === "moysite.duckdns.org"
+  ? location.origin + "/price-api"
+  : "https://price-api.nifork.workers.dev";
+const KEY = new URLSearchParams(location.search).get('k') || '';
+let state = null;
+
+function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+function showError(msg) {
+  document.getElementById('loadingState').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  const box = document.getElementById('errorState');
+  box.textContent = msg;
+  box.style.display = 'block';
+}
+function listText() {
+  const s = state, lines = [`Закупка: ${s.title || 'материалы'}`];
+  if (s.objectName) lines.push(`Объект: ${s.objectName}${s.address ? ', ' + s.address : ''}`);
+  lines.push('');
+  s.items.forEach((it, i) => lines.push(`${i + 1}. ${it.name}${it.qty ? ' — ' + it.qty + ' ' + (it.unit || '') : ''}`.trim()));
+  if (s.note) lines.push('', s.note);
+  return lines.join('\n');
+}
+async function copyList(btn) {
+  try { await navigator.clipboard.writeText(listText()); btn.textContent = 'Скопировано ✓'; }
+  catch (e) { prompt('Скопируйте список:', listText()); }
+}
+function render() {
+  const s = state, items = s.items || [], done = items.filter(it => it.done).length;
+  document.getElementById('loadingState').style.display = 'none';
+  document.title = (s.title || 'Список закупки') + ' — Кабинет мастера';
+  const app = document.getElementById('app');
+  app.style.display = 'block';
+  app.innerHTML = `<div class="hello">
+      <small>СПИСОК ЗАКУПКИ</small>
+      <h1>${esc(s.title || 'Материалы')}</h1>
+      ${s.objectName ? `<p>Объект: ${esc(s.objectName)}${s.address ? ', ' + esc(s.address) : ''}</p>` : ''}
+      ${s.to ? `<p>Кому: ${esc(s.to)}</p>` : ''}
+      <div class="summary"><span class="sum-chip">Позиций <b>${items.length}</b></span>${done ? `<span class="sum-chip">Куплено <b>${done}</b></span>` : ''}${s.delivered ? '<span class="sum-chip ok">Доставлено на объект</span>' : ''}</div>
+    </div>
+    ${items.length ? items.map((it, i) => `<div class="item${it.done ? ' done' : ''}"><span class="item-n">${i + 1}.</span><span class="item-name">${esc(it.name)}</span><span class="item-qty">${it.done ? '✓ ' : ''}${it.qty ? esc(it.qty) + ' ' + esc(it.unit || '') : ''}</span></div>`).join('') : '<div class="loader">В списке пока нет материалов.</div>'}
+    ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
+    ${items.length ? '<div class="actions"><button type="button" class="btn" onclick="copyList(this)">Скопировать список</button></div>' : ''}`;
+}
+async function load() {
+  if (!KEY) { showError('Ссылка некорректна. Попросите мастера прислать её заново.'); return; }
+  try {
+    const res = await fetch(`${WORKER_URL}/purchase?k=${encodeURIComponent(KEY)}`);
+    let data = null; try { data = await res.json(); } catch (e) { /* пусто */ }
+    if (!res.ok || !data) { showError((data && data.error) || 'Не удалось открыть закупку.'); return; }
+    state = data;
+    render();
+  } catch (e) {
+    showError('Не удалось загрузить список — проверьте интернет и обновите страницу.');
+  }
+}
+load();
+</script>
+</body>
+</html>
