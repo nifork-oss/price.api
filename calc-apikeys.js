@@ -72,8 +72,17 @@ fresh.innerHTML = st.fresh ? `<div class="api-key-fresh">
 <div style="display:flex; gap:8px; flex-wrap:wrap;">
 <button type="button" class="btn btn-primary btn-sm" onclick="copyApiGuide()">🤖 Скопировать для ИИ-агента</button>
 <button type="button" class="btn btn-ghost btn-sm" onclick="copyApiText(apiKeysState.fresh.key, 'Ключ скопирован')">Только ключ</button>
+<button type="button" class="btn btn-ghost btn-sm" onclick="copyApiText(mcpUrl(apiKeysState.fresh.key), 'Адрес скопирован — добавьте его в Claude как свой коннектор')">🔌 Адрес для Claude (MCP)</button>
 </div>
+<p>Адрес для Claude: Настройки → Коннекторы → «Добавить свой коннектор», вставить адрес. Claude сможет смотреть объекты, замеры, сметы и счета, но ничего не меняет.</p>
 </div>` : '';
+}
+
+// Адрес MCP-сервера для Claude (коннектор). Ключ — в адресе: в claude.ai у
+// своего коннектора нельзя задать заголовок. Claude ходит к серверу напрямую,
+// поэтому всегда адрес workers.dev, а не прокси на VPS.
+function mcpUrl(key) {
+return 'https://price-api.nifork.workers.dev/api/mcp/' + key;
 }
 
 async function createApiKeyUi() {

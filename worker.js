@@ -2626,7 +2626,7 @@ function apiCorsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-API-Key",
+    "Access-Control-Allow-Headers": "Content-Type, X-API-Key, Authorization, Mcp-Protocol-Version, Mcp-Session-Id",
   };
 }
 
@@ -2952,6 +2952,7 @@ async function readApiBody(request, max) {
 
 async function handleApi(request, env, url) {
   const path = url.pathname;
+  if (path === "/api/mcp" || path.startsWith("/api/mcp/")) return handleMcp(request, env, url);
   if ((path === "/api/v1" || path === "/api/v1/help") && request.method === "GET") {
     return new Response(apiGuide(url.origin), { headers: { "Content-Type": "text/plain; charset=utf-8", ...apiCorsHeaders() } });
   }
@@ -3237,6 +3238,155 @@ async function handleApi(request, env, url) {
   }
 
   return apiJson({ error: "Not found" }, 404);
+}
+
+/* ============== MCP-сервер (для Claude и других ИИ-клиентов) ============== */
+
+// Тот же доступ, что у API по ключу, но по протоколу MCP (Streamable HTTP,
+// без сессий: каждый POST — самостоятельный JSON-RPC-запрос). Пока только чтение.
+// Адрес: /api/mcp/<ключ> — в claude.ai у своего коннектора нельзя задать
+// заголовок, поэтому ключ в адресе. Другие клиенты могут слать ключ в
+// заголовке X-API-Key или Authorization: Bearer на /api/mcp.
+// Инструменты просто вызывают обработчики /api/v1, поэтому права, «свои
+// объекты» и формат ответов — те же, что у API.
+const MCP_PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
+const MCP_BODY_MAX = 100000;
+
+const MCP_TOOLS = [
+  {
+    name: "whoami",
+    title: "Чей кабинет",
+    description: "Логин мастера и название компании, к чьему кабинету подключён ключ.",
+    inputSchema: { type: "object", properties: {} },
+    path: () => "/api/v1/me",
+  },
+  {
+    name: "list_objects",
+    title: "Объекты",
+    description: "Объекты мастера: id, название, заказчик, адрес, помещения (id, название, этаж) и сколько присланных замеров ждут проверки.",
+    inputSchema: { type: "object", properties: {} },
+    path: () => "/api/v1/objects",
+  },
+  {
+    name: "get_object",
+    title: "Объект с замерами",
+    description: "Объект подробно: помещения с высотой и посчитанными калькулятором объёмами (surfaces: стены, потолок, пол, откосы и т. п. — значение, единица, подпись), доступ на объект, материалы и замеры, которые мастер ещё не проверил.",
+    inputSchema: { type: "object", properties: { id: { type: "string", description: "id объекта из list_objects" } }, required: ["id"] },
+    path: (a) => "/api/v1/objects/" + encodeURIComponent(a.id),
+  },
+  {
+    name: "list_estimates",
+    title: "Сметы и счета",
+    description: "Последние 50 смет и счетов мастера с позициями и итогами. docType: estimate — только сметы, invoice — только счета, без него — всё.",
+    inputSchema: { type: "object", properties: { docType: { type: "string", enum: ["estimate", "invoice"] } } },
+    path: (a) => "/api/v1/estimates" + (a.docType ? "?docType=" + encodeURIComponent(a.docType) : ""),
+  },
+  {
+    name: "get_estimate",
+    title: "Смета или счёт",
+    description: "Одна смета или счёт: заказчик, адрес, позиции (название, цена, количество, единица, помещение), скидка, итог, связанные документы и ссылка для заказчика.",
+    inputSchema: { type: "object", properties: { id: { type: "string", description: "id из list_estimates" } }, required: ["id"] },
+    path: (a) => "/api/v1/estimates/" + encodeURIComponent(a.id),
+  },
+  {
+    name: "list_services",
+    title: "Прайс",
+    description: "Прайс мастера: услуги с ценой и разделом.",
+    inputSchema: { type: "object", properties: {} },
+    path: () => "/api/v1/services",
+  },
+];
+
+const MCP_INSTRUCTIONS = `«Кабинет мастера» — калькулятор смет мастера по отделке.
+Через эти инструменты можно смотреть его объекты с замерами помещений, сметы, счета и прайс. Изменять ничего нельзя.
+Суммы — в рублях, объёмы — в единицах калькулятора (м², пог. м, шт.).`;
+
+function mcpKey(request, url) {
+  const m = url.pathname.match(/^\/api\/mcp\/([^/]+)\/?$/);
+  if (m) return decodeURIComponent(m[1]);
+  const bearer = (request.headers.get("Authorization") || "").match(/^Bearer\s+(\S+)$/i);
+  return (request.headers.get("X-API-Key") || (bearer && bearer[1]) || "").trim();
+}
+
+function mcpReply(body, status = 200) {
+  return new Response(body === null ? null : JSON.stringify(body), {
+    status,
+    headers: { ...(body === null ? {} : { "Content-Type": "application/json" }), ...apiCorsHeaders() },
+  });
+}
+
+async function mcpCallTool(env, url, key, name, args) {
+  const tool = MCP_TOOLS.find((t) => t.name === name);
+  if (!tool) return { error: { code: -32602, message: "Нет такого инструмента: " + name } };
+  const a = args && typeof args === "object" ? args : {};
+  for (const req of tool.inputSchema.required || []) {
+    if (typeof a[req] !== "string" || !a[req].trim()) return { result: mcpText({ error: `Нужен параметр ${req}` }, true) };
+  }
+  const res = await handleApi(new Request(url.origin + tool.path(a), { headers: { "X-API-Key": key } }), env, new URL(url.origin + tool.path(a)));
+  let data;
+  try { data = await res.json(); } catch (e) { data = { error: "Сервер вернул не JSON" }; }
+  return { result: mcpText(data, res.status >= 400) };
+}
+
+function mcpText(data, isError) {
+  return { content: [{ type: "text", text: JSON.stringify(data, null, 1) }], ...(isError ? { isError: true } : {}) };
+}
+
+async function mcpOne(env, url, key, msg) {
+  if (!msg || typeof msg !== "object" || msg.jsonrpc !== "2.0" || typeof msg.method !== "string") {
+    return { jsonrpc: "2.0", id: msg && msg.id !== undefined ? msg.id : null, error: { code: -32600, message: "Invalid Request" } };
+  }
+  const isNotification = msg.id === undefined;
+  const p = msg.params && typeof msg.params === "object" ? msg.params : {};
+  let out;
+  if (msg.method === "initialize") {
+    const asked = String(p.protocolVersion || "");
+    out = { result: {
+      protocolVersion: MCP_PROTOCOLS.includes(asked) ? asked : MCP_PROTOCOLS[0],
+      capabilities: { tools: { listChanged: false } },
+      serverInfo: { name: "kabinet-mastera", title: "Кабинет мастера", version: "1.0.0" },
+      instructions: MCP_INSTRUCTIONS,
+    } };
+  } else if (msg.method === "ping") {
+    out = { result: {} };
+  } else if (msg.method === "tools/list") {
+    out = { result: { tools: MCP_TOOLS.map(({ path, ...t }) => ({ ...t, annotations: { readOnlyHint: true, openWorldHint: false } })) } };
+  } else if (msg.method === "tools/call") {
+    out = await mcpCallTool(env, url, key, String(p.name || ""), p.arguments);
+  } else if (msg.method.startsWith("notifications/")) {
+    return null;
+  } else {
+    out = { error: { code: -32601, message: "Method not found: " + msg.method } };
+  }
+  return isNotification ? null : { jsonrpc: "2.0", id: msg.id, ...out };
+}
+
+async function handleMcp(request, env, url) {
+  if (request.method !== "POST") {
+    // Поток событий от сервера (GET) не нужен: уведомлений у нас нет
+    const r = mcpReply({ error: "MCP: только POST" }, 405);
+    r.headers.set("Allow", "POST, OPTIONS");
+    return r;
+  }
+  const key = mcpKey(request, url);
+  const record = await readBin(env);
+  const found = await findApiKey(record, new Request(url.origin, { headers: { "X-API-Key": key } }));
+  if (!found) {
+    if (await isRateLimited(env.AUTH_LIMITER, "apikey-ip:" + clientIp(request))) return mcpReply({ error: "Слишком много попыток. Подождите минуту." }, 429);
+    return mcpReply({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Нужен действующий ключ: адрес вида /api/mcp/<ключ> (ключ создаётся в кабинете, «Ключи API»)" } }, 401);
+  }
+  const raw = await request.text();
+  if (raw.length > MCP_BODY_MAX) return mcpReply({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Слишком большой запрос" } }, 413);
+  let msg;
+  try { msg = JSON.parse(raw); } catch (e) { return mcpReply({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }, 400); }
+  if (Array.isArray(msg)) {
+    if (!msg.length) return mcpReply({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid Request" } }, 400);
+    const out = [];
+    for (const m of msg.slice(0, 20)) { const r = await mcpOne(env, url, key, m); if (r) out.push(r); }
+    return out.length ? mcpReply(out) : mcpReply(null, 202);
+  }
+  const r = await mcpOne(env, url, key, msg);
+  return r ? mcpReply(r) : mcpReply(null, 202);
 }
 
 /* ============== хранилище: Durable Object ============== */
