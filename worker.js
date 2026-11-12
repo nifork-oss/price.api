@@ -595,6 +595,64 @@ const FOREMAN_TOKEN_RE = /^pr_[0-9a-f]{48}$/;
 const FOREMAN_DOCS_MAX = 50;
 const FOREMAN_ITEMS_MAX = 200;
 
+// ---- Закупка по ссылке (purchase.html) ----
+const PURCHASE_ITEMS_MAX = 500;
+const PURCHASE_LINK_FILES_MAX = 20;
+
+// Закупка по ключу ссылки: ищем в общих объектах и в объектах каждой компании
+function findPurchaseByShare(record, key) {
+  if (typeof key !== "string" || key.length < 16) return null;
+  const spaces = [["main", record.objects || []], ...Object.entries(record.companyData || {}).map(([login, cd]) => [COMPANY_PREFIX + login, cd && Array.isArray(cd.objects) ? cd.objects : []])];
+  for (const [space, objects] of spaces) {
+    for (const obj of objects) {
+      const p = (obj && Array.isArray(obj.purchases) ? obj.purchases : []).find((x) => x && x.share === key);
+      if (p) return { space, obj, p };
+    }
+  }
+  return null;
+}
+
+function purchaseLinkView(obj, p) {
+  const price = (v) => (v === "" || v === null || v === undefined ? "" : Number(String(v).replace(/\s/g, "").replace(",", ".")) || 0);
+  return {
+    title: String(p.title || ""),
+    to: String(p.to || ""),
+    note: String(p.note || ""),
+    createdAt: Number(p.createdAt) || 0,
+    delivered: !!p.delivered,
+    deliveredAt: Number(p.deliveredAt) || 0,
+    objectName: String(obj.name || ""),
+    address: String(obj.address || ""),
+    total: price(p.total),
+    items: (Array.isArray(p.items) ? p.items : []).map((it) => ({ id: String((it && it.id) ?? ""), name: String((it && it.name) || ""), qty: String((it && it.qty) ?? ""), unit: String((it && it.unit) || ""), done: !!(it && it.done), price: price(it && it.price) })),
+    files: (Array.isArray(p.files) ? p.files : []).filter((f) => f && f.url).map((f) => ({ url: String(f.url), name: String(f.name || ""), type: String(f.type || ""), mine: f.by === "link", id: f.by === "link" ? String(f.publicId || "") : "" })),
+  };
+}
+
+// Мастер сохраняет объект целиком. Если его страница ещё не видела отметок, поставленных по ссылке
+// (linkAt на сервере новее), переносим их в сохраняемую запись — иначе они бы затёрлись.
+function keepPurchaseLinkEdits(stored, incoming) {
+  const old = new Map((Array.isArray(stored) ? stored : []).filter((o) => o && o.id != null).map((o) => [String(o.id), o]));
+  for (const obj of Array.isArray(incoming) ? incoming : []) {
+    const was = obj && obj.id != null ? old.get(String(obj.id)) : null;
+    if (!was || !Array.isArray(was.purchases) || !Array.isArray(obj.purchases)) continue;
+    for (const p of obj.purchases) {
+      const wp = p && was.purchases.find((x) => x && x.id === p.id);
+      if (!wp || !((Number(wp.linkAt) || 0) > (Number(p.linkAt) || 0))) continue;
+      for (const it of Array.isArray(p.items) ? p.items : []) {
+        const wi = it && (Array.isArray(wp.items) ? wp.items : []).find((x) => x && x.id === it.id);
+        if (wi) { it.done = !!wi.done; if (wi.price !== undefined) it.price = wi.price; }
+      }
+      if (wp.total !== undefined) p.total = wp.total;
+      p.delivered = !!wp.delivered;
+      p.deliveredAt = wp.deliveredAt || 0;
+      const mine = (Array.isArray(p.files) ? p.files : []).filter((f) => f && f.by !== "link");
+      p.files = [...mine, ...(Array.isArray(wp.files) ? wp.files : []).filter((f) => f && f.by === "link")];
+      p.linkAt = wp.linkAt;
+    }
+  }
+}
+
 function spaceData(record, space) {
   if (space === "main") return { objects: Array.isArray(record.objects) ? record.objects : [], history: Array.isArray(record.history) ? record.history : [] };
   const cd = (record.companyData || {})[String(space).slice(COMPANY_PREFIX.length)] || {};
@@ -761,34 +819,87 @@ const handler = {
       }
 
       // Закупка по ссылке (без входа) — для purchase.html: список материалов для снабженца или прораба.
-      // Ищем по ключу ссылки (purchase.share, его создаёт кабинет при отправке). Отдаём только сам список
-      // и название объекта — без сумм, чеков и остальных данных аккаунта.
+      // Ищем по ключу ссылки (purchase.share, его создаёт кабинет при отправке). Отдаём только саму закупку
+      // и название объекта — без остальных данных аккаунта.
       if (path === "/purchase" && request.method === "GET") {
         if (await isRateLimited(env.PUBLIC_LIMITER, "purchase:" + clientIp(request))) return tooManyRequests();
-        const key = url.searchParams.get("k") || "";
-        if (key.length < 16) return json({ error: "Ссылка не действует." }, 404);
+        const found = findPurchaseByShare(await readBin(env), url.searchParams.get("k") || "");
+        if (!found) return json({ error: "Закупка не найдена. Возможно, её удалили или ссылку отозвали." }, 404);
+        return json(purchaseLinkView(found.obj, found.p));
+      }
+
+      // Отметки по ссылке: «куплено», сумма за позицию и за весь закуп, «доставлено на объект»,
+      // удаление своего (загруженного по ссылке) фото. Менять состав списка по ссылке нельзя.
+      if (path === "/purchase" && request.method === "POST") {
+        if (await isRateLimited(env.AUTH_LIMITER, "purchase-w:" + clientIp(request))) return tooManyRequests();
+        let body;
+        try { body = await request.json(); } catch (e) { return json({ error: "Некорректные данные" }, 400); }
         const record = await readBin(env);
-        const spaces = [record.objects || [], ...Object.values(record.companyData || {}).map((cd) => (cd && Array.isArray(cd.objects) ? cd.objects : []))];
-        let obj = null, p = null;
-        for (const objects of spaces) {
-          for (const o of objects) {
-            const found = (o && Array.isArray(o.purchases) ? o.purchases : []).find((x) => x && x.share === key);
-            if (found) { obj = o; p = found; break; }
-          }
-          if (p) break;
+        const found = findPurchaseByShare(record, url.searchParams.get("k") || "");
+        if (!found) return json({ error: "Закупка не найдена. Возможно, её удалили или ссылку отозвали." }, 404);
+        const { obj, p } = found;
+        const money = (v) => {
+          if (v === "" || v === null) return "";
+          const n = Math.round(Number(String(v).replace(/\s/g, "").replace(",", ".")) * 100) / 100;
+          return Number.isFinite(n) && n >= 0 && n < 1e10 ? n : undefined;
+        };
+        let changed = false;
+        const edits = body && Array.isArray(body.items) ? body.items.slice(0, PURCHASE_ITEMS_MAX) : [];
+        for (const e of edits) {
+          const it = (Array.isArray(p.items) ? p.items : []).find((x) => x && String(x.id) === String(e && e.id));
+          if (!it) continue;
+          if (typeof e.done === "boolean" && !!it.done !== e.done) { it.done = e.done; changed = true; }
+          if (e.price !== undefined) { const v = money(e.price); if (v !== undefined && it.price !== v) { it.price = v; changed = true; } }
         }
-        if (!p) return json({ error: "Закупка не найдена. Возможно, её удалили или ссылку отозвали." }, 404);
-        return json({
-          title: String(p.title || ""),
-          to: String(p.to || ""),
-          note: String(p.note || ""),
-          createdAt: Number(p.createdAt) || 0,
-          delivered: !!p.delivered,
-          deliveredAt: Number(p.deliveredAt) || 0,
-          objectName: String(obj.name || ""),
-          address: String(obj.address || ""),
-          items: (Array.isArray(p.items) ? p.items : []).map((it) => ({ name: String((it && it.name) || ""), qty: String((it && it.qty) ?? ""), unit: String((it && it.unit) || ""), done: !!(it && it.done) })),
-        });
+        if (body && body.total !== undefined) { const v = money(body.total); if (v !== undefined && p.total !== v) { p.total = v; changed = true; } }
+        if (body && typeof body.delivered === "boolean" && !!p.delivered !== body.delivered) {
+          p.delivered = body.delivered;
+          p.deliveredAt = body.delivered ? Date.now() : 0;
+          changed = true;
+        }
+        if (body && typeof body.removeFile === "string" && body.removeFile) {
+          const files = Array.isArray(p.files) ? p.files : [];
+          const f = files.find((x) => x && x.by === "link" && x.publicId === body.removeFile);
+          if (f) {
+            p.files = files.filter((x) => x !== f);
+            changed = true;
+            if (cloudinaryConfigured(env)) { try { await deleteFromCloudinary(env, f.publicId, f.resourceType || "image"); } catch (e) { console.error("Cloudinary delete failed:", e); } }
+          }
+        }
+        if (changed) {
+          p.linkAt = Math.max(Date.now(), (Number(p.linkAt) || 0) + 1);
+          bumpRev(record, found.space, ["objects"]);
+          await writeBin(env, record);
+        }
+        return json(purchaseLinkView(obj, p));
+      }
+
+      // Фото товара или чек по ссылке закупки (без входа): только картинки и PDF, не больше PURCHASE_LINK_FILES_MAX.
+      if (path === "/purchase/upload" && request.method === "POST") {
+        if (await isRateLimited(env.AUTH_LIMITER, "purchase-up:" + clientIp(request))) return tooManyRequests();
+        const key = url.searchParams.get("k") || "";
+        if (!findPurchaseByShare(await readBin(env), key)) return json({ error: "Закупка не найдена. Возможно, её удалили или ссылку отозвали." }, 404);
+        if (!cloudinaryConfigured(env)) return json({ error: "Хранилище файлов не подключено." }, 500);
+        let file = null;
+        try { file = (await request.formData()).get("file"); } catch (e) { /* не форма */ }
+        if (!file || typeof file === "string") return json({ error: "Файл не найден в запросе" }, 400);
+        if (!/^image\//.test(file.type || "") && file.type !== "application/pdf") return json({ error: "Можно загрузить только фото или PDF" }, 400);
+        if (file.size > MAX_REPORT_FILE_SIZE) return json({ error: `Файл слишком большой (максимум ${Math.round(MAX_REPORT_FILE_SIZE / 1024 / 1024)} МБ)` }, 400);
+        const count = (x) => (Array.isArray(x.files) ? x.files : []).filter((f) => f && f.by === "link").length;
+        const before = findPurchaseByShare(await readBin(env), key);
+        if (count(before.p) >= PURCHASE_LINK_FILES_MAX) return json({ error: `По ссылке можно загрузить не больше ${PURCHASE_LINK_FILES_MAX} файлов` }, 400);
+        let result;
+        try { result = await uploadToCloudinary(env, file); } catch (e) { return json({ error: "Не удалось загрузить файл в облако: " + e.message }, 502); }
+        // Загрузка шла долго — берём свежие данные, чтобы не затереть чужие правки
+        const record = await readBin(env);
+        const found = findPurchaseByShare(record, key);
+        if (!found) return json({ error: "Закупка не найдена. Возможно, её удалили или ссылку отозвали." }, 404);
+        if (!Array.isArray(found.p.files)) found.p.files = [];
+        found.p.files.push({ url: result.secure_url, publicId: result.public_id, resourceType: result.resource_type, name: String(file.name || "file").slice(0, 150), size: file.size, type: file.type || "", by: "link" });
+        found.p.linkAt = Math.max(Date.now(), (Number(found.p.linkAt) || 0) + 1);
+        bumpRev(record, found.space, ["objects"]);
+        await writeBin(env, record);
+        return json(purchaseLinkView(found.obj, found.p));
       }
 
       // Страница прораба по ссылке-приглашению (без входа): объект и его счета с решениями
@@ -1410,7 +1521,7 @@ const handler = {
           const cdOps = { objects: readOps(incoming, "objects"), history: readOps(incoming, "history") };
           const fields = ["services", "objects", "history"].filter((f) => Array.isArray(incoming[f]) && !cdOps[f]);
           if (baseRev !== null && hasConflict(record, key, baseRev, fields)) return conflictResponse();
-          if (cdOps.objects) cd.objects = applyOps(cd.objects, cdOps.objects, true);
+          if (cdOps.objects) { keepPurchaseLinkEdits(cd.objects, cdOps.objects.upsert); cd.objects = applyOps(cd.objects, cdOps.objects, true); }
           if (cdOps.history) cd.history = applyOps(cd.history, cdOps.history, true);
           const opFields = ["objects", "history"].filter((f) => cdOps[f]);
           for (const f of fields) {
@@ -1519,7 +1630,7 @@ const handler = {
         };
         if (mainOps.history) record.history = applyOps(record.history, mainOps.history, true);
         else if (Array.isArray(incoming.history)) record.history = keepMissing(record.history, incoming.history);
-        if (mainOps.objects) record.objects = applyOps(record.objects, mainOps.objects, true);
+        if (mainOps.objects) { keepPurchaseLinkEdits(record.objects, mainOps.objects.upsert); record.objects = applyOps(record.objects, mainOps.objects, true); }
         else if (Array.isArray(incoming.objects)) record.objects = keepMissing(record.objects, incoming.objects);
         if (Array.isArray(incoming.pirogHistory)) {
           // Как и с services: мастер обычно просто пересылает то, что получил

@@ -615,19 +615,112 @@ test('сохранение переписывает только изменив�
   assert.deepStrictEqual(written.filter(k => !k.startsWith('snap:')).sort(), ['cd:ivan', 'revs']);
 });
 
-test('закупка по ссылке: открывается без входа по ключу, без сумм и чеков; короткий или чужой ключ — 404', async () => {
+test('закупка по ссылке: открывается без входа по ключу; короткий или чужой ключ — 404', async () => {
   const { call, token } = await setup();
   const page = await call('GET', '/appdata', { token });
   const share = 'k'.repeat(20) + 'abc123';
   const obj = { id: 'o-pur', name: 'Квартира', address: 'ул. Ленина, 5', client: 'Анна', purchases: [{ id: 'p1', share, title: 'Черновые материалы', to: 'Олег', note: 'к пятнице', createdAt: 5, delivered: true,
-    total: 9000, files: [{ url: 'https://files.test/chek.jpg', name: 'чек' }], items: [{ id: 'i1', name: 'Грунтовка', qty: '10', unit: 'л', done: true, price: 1250 }, { id: 'i2', name: 'Валик', qty: '', unit: 'шт.' }] }] };
+    total: 9000, files: [{ url: 'https://files.test/chek.jpg', name: 'чек', publicId: 'm1' }], items: [{ id: 'i1', name: 'Грунтовка', qty: '10', unit: 'л', done: true, price: 1250 }, { id: 'i2', name: 'Валик', qty: '', unit: 'шт.' }] }] };
   const put = await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, ops: { objects: { upsert: [obj], delete: [] } } } });
   assert.strictEqual(put.status, 200, JSON.stringify(put.data));
   const got = await call('GET', '/purchase?k=' + share);
   assert.strictEqual(got.status, 200);
-  assert.deepStrictEqual(got.data, { title: 'Черновые материалы', to: 'Олег', note: 'к пятнице', createdAt: 5, delivered: true, deliveredAt: 0, objectName: 'Квартира', address: 'ул. Ленина, 5',
-    items: [{ name: 'Грунтовка', qty: '10', unit: 'л', done: true }, { name: 'Валик', qty: '', unit: 'шт.', done: false }] });
-  assert.ok(!JSON.stringify(got.data).includes('1250') && !JSON.stringify(got.data).includes('chek'), 'суммы и чеки по ссылке не отдаются');
+  assert.deepStrictEqual(got.data, { title: 'Черновые материалы', to: 'Олег', note: 'к пятнице', createdAt: 5, delivered: true, deliveredAt: 0, objectName: 'Квартира', address: 'ул. Ленина, 5', total: 9000,
+    items: [{ id: 'i1', name: 'Грунтовка', qty: '10', unit: 'л', done: true, price: 1250 }, { id: 'i2', name: 'Валик', qty: '', unit: 'шт.', done: false, price: '' }],
+    files: [{ url: 'https://files.test/chek.jpg', name: 'чек', type: '', mine: false, id: '' }] });
+  assert.ok(!JSON.stringify(got.data).includes('Анна'), 'заказчик и прочие данные объекта по ссылке не отдаются');
   assert.strictEqual((await call('GET', '/purchase?k=' + 'z'.repeat(26))).status, 404);
   assert.strictEqual((await call('GET', '/purchase?k=p1')).status, 404, 'по номеру закупки — нельзя, только по ключу ссылки');
+  assert.strictEqual((await call('POST', '/purchase?k=' + 'z'.repeat(26), { body: { delivered: true } })).status, 404);
+});
+
+test('закупка по ссылке: галочки, суммы и «доставлено» сохраняются и видны мастеру; состав списка по ссылке не меняется', async () => {
+  const { call, token } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  const share = 'e'.repeat(24);
+  const obj = { id: 'o-pur', name: 'Квартира', purchases: [{ id: 'p1', share, title: 'Материалы', items: [{ id: 'i1', name: 'Грунтовка', qty: '10', unit: 'л' }, { id: 'i2', name: 'Валик' }], files: [{ url: 'https://files.test/m.jpg', publicId: 'm1' }] }] };
+  const put = await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, ops: { objects: { upsert: [obj], delete: [] } } } });
+  assert.strictEqual(put.status, 200);
+  const edit = await call('POST', '/purchase?k=' + share, { body: { items: [{ id: 'i1', done: true, price: '1 250,5', name: 'Взлом' }, { id: 'i2', price: -5 }, { id: 'нет', done: true }], total: 3000, delivered: true, title: 'Чужое' } });
+  assert.strictEqual(edit.status, 200, JSON.stringify(edit.data));
+  assert.deepStrictEqual(edit.data.items, [{ id: 'i1', name: 'Грунтовка', qty: '10', unit: 'л', done: true, price: 1250.5 }, { id: 'i2', name: 'Валик', qty: '', unit: '', done: false, price: '' }]);
+  assert.strictEqual(edit.data.total, 3000);
+  assert.strictEqual(edit.data.title, 'Материалы');
+  assert.ok(edit.data.delivered && edit.data.deliveredAt > 0);
+  // мастер видит отметки у себя, и версия данных выросла — кабинет их подхватит
+  const after = await call('GET', '/appdata', { token });
+  assert.ok(after.data.rev > put.data.rev);
+  const saved = after.data.data.objects.find((o) => o.id === 'o-pur').purchases[0];
+  assert.strictEqual(saved.items[0].done, true);
+  assert.strictEqual(saved.items[0].price, 1250.5);
+  assert.strictEqual(saved.total, 3000);
+  assert.strictEqual(saved.delivered, true);
+  assert.ok(saved.linkAt > 0);
+  // чужой файл (мастера) по ссылке убрать нельзя; сумму можно стереть; «доставлено» — снять
+  const undo = await call('POST', '/purchase?k=' + share, { body: { removeFile: 'm1', total: '', delivered: false } });
+  assert.strictEqual(undo.data.files.length, 1);
+  assert.strictEqual(undo.data.total, '');
+  assert.strictEqual(undo.data.delivered, false);
+  assert.strictEqual(undo.data.deliveredAt, 0);
+});
+
+test('закупка по ссылке: кабинет со старой копией объекта не затирает отметки, поставленные по ссылке', async () => {
+  const { call, token } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  const share = 'f'.repeat(24);
+  const obj = { id: 'o-pur', name: 'Квартира', purchases: [{ id: 'p1', share, title: 'Материалы', items: [{ id: 'i1', name: 'Грунтовка' }, { id: 'i2', name: 'Валик' }] }] };
+  const put = await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, ops: { objects: { upsert: [obj], delete: [] } } } });
+  await call('POST', '/purchase?k=' + share, { body: { items: [{ id: 'i1', done: true, price: 700 }], delivered: true } });
+  // мастер, не видя отметок, переименовал объект и добавил позицию — сохраняет свою старую копию закупки
+  const stale = JSON.parse(JSON.stringify(obj));
+  stale.name = 'Квартира на Ленина';
+  stale.purchases[0].items.push({ id: 'i3', name: 'Кисть' });
+  const put2 = await call('PUT', '/appdata', { token, body: { baseRev: put.data.rev, ops: { objects: { upsert: [stale], delete: [] } } } });
+  assert.ok(put2.status === 200 || put2.status === 409, JSON.stringify(put2.data));
+  if (put2.status === 409) return; // сервер отказал устаревшей странице — отметки тем более целы
+  const got = (await call('GET', '/purchase?k=' + share)).data;
+  assert.strictEqual(got.objectName, 'Квартира на Ленина');
+  assert.deepStrictEqual(got.items.map((it) => [it.id, it.done, it.price]), [['i1', true, 700], ['i2', false, ''], ['i3', false, '']]);
+  assert.strictEqual(got.delivered, true);
+  // а свежая копия мастера (с linkAt) свои правки сохраняет как есть
+  const fresh = (await call('GET', '/appdata', { token })).data;
+  const cur = fresh.data.objects.find((o) => o.id === 'o-pur');
+  cur.purchases[0].items[0].done = false;
+  await call('PUT', '/appdata', { token, body: { baseRev: fresh.rev, ops: { objects: { upsert: [cur], delete: [] } } } });
+  assert.strictEqual((await call('GET', '/purchase?k=' + share)).data.items[0].done, false);
+});
+
+test('закупка по ссылке: фото и чеки загружаются без входа, свои можно убрать; не картинка — отказ', async () => {
+  const { env, call, token } = await setup();
+  Object.assign(env, { CLOUDINARY_CLOUD_NAME: 'c', CLOUDINARY_API_KEY: 'k', CLOUDINARY_API_SECRET: 's' });
+  const page = await call('GET', '/appdata', { token });
+  const share = 'g'.repeat(24);
+  const obj = { id: 'o-pur', name: 'Квартира', purchases: [{ id: 'p1', share, title: 'Материалы', items: [] }] };
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, ops: { objects: { upsert: [obj], delete: [] } } } });
+  const worker = await loadWorker();
+  const upload = async (key, name, type) => {
+    const form = new FormData();
+    form.append('file', new File(['x'], name, { type }));
+    const res = await worker.fetch(new Request('https://api.test/purchase/upload?k=' + key, { method: 'POST', body: form }), env);
+    return { status: res.status, data: await res.json() };
+  };
+  const realFetch = globalThis.fetch, calls = [];
+  globalThis.fetch = async (url, opts) => {
+    calls.push([String(url), opts && opts.method]);
+    return new Response(JSON.stringify({ secure_url: 'https://files.test/up.jpg', public_id: 'prise_reports/up1', resource_type: 'image', result: 'ok' }), { status: 200 });
+  };
+  try {
+    assert.strictEqual((await upload('z'.repeat(26), 'a.jpg', 'image/jpeg')).status, 404);
+    assert.strictEqual((await upload(share, 'a.exe', 'application/octet-stream')).status, 400);
+    assert.strictEqual(calls.length, 0, 'до проверок в облако ничего не уходит');
+    const up = await upload(share, 'чек.jpg', 'image/jpeg');
+    assert.strictEqual(up.status, 200, JSON.stringify(up.data));
+    assert.deepStrictEqual(up.data.files, [{ url: 'https://files.test/up.jpg', name: 'чек.jpg', type: 'image/jpeg', mine: true, id: 'prise_reports/up1' }]);
+    const saved = (await call('GET', '/appdata', { token })).data.data.objects[0].purchases[0];
+    assert.strictEqual(saved.files[0].by, 'link');
+    const del = await call('POST', '/purchase?k=' + share, { body: { removeFile: 'prise_reports/up1' } });
+    assert.deepStrictEqual(del.data.files, []);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
