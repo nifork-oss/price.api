@@ -361,3 +361,27 @@ test('молдинг: ширина профиля — просвет до вну
   near(run('molWallLayout(measure, 0)').frames[0].inner.x0, 0.47, 0.0001);
   assert.strictEqual(run('computeMeasure(measure).molWallOut'), 0);
 });
+
+test('молдинг для закупки: планки по 2 м, обрезки — в другие места, длинное — со стыком', () => {
+  const { run } = setup({ shape: 'rect', height: '2,5', walls: ['4,47', '3', '4,47', '3'],
+    molding: { wall: [
+      { type: 'frame', walls: [0], x: '0,37', w: '1,75', yb: '0,25', yt: '2,3', dbl: true, ind: '0,1', indY: '', mw: '40', mwIn: '20' },
+      { type: 'frame', walls: [0], x: '3,61', w: '0,55', yb: '0,25', yt: '2,3', dbl: true, ind: '0,1', indY: '', mw: '40', mwIn: '20' } ] } });
+  const pieces = run('molPieces(measure)');
+  assert.strictEqual(pieces.length, 16, '2 двойные рамки × 2 × 4 стороны');
+  const plan = run('molCutPlan(molPieces(measure))');
+  const p40 = plan.find(g => g.mw === 40), p20 = plan.find(g => g.mw === 20);
+  // 40 мм: стороны 2,05 ×4 (длиннее планки — каждая со стыком), 1,75 ×2, 0,55 ×2
+  near(p40.need, 2 * (1.75 + 2.05) + 2 * (0.55 + 2.05));
+  near(p20.need, 2 * (1.47 + 1.77) + 2 * (0.27 + 1.77));
+  assert.strictEqual(p40.bars.length, 7, '40 мм: 12,8 м — 7 планок (стыки подобраны под обрезки)');
+  assert.strictEqual(p20.bars.length, 6);
+  assert.ok(p40.bars.flatMap(b => b.cuts).some(c => /стык/.test(c.label)), 'стороны по 2,05 — со стыком');
+  assert.ok(p40.bars.flatMap(b => b.cuts).every(c => !/стык/.test(c.label) || c.len >= 0.2 - 1e-9), 'у стыка — не огрызок короче 20 см');
+  // каждая планка не длиннее 2 м с учётом резов
+  plan.forEach(g => g.bars.forEach(b => assert.ok(b.cuts.reduce((a, c) => a + c.len, 0) <= 2 + 1e-9)));
+  // 20 мм: 1,77 ×4 — каждая на свою планку, а короткие 0,27 — в обрезки от 1,77 (0,23 не хватит) или 1,47 (0,53 — хватит)
+  const cut027 = p20.bars.find(b => b.cuts.some(c => Math.abs(c.len - 0.27) < 1e-6));
+  assert.ok(cut027.cuts.some(c => Math.abs(c.len - 1.47) < 1e-6), 'кусок 0,27 — из обрезка планки, где резали 1,47');
+  assert.match(run('molBuyHtml(molCutPlan(molPieces(measure)))'), /Молдинг 40 мм — <b>\d+ план/);
+});

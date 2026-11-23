@@ -738,6 +738,12 @@ return { rows: list, counted };
 function objectVolumeTableHtml(t) {
 return `<table class="volume-table">${t.rows.map(x => `<tr class="${x.key === 'pie' ? 'volume-pie' : x.key === 'walls' || x.key === 'ceiling' ? 'volume-main' : ''}"><td>${escapeHtml(x.label)}</td><td>${mFmt(x.value)}&nbsp;${escapeHtml(x.unit)}</td></tr>`).join('')}</table>`;
 }
+// закупка молдинга по всему объекту: обрезки одного помещения идут в другое (calc-molding.js)
+function objectMoldingBuyHtml(rooms) {
+if (typeof molPieces !== 'function') return '';
+const pieces = rooms.filter(r => r && r.measure).flatMap(r => { try { return molPieces(r.measure, roomName(r) + ' · '); } catch (e) { return []; } });
+return pieces.length ? molBuyHtml(molCutPlan(pieces)) : '';
+}
 function objectVolumeHtml(rooms, floorsOf, grouped, floorOfRoom) {
 const all = objectVolumeTotals(rooms);
 if (!all.rows.length) return '';
@@ -747,6 +753,7 @@ return `<div class="volume-box">
 <div class="volume-sub">Помещений с замером: ${all.counted} из ${rooms.length}</div>
 ${objectVolumeTableHtml(all)}
 ${all.rows.some(x => x.key === 'pie') ? `<div class="volume-sub" style="margin-top:4px;">Общий объём: ${VOLUME_PIE_NOTE}.</div>` : ''}
+${objectMoldingBuyHtml(rooms)}
 ${byFloor.length > 1 ? `<details class="volume-floors"><summary>По этажам</summary>${byFloor.map(x => `<div class="volume-floor">${escapeHtml(roomFloorLabel(x.f) || 'Без этажа')}</div>${objectVolumeTableHtml(x.t)}`).join('')}</details>` : ''}
 </div>`;
 }
