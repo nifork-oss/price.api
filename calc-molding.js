@@ -227,17 +227,24 @@ if (!plan.length) return '';
 _molPlans = plan;
 return `<div class="mol-buy"><b>Для закупки:</b> ${plan.map(g => `${escapeHtml(molBuyName(g))} — <b>${g.bars.length} ${molPlanksWord(g.bars.length)}</b> по ${mFmt(g.plank)} м`).join('; ')}
 <details class="mol-cut"><summary>Раскрой планок</summary>${plan.map((g, gi) => `<div class="mol-cut-g">${escapeHtml(molBuyName(g))}: ${g.bars.length} ${molPlanksWord(g.bars.length)}</div>${molCutSvg(g, gi)}`).join('')}
-<div class="mol-pick-info mp-hint">Нажмите на кусок планки или на молдинг на развёртке — он подсветится, и здесь будет, куда он идёт и из какой планки его резать.</div></details></div>`;
+<div class="mol-pick-info mp-hint">Нажмите на молдинг на развёртке или на кусок планки: он подсветится оранжевым, а синим — то, что режется из остатка той же планки.</div></details></div>`;
 }
-// нажали на кусок: подсветить его во всех схемах и показать цифры
+// нажали на кусок: подсветить его во всех схемах, а «соседей» по планке — тех, кто режется из её остатка, —
+// другим цветом: наклеили этот кусок — остаток этой же планки идёт туда, целую планку не режут
 function molPick(key) {
-document.querySelectorAll('.mol-pick.sel').forEach(el => el.classList.remove('sel'));
+document.querySelectorAll('.mol-pick.sel, .mol-pick.mate').forEach(el => el.classList.remove('sel', 'mate'));
 if (!key) return;
-document.querySelectorAll(`.mol-pick[data-mk="${CSS.escape(key)}"]`).forEach(el => el.classList.add('sel'));
 const parts = [];
-_molPlans.forEach(g => g.bars.forEach((b, i) => b.cuts.forEach(c => { if (c.key === key) parts.push({ g, i, c }); })));
+_molPlans.forEach(g => g.bars.forEach((b, i) => b.cuts.forEach(c => { if (c.key === key) parts.push({ g, i, b, c }); })));
+const mates = new Set();
+parts.forEach(p => p.b.cuts.forEach(c => { if (c.key !== key) mates.add(c.key); }));
+const mark = (k, cls) => document.querySelectorAll(`.mol-pick[data-mk="${CSS.escape(k)}"]`).forEach(el => el.classList.add(cls));
+mates.forEach(k => mark(k, 'mate'));
+mark(key, 'sel');
+const plain = l => escapeHtml(l.replace(/ \(\d+ из \d+, стык\)$/, ''));
 const info = parts.length
-? `<b>${escapeHtml(parts[0].c.label.replace(/ \(\d+ из \d+, стык\)$/, ''))}</b> — ${mFmt(parts[0].c.whole || parts[0].c.len)} м${parts[0].g.mw ? `, молдинг ${molCmTxt(parts[0].g.mw)}` : ''}<br>${parts.map(p => `${p.c.parts ? `${p.c.part}-й кусок ` : 'Резать '}${mFmt(p.c.len)} м — из планки <b>${p.i + 1}</b>${p.g.bars[p.i].cuts[0] !== p.c ? ' (из обрезка)' : ''}`).join('<br>')}${parts.some(p => p.c.parts) ? '<br>Сторона длиннее планки — со стыком.' : ''}`
+? `<b>${plain(parts[0].c.label)}</b> — ${mFmt(parts[0].c.whole || parts[0].c.len)} м${parts[0].g.mw ? `, молдинг ${molCmTxt(parts[0].g.mw)}` : ''}${parts.some(p => p.c.parts) ? ' (длиннее планки — со стыком)' : ''}
+${parts.map(p => `<div class="mol-pick-bar"><b>Планка ${p.i + 1}</b>: ${p.b.cuts.map(c => c === p.c ? `<span class="mol-pick-me">${mFmt(c.len)} — сюда</span>` : `<span class="mol-pick-mate">${mFmt(c.len)} — ${plain(c.label)}</span>`).join(' → ')}${p.b.rest > 0.005 ? ` → обрезок ${mFmt(p.b.rest)}` : ''}</div>`).join('')}`
 : 'Этот молдинг не попал в раскрой.';
 document.querySelectorAll('.mol-pick-info').forEach(el => { el.innerHTML = info; el.classList.remove('mp-hint'); });
 document.querySelectorAll('details.mol-cut').forEach(d => { d.open = true; });
