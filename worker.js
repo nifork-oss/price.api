@@ -2831,6 +2831,9 @@ function apiGuide(base, key) {
    "cornice":{"on":true,"walls":null},"plinth":{"on":true,"walls":[1,2]}}
   frame — одна рамка по чертежу: x_m — от левого угла стены до рамки, width_m — ширина, bottom_m/top_m — от пола;
   double — двойная, inner_m — отступ внутренней рамки по бокам, inner_y_m — сверху и снизу (нет — как по бокам).
+  profile_cm — ширина молдинга (см), inner_profile_cm — внутренней рамки (нет — как наружной). С шириной inner_m —
+  просвет между молдингами (как на чертеже), без неё — от края до края. Длина считается по каждому профилю отдельно
+  (surfaces: molWallOut — наружные рамки и линии, molWallIn — внутренние рамки).
   frames — ряд рамок, калькулятор раскладывает сам (один промежуток gap_m от углов, между рамками и у проёмов).
   line — горизонтальная линия на высоте y_m. walls: null — все стены. Размеры — в метрах.
   Сначала прочитай помещение (GET …/rooms/<roomId>) и проверь, что рамки не налезают на проёмы и помещаются на стене.
@@ -3096,6 +3099,9 @@ function apiObjectDetail(o) {
    в метрах с запятой, стены с 0. В API — числа в метрах, стены с 1. */
 const apiM = (v) => { const n = Number(String(v == null ? "" : v).trim().replace(",", ".")); return isFinite(n) && n > 0 ? Math.round(n * 1000) / 1000 : 0; };
 const apiMStr = (v) => (v > 0 ? String(Math.round(v * 1000) / 1000).replace(".", ",") : "");
+// ширина профиля молдинга, см: в замере — строкой («4», «2,5»), в API — числом
+const apiCm = (v) => { const n = Number(String(v == null ? "" : v).replace(",", ".")); return isFinite(n) && n > 0 && n < 100 ? Math.round(n * 10) / 10 : 0; };
+const apiProf = (r) => ({ ...(apiCm(r.mw) ? { profile_cm: apiCm(r.mw) } : {}), ...(r.dbl && apiCm(r.mwIn) ? { inner_profile_cm: apiCm(r.mwIn) } : {}) });
 function apiMoldingView(mol) {
   const d = mol && typeof mol === "object" ? mol : {};
   const walls = (w) => (Array.isArray(w) ? w.map((i) => i + 1) : null);
@@ -3104,10 +3110,10 @@ function apiMoldingView(mol) {
     cornice: edge(d.cornice), plinth: edge(d.plinth),
     ceil: (Array.isArray(d.ceil) ? d.ceil : []).map((f) => ({ offset_m: apiM(f.d), double: !!f.dbl, inner_m: f.dbl ? apiM(f.ind) : 0 })),
     wall: (Array.isArray(d.wall) ? d.wall : []).map((r) => r.type === "line"
-      ? { type: "line", walls: walls(r.walls), y_m: apiM(r.y) }
+      ? { type: "line", walls: walls(r.walls), y_m: apiM(r.y), ...apiProf(r) }
       : r.type === "frame"
-        ? { type: "frame", walls: walls(r.walls), x_m: apiM(r.x), width_m: apiM(r.w), bottom_m: apiM(r.yb), top_m: apiM(r.yt), double: !!r.dbl, inner_m: r.dbl ? apiM(r.ind) : 0, inner_y_m: r.dbl ? apiM(r.indY) || apiM(r.ind) : 0 }
-        : { type: "frames", walls: walls(r.walls), bottom_m: apiM(r.yb), top_m: apiM(r.yt), gap_m: apiM(r.gap), width_m: apiM(r.fw) || null, double: !!r.dbl, inner_m: r.dbl ? apiM(r.ind) : 0 }),
+        ? { type: "frame", walls: walls(r.walls), x_m: apiM(r.x), width_m: apiM(r.w), bottom_m: apiM(r.yb), top_m: apiM(r.yt), double: !!r.dbl, inner_m: r.dbl ? apiM(r.ind) : 0, inner_y_m: r.dbl ? apiM(r.indY) || apiM(r.ind) : 0, ...apiProf(r) }
+        : { type: "frames", walls: walls(r.walls), bottom_m: apiM(r.yb), top_m: apiM(r.yt), gap_m: apiM(r.gap), width_m: apiM(r.fw) || null, double: !!r.dbl, inner_m: r.dbl ? apiM(r.ind) : 0, ...apiProf(r) }),
   };
 }
 // помещение для агента: стены, проёмы на них (где по стене), высоты, молдинги сейчас
@@ -3164,10 +3170,12 @@ function apiMolding(body, room) {
     const list = [];
     for (const [i, r] of body.wall.entries()) {
       const what = `wall[${i}]`, t = r && r.type;
+      for (const k of ["profile_cm", "inner_profile_cm"]) if (r && r[k] != null && !apiCm(r[k])) return { error: `${what}: ${k} — ширина молдинга в сантиметрах (например 4 или 2,5)` };
+      const prof = { mw: r && r.profile_cm != null ? String(apiCm(r.profile_cm)).replace(".", ",") : "", mwIn: r && r.double && r.inner_profile_cm != null ? String(apiCm(r.inner_profile_cm)).replace(".", ",") : "" };
       const w = walls(r && r.walls, what); if (w.error) return { error: w.error };
       if (t === "line") {
         const y = pos(r.y_m, what + ": y_m", H); if (y.error || !(y.v > 0)) return { error: what + ": y_m — высота линии от пола, больше 0 и не выше потолка" };
-        list.push({ type: "line", walls: w.v, y: apiMStr(y.v) });
+        list.push({ type: "line", walls: w.v, y: apiMStr(y.v), mw: prof.mw });
         continue;
       }
       if (t !== "frame" && t !== "frames") return { error: what + ': type — "frame" (рамка по размерам), "frames" (ряд рамок) или "line"' };
@@ -3183,9 +3191,9 @@ function apiMolding(body, room) {
         if (!(fw > 0)) return { error: what + ": width_m — ширина рамки" };
         const L = apiM(m.walls[w.v[0]]);
         if (L > 0 && x.v + fw > L + 0.005) return { error: `${what}: рамка выходит за стену ${w.v[0] + 1} (длина ${L} м): x_m + width_m = ${Math.round((x.v + fw) * 1000) / 1000}` };
-        list.push({ type: "frame", walls: w.v, x: x.v > 0 ? apiMStr(x.v) : "0", w: apiMStr(fw), yb: yb.v > 0 ? apiMStr(yb.v) : "0", yt: apiMStr(yt.v), dbl, ind: dbl ? apiMStr(ind) : "", indY: dbl && apiM(r.inner_y_m) ? apiMStr(apiM(r.inner_y_m)) : "" });
+        list.push({ type: "frame", walls: w.v, x: x.v > 0 ? apiMStr(x.v) : "0", w: apiMStr(fw), yb: yb.v > 0 ? apiMStr(yb.v) : "0", yt: apiMStr(yt.v), dbl, ind: dbl ? apiMStr(ind) : "", indY: dbl && apiM(r.inner_y_m) ? apiMStr(apiM(r.inner_y_m)) : "", ...prof });
       } else {
-        list.push({ type: "frames", walls: w.v, yb: yb.v > 0 ? apiMStr(yb.v) : "0", yt: apiMStr(yt.v), gap: apiMStr(apiM(r.gap_m)), fw: apiMStr(apiM(r.width_m)), dbl, ind: dbl ? apiMStr(ind) : "" });
+        list.push({ type: "frames", walls: w.v, yb: yb.v > 0 ? apiMStr(yb.v) : "0", yt: apiMStr(yt.v), gap: apiMStr(apiM(r.gap_m)), fw: apiMStr(apiM(r.width_m)), dbl, ind: dbl ? apiMStr(ind) : "", ...prof });
       }
     }
     out.wall = list;

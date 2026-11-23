@@ -34,6 +34,8 @@ const SURFACES = [
 { key: 'molPlinth', tab: 'molPlinth', label: 'Плинтус' },
 { key: 'molCeil', tab: 'molCeil', label: 'Молдинг на потолке' },
 { key: 'molWall', tab: 'molWall', label: 'Молдинг на стенах' },
+{ key: 'molWallOut', tab: 'molWallOut', label: 'Молдинг: наружные рамки и линии' },
+{ key: 'molWallIn', tab: 'molWallIn', label: 'Молдинг: внутренние рамки' },
 { key: 'tileWalls', tab: 'tileWalls', label: 'Плитка: стены' },
 { key: 'tileFloor', tab: 'tileFloor', label: 'Плитка: пол' },
 { key: 'tileAll', tab: 'tileAll', label: 'Плитка: всего' },
