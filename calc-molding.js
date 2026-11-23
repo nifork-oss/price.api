@@ -9,7 +9,9 @@
 //   wall:    [{ type: 'frames', walls, yb, yt, gap, fw,      — ряд рамок на развёртках
 //              dbl, ind } |                                  — двойные: внутренняя рамка с отступом ind
 
-//             { type: 'line', walls, y }]                    — горизонтальная линия
+//             { type: 'line', walls, y } |                   — горизонтальная линия
+//             { type: 'frame', walls, x, w, yb, yt,          — рамка по размерам: x — от левого угла стены,
+//               dbl, ind, indY }]                            — w — ширина; у двойной indY — отступ сверху и снизу (пусто — как ind)
 // }
 // Всё считается в погонных метрах по фактической длине.
 
@@ -151,6 +153,20 @@ cuts.forEach(([c0, c1]) => { if (c0 > x + 0.01) res.lines.push({ ri, x0: x, x1: 
 if (L > x + 0.01) res.lines.push({ ri, x0: x, x1: L, y });
 return;
 }
+// рамка по размерам — ровно там, где задана (проёмы не обходит: её ставят по чертежу)
+if (row.type === 'frame') {
+const x0 = Math.max(0, mNum(row.x)), w = mNum(row.w), fb = mNum(row.yb), ft = Math.min(Hh, mNum(row.yt));
+if (!(w > 0) || !(ft > fb)) return;
+if (x0 + w > L + 0.005) { res.outside = true; return; }
+const ind = molInd(row), iy = row.dbl && String(row.indY == null ? '' : row.indY).trim() !== '' ? mNum(row.indY) : ind;
+const fr = { ri, x0, x1: x0 + w, y0: fb, y1: ft, gap: 0, fixed: true };
+if (ind > 0 || iy > 0) {
+if (w - 2 * ind >= 0.05 && ft - fb - 2 * iy >= 0.05) fr.inner = { x0: x0 + ind, x1: x0 + w - ind, y0: fb + iy, y1: ft - iy };
+else fr.innerBad = true;
+}
+res.frames.push(fr);
+return;
+}
 const yb = mNum(row.yb), yt = Math.min(Hh, mNum(row.yt));
 const gap = Math.max(0, evalMeasureExpr(row.gap) || 0);
 const fw = mNum(row.fw);
@@ -282,6 +298,7 @@ out.wallParts.push(`стена ${wi + 1}: ${[lay.frames.length ? `${lay.frames.l
 });
 if (out.wallParts.length) out.lines.wall = `Молдинг на стенах: ${out.wallParts.join('; ')} = ${mFmt(out.wallLen)} пог. м`;
 if (lens.some((L, wi) => L > 0 && molWallLayout(m, wi).frames.some(f => f.innerBad))) out.lines.wallBad = 'Внутренняя рамка не помещается в узкие рамки — там рамка одинарная';
+if (lens.some((L, wi) => L > 0 && molWallLayout(m, wi).outside)) out.lines.wallBad = [out.lines.wallBad, 'Рамка по размерам выходит за край стены — проверьте отступ от угла и ширину'].filter(Boolean).join('. ');
 }
 if (out.min) Object.keys(out.lines).forEach(k => { if (k !== 'ceilBad' && /\*/.test(out.lines[k])) out.lines[k] += MIN_NOTE; });
 return out;
@@ -391,6 +408,11 @@ const above = Math.min(Hh, ...others.filter(g => g.y0 >= f.y1 - 0.001).map(g => 
 const xv = xL + (xR - xL) * 0.7;
 s += vDim(xv, below, f.y0);
 if (!others.some(g => g.y0 >= f.y1 - 0.001)) s += vDim(xv, f.y1, above);   // между рядами — уже подписано у верхнего
+// рамка по размерам — отступ от левого угла (или от соседней рамки по размерам слева)
+if (f.fixed) {
+const left = Math.max(0, ...lay.frames.filter(g => g.fixed && g !== f && g.x1 <= f.x0 + 0.001 && g.y0 < f.y1 && g.y1 > f.y0).map(g => g.x1));
+s += hDim(left, f.x0, f.y0 + (f.y1 - f.y0) * 0.1);
+}
 // промежуток — у первой пары соседних рамок ряда (не через окно или дверь)
 const row = lay.frames.filter(g => g.ri === f.ri);
 const k = row.findIndex((g, j) => row[j + 1] && Math.abs(row[j + 1].x0 - g.x1 - g.gap) < 0.005);
@@ -493,16 +515,21 @@ ${molDblHtml(`molDbl('ceil', ${i}, this.checked)`, f, `molding.ceil.${i}.ind`)}`
 <div class="mp-sec-title">Молдинги на стенах</div>
 <div class="rl-elev-nav"><button type="button" onclick="molStep(-1)" aria-label="Предыдущая стена">‹</button><span>Стена ${molElevWall + 1} из ${n}</span><button type="button" onclick="molStep(1)" aria-label="Следующая стена">›</button></div>
 <div class="mp-ce-plan rl-sketch${molFull === 'elev' ? ' full' : ''}" id="mpMolElev"></div>
-<div class="mp-hint">Ряд рамок раскладывается по стене сам: рамки обходят окна, двери и ниши с тем же промежутком. Линия — горизонтальный молдинг на высоте, разрывается на проёмах и нишах. Синим на развёртке — отступы: от пола, до потолка, между рамками и до внутренней рамки.</div>
+<div class="mp-hint">Ряд рамок раскладывается по стене сам: рамки обходят окна, двери и ниши с тем же промежутком. Линия — горизонтальный молдинг на высоте, разрывается на проёмах и нишах. Рамка по размерам — одна рамка точно по чертежу: отступ от левого угла стены, ширина, низ и верх от пола. Синим на развёртке — отступы: от пола, до потолка, между рамками и до внутренней рамки.</div>
 ${d.wall.map((row, i) => `<div class="mp-open">
 <div class="mp-open-top">
-<button type="button" class="mp-type" onclick="molRowType(${i})">${row.type === 'line' ? 'Линия' : 'Ряд рамок'} ▾</button>
+<button type="button" class="mp-type" onclick="molRowType(${i})">${row.type === 'line' ? 'Линия' : row.type === 'frame' ? 'Рамка по размерам' : 'Ряд рамок'} ▾</button>
 <span class="mp-open-area" id="mpMolRowRes${i}"></span>
 <button type="button" class="mp-del" onclick="molRemove('wall', ${i})" aria-label="Убрать">✕</button>
 </div>
 ${chips(row.walls, wi => `molRowWall(${i}, ${wi})`, `molRowAll(${i})`)}
 ${row.type === 'line'
 ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Высота от пола ↕${mIn(`molding.wall.${i}.y`, row.y, '0,9')}</label><span></span><span></span></div>`
+: row.type === 'frame'
+? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>От левого угла ↔${mIn(`molding.wall.${i}.x`, row.x, '0,37')}</label><span class="mp-x">·</span><label>Ширина ↔${mIn(`molding.wall.${i}.w`, row.w, '1,4')}</label></div>
+<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Низ от пола ↕${mIn(`molding.wall.${i}.yb`, row.yb, '0,25')}</label><span class="mp-x">·</span><label>Верх от пола ↕${mIn(`molding.wall.${i}.yt`, row.yt, '2,27')}</label></div>
+${molDblHtml(`molDbl('wall', ${i}, this.checked)`, row, `molding.wall.${i}.ind`)}
+${row.dbl ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Отступ сверху и снизу, м${mIn(`molding.wall.${i}.indY`, row.indY, 'как по бокам')}</label><span></span><span></span></div>` : ''}`
 : `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Низ рамок от пола ↕${mIn(`molding.wall.${i}.yb`, row.yb, '0,15')}</label><span class="mp-x">·</span><label>Верх рамок от пола ↕${mIn(`molding.wall.${i}.yt`, row.yt, '0,85')}</label></div>
 <div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Промежуток ↔${mIn(`molding.wall.${i}.gap`, row.gap, '0,1')}</label><span class="mp-x">·</span><label>Ширина рамки ↔${mIn(`molding.wall.${i}.fw`, row.fw, 'на весь участок')}</label></div>
 ${molDblHtml(`molDbl('wall', ${i}, this.checked)`, row, `molding.wall.${i}.ind`)}`}
@@ -510,6 +537,7 @@ ${molDblHtml(`molDbl('wall', ${i}, this.checked)`, row, `molding.wall.${i}.ind`)
 <div class="mp-add-row">
 <button type="button" class="mp-add" onclick="molAddRow('frames')">+ Ряд рамок</button>
 <button type="button" class="mp-add" onclick="molAddRow('line')">+ Линия</button>
+<button type="button" class="mp-add" onclick="molAddRow('frame')">+ Рамка по размерам</button>
 </div>
 <div class="mp-calc" id="mpCalcMolWall"></div>
 </section>`;
@@ -616,16 +644,18 @@ const d = molEnsure();
 const prev = [...d.wall].reverse().find(r => r.type === type);
 d.wall.push(type === 'line'
 ? { type, walls: prev ? prev.walls : [molElevWall], y: prev ? prev.y : '' }
+: type === 'frame'
+? { type, walls: [molElevWall], x: '', w: '', yb: prev ? prev.yb : '', yt: prev ? prev.yt : '', dbl: prev ? !!prev.dbl : false, ind: prev ? prev.ind || '' : '', indY: prev ? prev.indY || '' : '' }
 : { type, walls: prev ? prev.walls : [molElevWall], yb: prev ? prev.yb : '', yt: prev ? prev.yt : '', gap: prev ? prev.gap : '', fw: prev ? prev.fw : '', dbl: prev ? !!prev.dbl : false, ind: prev ? prev.ind || '' : '' });
 saveMeasureDraft();
 renderMeasure();
-focusMeasurePath(`molding.wall.${d.wall.length - 1}.${type === 'line' ? 'y' : 'yb'}`);
+focusMeasurePath(`molding.wall.${d.wall.length - 1}.${type === 'line' ? 'y' : type === 'frame' ? 'x' : 'yb'}`);
 }
 function molRowType(i) {
 const d = molEnsure();
 const row = d.wall[i];
 if (!row) return;
-row.type = row.type === 'line' ? 'frames' : 'line';
+row.type = row.type === 'frames' || !row.type ? 'line' : row.type === 'line' ? 'frame' : 'frames'; // ряд рамок → линия → рамка по размерам
 saveMeasureDraft();
 renderMeasure();
 }

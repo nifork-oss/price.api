@@ -385,9 +385,21 @@ openSheet(roomName(room), [
 { icon: '📏', label: 'Изменить замер', onClick: () => openMeasure({ kind: 'room', objectId, roomId }) },
 { icon: '🏠', label: room.measure && room.measure.floor ? `Этаж: ${roomFloorLabel(room.measure.floor)} — изменить` : 'Указать этаж', onClick: () => setRoomFloor(objectId, roomId) },
 { icon: '📋', label: 'Копировать как новое помещение', onClick: () => duplicateRoom(objectId, roomId) },
+...(room.moldingPrev ? [{ icon: '↩️', label: 'Вернуть молдинги как были до ИИ-агента', onClick: () => undoAgentMolding(objectId, roomId) }] : []),
 null,
 { icon: '🗑️', label: 'Удалить помещение', danger: true, onClick: () => deleteRoom(objectId, roomId) },
 ]);
+}
+
+// Молдинги, выставленные ИИ-агентом через API (PATCH …/rooms/<id>/molding): прежние лежат в room.moldingPrev
+async function undoAgentMolding(objectId, roomId) {
+const room = findObjectRoom(objectId, roomId);
+if (!room || !room.measure || !room.moldingPrev) return;
+if (!confirm('Вернуть молдинги, какие были до ИИ-агента? Выставленные им пропадут.')) return;
+if (room.moldingPrev.molding) room.measure.molding = room.moldingPrev.molding; else delete room.measure.molding;
+delete room.moldingPrev; delete room.moldingFrom;
+await saveCloudData();
+if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();
 }
 
 // Этаж — поле помещения: по нему помещения дома или квартиры делятся на составы по этажам
@@ -757,6 +769,7 @@ return `${floorHead}<div class="room-card">
 ${canEdit ? `<button type="button" class="hc-btn hc-btn-more" style="flex:0 0 44px; min-height:38px;" onclick="openRoomActions('${obj.id}', '${room.id}')" aria-label="Действия">⋯</button>` : ''}
 </div>
 <div class="obj-money">${pills || '<span class="obj-pill">замер не заполнен</span>'}</div>
+${room.moldingFrom ? `<div style="font-size:12px; color:#7a3fb0; margin-top:4px;">Молдинги выставил ИИ-агент${room.moldingFrom.from ? ' «' + escapeHtml(room.moldingFrom.from) + '»' : ''} · ${new Date(room.moldingFrom.at).toLocaleDateString('ru-RU')}${canEdit ? ' — вернуть прежние: «⋯»' : ''}</div>` : ''}
 <details class="measure-note" style="margin:6px 0 0;"><summary>Как мерили</summary><div>${escapeHtml(measureSummaryLines(room.measure).join('\n'))}</div></details>
 </div>`;
 }).join('')

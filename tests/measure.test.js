@@ -319,3 +319,26 @@ test('обмерный план: объём работ под экспликац
   assert.ok(run('plExplicationEnd(many.map(plRoomRow)) + 1 + plVolumeHeight(plVolumeData(many)) > PL_VOL_LIMIT'));
   assert.match(run('plVolumePage(plVolumeData(many), info, 2, 9)'), /Объём работ по всему объекту/);
 });
+
+test('молдинг: рамка по размерам — точно по чертежу, двойная с разными отступами, выход за стену', () => {
+  const { run } = setup({ shape: 'rect', height: '2,5', walls: ['3,2', '1', '3,2', '1'],
+    openings: [{ type: 'door', w: '0,8', h: '2,1', n: '1', wall: 0, off: '2,07' }],
+    molding: { wall: [
+      { type: 'frame', walls: [0], x: '0,37', w: '1,4', yb: '0,25', yt: '2,27', dbl: true, ind: '0,14', indY: '' },
+      { type: 'frame', walls: [0], x: '3,0', w: '0,55', yb: '0,25', yt: '2,27', dbl: false },
+    ] } });
+  const lay = run('molWallLayout(measure, 0)');
+  assert.strictEqual(lay.frames.length, 1, 'вторая рамка выходит за стену 3,2 м — не ставится');
+  assert.strictEqual(lay.outside, true);
+  const f = lay.frames[0];
+  near(f.x0, 0.37); near(f.x1, 1.77); near(f.y0, 0.25); near(f.y1, 2.27);
+  near(f.inner.x0, 0.51); near(f.inner.y0, 0.39, 0.001);
+  // своя вертикаль внутренней рамки
+  run('measure.molding.wall[0].indY = "0,1"; measure.molding.wall[1].x = "2,6";');
+  const l2 = run('molWallLayout(measure, 0)');
+  near(l2.frames[0].inner.y0, 0.35); near(l2.frames[0].inner.x0, 0.51);
+  const r = run('computeMeasure(measure)');
+  // 2·(1,4+2,02) + 2·(1,12+1,82) + 2·(0,55→1 + 2,02): куски короче метра считаются как метр (как везде в лепнине)
+  near(r.molWall, 6.84 + 5.88 + 6.04, 0.01);
+  assert.match(run('moldingCompute(measure).lines.wall'), /стена 1: 2 рам\. \(двойных 1\)/);
+});

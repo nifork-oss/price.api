@@ -724,3 +724,35 @@ test('закупка по ссылке: фото и чеки загружают�
     globalThis.fetch = realFetch;
   }
 });
+
+test('молдинги через API: помещение со стенами и проёмами, рамки по размерам в замер, прежние — для возврата', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const page = await call('GET', '/appdata', { token });
+  const rooms = [{ id: 'r1', measure: { room: 'Коридор', height: '2,5', walls: ['3,2', '1', '3,2', '1'],
+    openings: [{ type: 'door', w: '0,8', h: '2,1', n: '1', wall: 0, off: '2,07' }], molding: { cornice: { on: true, walls: null, plank: '' } } } }];
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [{ id: 'o1', name: 'Горянка', rooms }] } });
+
+  const room = await call('GET', '/api/v1/objects/o1/rooms/r1', { key });
+  assert.strictEqual(room.status, 200);
+  assert.deepStrictEqual(room.data.walls.map(w => w.length_m), [3.2, 1, 3.2, 1]);
+  assert.deepStrictEqual([room.data.openings[0].wall, room.data.openings[0].from_left_m, room.data.openings[0].to_m], [1, 2.07, 2.87]);
+  assert.strictEqual(room.data.molding.cornice.on, true);
+
+  const bad = await call('PATCH', '/api/v1/objects/o1/rooms/r1/molding', { key, body: { wall: [{ type: 'frame', walls: [1], x_m: 2.9, width_m: 0.55, bottom_m: 0.25, top_m: 2.27 }] } });
+  assert.strictEqual(bad.status, 400);
+  assert.match(bad.data.error, /выходит за стену 1/);
+  assert.strictEqual((await call('PATCH', '/api/v1/objects/o1/rooms/r1/molding', { key, body: { wall: [{ type: 'frame', walls: [9], x_m: 0, width_m: 1, bottom_m: 0, top_m: 1 }] } })).status, 400);
+
+  const ok = await call('PATCH', '/api/v1/objects/o1/rooms/r1/molding', { key, body: { wall: [
+    { type: 'frame', walls: [1], x_m: 0.37, width_m: 1.4, bottom_m: 0.25, top_m: 2.27, double: true, inner_m: 0.14 },
+    { type: 'line', walls: null, y_m: 0.9 }] } });
+  assert.strictEqual(ok.status, 200);
+  assert.deepStrictEqual(ok.data.room.molding.wall[0], { type: 'frame', walls: [1], x_m: 0.37, width_m: 1.4, bottom_m: 0.25, top_m: 2.27, double: true, inner_m: 0.14, inner_y_m: 0.14 });
+  assert.strictEqual(ok.data.room.molding.cornice.on, true, 'чего не прислали — осталось');
+  const saved = (await call('GET', '/appdata', { token })).data.data.objects[0].rooms[0];
+  assert.deepStrictEqual(saved.measure.molding.wall[0], { type: 'frame', walls: [0], x: '0,37', w: '1,4', yb: '0,25', yt: '2,27', dbl: true, ind: '0,14', indY: '' });
+  assert.strictEqual(saved.measure.molding.wall[1].walls, null);
+  assert.deepStrictEqual(saved.moldingPrev.molding, { cornice: { on: true, walls: null, plank: '' } }, 'прежние — для возврата');
+  assert.strictEqual(saved.moldingFrom.from, 'Агент');
+});
