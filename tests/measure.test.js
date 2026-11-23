@@ -355,6 +355,7 @@ test('молдинг: ширина профиля — просвет до вну
   near(r.molWall, r.molWallOut + r.molWallIn);
   assert.match(run('moldingCompute(measure).lines.wallProf'), /молдинг 40 мм — 7,6 пог\. м; молдинг 20 мм — 6,48 пог\. м/);
   assert.match(run('measureValueForTab(computeMeasure(measure), "molWallIn").label'), /внутренние рамки 20 мм/);
+  assert.match(run('molElevShapes(measure, 0, x => x * 100, y => 300 - y * 100, 4.47, 2.5)'), /молдинг 40 \/ 20 мм/, 'ширина профиля подписана на развёртке');
   // без ширины — как раньше: отступ от края до края, отдельных длин нет
   run('measure.molding.wall[0].mw = ""; measure.molding.wall[0].mwIn = "";');
   near(run('molWallLayout(measure, 0)').frames[0].inner.x0, 0.47, 0.0001);

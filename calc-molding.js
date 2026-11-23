@@ -418,6 +418,8 @@ if (seen.has(f.ri)) return;
 seen.add(f.ri);
 const xL = Math.min(XA(f.x0), XA(f.x1)), xR = Math.max(XA(f.x0), XA(f.x1));
 s += `<text x="${(xL + xR) / 2}" y="${(Yh(f.y0) + Yh(f.y1)) / 2 + 4}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${MOL_INK}" paint-order="stroke" stroke="#ffffff" stroke-width="3">${mFmt(f.x1 - f.x0)}×${mFmt(f.y1 - f.y0)}</text>`;
+// ширина профиля — под размером рамки: «молдинг 40 мм», у двойной с другим внутренним — «40 / 20 мм»
+if (f.mw > 0) s += `<text x="${(xL + xR) / 2}" y="${(Yh(f.y0) + Yh(f.y1)) / 2 + 17}" text-anchor="middle" font-size="9.5" fill="${MOL_INK}" paint-order="stroke" stroke="#ffffff" stroke-width="3">молдинг ${f.inner && f.inner.mw && f.inner.mw !== f.mw ? `${f.mw} / ${f.inner.mw}` : f.mw} мм</text>`;
 // по вертикали — цепочкой: до ближайшей рамки другого ряда снизу и сверху, иначе до пола и потолка
 const others = lay.frames.filter(g => g.ri !== f.ri && overlap(f, g));
 const below = Math.max(0, ...others.filter(g => g.y1 <= f.y0 + 0.001).map(g => g.y1));
