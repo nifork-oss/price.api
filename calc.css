@@ -1224,4 +1224,9 @@ body.assistant-open .add-toast { z-index: 99; }
 .mol-pick .mol-hl { stroke: transparent; }
 .mol-pick.sel .mol-hl { stroke: #f97316; }
 .mol-pick.sel .mol-seg { stroke: #c2410c; stroke-width: 2.5; }
+.mol-pick.mate .mol-hl { stroke: #2563eb; stroke-dasharray: 6 3; }
+.mol-pick.mate .mol-seg { stroke: #1d4ed8; stroke-width: 2.5; stroke-dasharray: 4 2; }
+.mol-pick-bar { margin-top: 4px; }
+.mol-pick-me { color: #c2410c; font-weight: 700; }
+.mol-pick-mate { color: #1d4ed8; }
 .mol-pick-info { margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: #fff; color: #33404f; font-size: 13px; }
