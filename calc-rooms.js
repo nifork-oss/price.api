@@ -399,6 +399,8 @@ const room = findObjectRoom(objectId, roomId);
 if (!room || !room.measure || !room.moldingPrev) return;
 if (!confirm('Вернуть молдинги, какие были до ИИ-агента? Выставленные им пропадут.')) return;
 if (room.moldingPrev.molding) room.measure.molding = room.moldingPrev.molding; else delete room.measure.molding;
+// отметка возвращённого — сервер по ней понимает, что это не устаревшая копия (keepAgentMolding в worker.js)
+if (room.moldingFrom && room.moldingFrom.at) room.moldingUndo = room.moldingFrom.at;
 delete room.moldingPrev; delete room.moldingFrom;
 await saveCloudData();
 if (typeof currentObjectId !== 'undefined' && currentObjectId === objectId) renderObjectDetail();

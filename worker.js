@@ -653,6 +653,29 @@ function keepPurchaseLinkEdits(stored, incoming) {
   }
 }
 
+// Молдинги, выставленные ИИ-агентом через API (PATCH …/rooms/<id>/molding), — новее копии на открытой странице:
+// страница, загрузившая объект раньше, при сохранении (например, пересчитав объёмы) прислала бы помещение
+// со старыми молдингами. Своё страница «видела», если у неё та же отметка moldingFrom.at или она вернула
+// прежние (moldingUndo — отметка возвращённого) — тогда её версия и остаётся.
+function keepAgentMolding(stored, incoming) {
+  const old = new Map((Array.isArray(stored) ? stored : []).filter((o) => o && o.id != null).map((o) => [String(o.id), o]));
+  for (const obj of Array.isArray(incoming) ? incoming : []) {
+    const was = obj && obj.id != null ? old.get(String(obj.id)) : null;
+    if (!was || !Array.isArray(was.rooms) || !Array.isArray(obj.rooms)) continue;
+    for (const room of obj.rooms) {
+      const w = room && was.rooms.find((x) => x && x.id === room.id);
+      const at = w && w.moldingFrom && Number(w.moldingFrom.at);
+      if (!at || !w.measure) continue;
+      const seen = (room.moldingFrom && Number(room.moldingFrom.at) >= at) || Number(room.moldingUndo) >= at;
+      if (seen) continue;
+      room.measure = { ...(room.measure && typeof room.measure === "object" ? room.measure : {}), molding: w.measure.molding };
+      room.moldingFrom = w.moldingFrom;
+      if (w.moldingPrev) room.moldingPrev = w.moldingPrev;
+      delete room.surfaces; // посчитаны по старым молдингам — страница пересчитает
+    }
+  }
+}
+
 function spaceData(record, space) {
   if (space === "main") return { objects: Array.isArray(record.objects) ? record.objects : [], history: Array.isArray(record.history) ? record.history : [] };
   const cd = (record.companyData || {})[String(space).slice(COMPANY_PREFIX.length)] || {};
@@ -1521,7 +1544,7 @@ const handler = {
           const cdOps = { objects: readOps(incoming, "objects"), history: readOps(incoming, "history") };
           const fields = ["services", "objects", "history"].filter((f) => Array.isArray(incoming[f]) && !cdOps[f]);
           if (baseRev !== null && hasConflict(record, key, baseRev, fields)) return conflictResponse();
-          if (cdOps.objects) { keepPurchaseLinkEdits(cd.objects, cdOps.objects.upsert); cd.objects = applyOps(cd.objects, cdOps.objects, true); }
+          if (cdOps.objects) { keepPurchaseLinkEdits(cd.objects, cdOps.objects.upsert); keepAgentMolding(cd.objects, cdOps.objects.upsert); cd.objects = applyOps(cd.objects, cdOps.objects, true); }
           if (cdOps.history) cd.history = applyOps(cd.history, cdOps.history, true);
           const opFields = ["objects", "history"].filter((f) => cdOps[f]);
           for (const f of fields) {
@@ -1630,7 +1653,7 @@ const handler = {
         };
         if (mainOps.history) record.history = applyOps(record.history, mainOps.history, true);
         else if (Array.isArray(incoming.history)) record.history = keepMissing(record.history, incoming.history);
-        if (mainOps.objects) { keepPurchaseLinkEdits(record.objects, mainOps.objects.upsert); record.objects = applyOps(record.objects, mainOps.objects, true); }
+        if (mainOps.objects) { keepPurchaseLinkEdits(record.objects, mainOps.objects.upsert); keepAgentMolding(record.objects, mainOps.objects.upsert); record.objects = applyOps(record.objects, mainOps.objects, true); }
         else if (Array.isArray(incoming.objects)) record.objects = keepMissing(record.objects, incoming.objects);
         if (Array.isArray(incoming.pirogHistory)) {
           // Как и с services: мастер обычно просто пересылает то, что получил

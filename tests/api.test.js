@@ -764,3 +764,34 @@ test('молдинги через API: помещение со стенами и
   assert.deepStrictEqual([s2.mw, s2.mwIn], ['40', '20']);
   assert.strictEqual((await call('PATCH', '/api/v1/objects/o1/rooms/r1/molding', { key, body: { wall: [{ type: 'line', walls: null, y_m: 0.9, profile_mm: 'широкий' }] } })).status, 400);
 });
+
+test('молдинги от API не затирает открытая страница со старой копией объекта; «вернуть» — затирает', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Агент' } });
+  const page = await call('GET', '/appdata', { token });
+  const room = { id: 'r1', measure: { room: 'Коридор', height: '2,5', walls: ['4,47', '3', '4,47', '3'] } };
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [{ id: 'o1', name: 'Горянка', rooms: [room] }] } });
+  const stale = await call('GET', '/appdata', { token }); // страница загрузила объект до агента
+  await call('PATCH', '/api/v1/objects/o1/rooms/r1/molding', { key, body: { wall: [
+    { type: 'frame', walls: [1], x_m: 0.37, width_m: 1.75, bottom_m: 0.25, top_m: 2.3, double: true, inner_m: 0.1, profile_mm: 40, inner_profile_mm: 20 }] } });
+  // страница пересчитала объёмы и сохранила объект целиком — по записям, со старой копией помещения
+  const old = stale.data.data.objects[0];
+  const staleObj = { ...old, rooms: [{ ...old.rooms[0], surfaces: { walls: { v: 35, u: 'м²', l: 'Стены' } } }] };
+  const fresh = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: fresh.data.rev, ops: { objects: { upsert: [staleObj], delete: [] } } } });
+  let r = (await call('GET', '/api/v1/objects/o1/rooms/r1', { key })).data;
+  assert.strictEqual(r.molding.wall[0].profile_mm, 40, 'молдинги агента остались');
+  // страница, увидевшая молдинги агента, правит их сама — её версия и остаётся
+  const now = (await call('GET', '/appdata', { token })).data;
+  const seen = now.data.objects[0];
+  seen.rooms[0].measure.molding.wall[0].mw = '50';
+  await call('PUT', '/appdata', { token, body: { baseRev: now.rev, ops: { objects: { upsert: [seen], delete: [] } } } });
+  r = (await call('GET', '/api/v1/objects/o1/rooms/r1', { key })).data;
+  assert.strictEqual(r.molding.wall[0].profile_mm, 50);
+  // «вернуть как были» — молдинги агента уходят
+  const u = (await call('GET', '/appdata', { token })).data, uo = u.data.objects[0], ur = uo.rooms[0];
+  ur.measure.molding = ur.moldingPrev.molding || undefined; ur.moldingUndo = ur.moldingFrom.at; delete ur.moldingFrom; delete ur.moldingPrev;
+  await call('PUT', '/appdata', { token, body: { baseRev: u.rev, ops: { objects: { upsert: [uo], delete: [] } } } });
+  r = (await call('GET', '/api/v1/objects/o1/rooms/r1', { key })).data;
+  assert.deepStrictEqual(r.molding.wall, []);
+});
