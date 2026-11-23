@@ -384,4 +384,9 @@ test('молдинг для закупки: планки по 2 м, обрезк
   const cut027 = p20.bars.find(b => b.cuts.some(c => Math.abs(c.len - 0.27) < 1e-6));
   assert.ok(cut027.cuts.some(c => Math.abs(c.len - 1.47) < 1e-6), 'кусок 0,27 — из обрезка планки, где резали 1,47');
   assert.match(run('molBuyHtml(molCutPlan(molPieces(measure)))'), /Молдинг 40 мм — <b>\d+ план/);
+  // планки — схемой; тот же кусок нажимается и на развёртке (один ключ)
+  const buy = run('molBuyHtml(molCutPlan(molPieces(measure)))');
+  assert.match(buy, /<svg class="mol-cut-svg"/);
+  assert.match(buy, /data-mk="w0f1ib"/, 'кусок «рамка 2, внутренняя, низ» на планке');
+  assert.match(run('molElevShapes(measure, 0, x => x * 100, y => 300 - y * 100, 4.47, 2.5)'), /data-mk="w0f1ib"/, 'и на развёртке');
 });

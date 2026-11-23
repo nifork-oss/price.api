@@ -741,7 +741,7 @@ return `<table class="volume-table">${t.rows.map(x => `<tr class="${x.key === 'p
 // закупка молдинга по всему объекту: обрезки одного помещения идут в другое (calc-molding.js)
 function objectMoldingBuyHtml(rooms) {
 if (typeof molPieces !== 'function') return '';
-const pieces = rooms.filter(r => r && r.measure).flatMap(r => { try { return molPieces(r.measure, roomName(r) + ' · '); } catch (e) { return []; } });
+const pieces = rooms.filter(r => r && r.measure).flatMap(r => { try { return molPieces(r.measure, roomName(r) + ' · ', r.id + ':'); } catch (e) { return []; } });
 return pieces.length ? molBuyHtml(molCutPlan(pieces)) : '';
 }
 function objectVolumeHtml(rooms, floorsOf, grouped, floorOfRoom) {
