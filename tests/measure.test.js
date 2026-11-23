@@ -275,3 +275,26 @@ test('лестница: ступени подбираются сами, торе
   near(k.side, 0);
   near(k.plinth, 2 * 7.53);
 });
+
+test('объём работ по всему объекту: суммы стен, потолка и периметра, по этажам', () => {
+  const { loadCalc } = require('./load.js');
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-stairs.js', 'calc-rooms.js']);
+  const run = code => vm.runInContext(code, c);
+  run(`var escapeHtml = s => String(s); var rooms = [
+    { id: 'a', measure: Object.assign(newMeasure(), { room: 'Кухня', floor: '1', shape: 'rect', height: '2,7', walls: ['4', '3', '4', '3'] }) },
+    { id: 'b', measure: Object.assign(newMeasure(), { room: 'Спальня', floor: '2', shape: 'rect', height: '2,5', walls: ['5', '4', '5', '4'],
+      openings: [{ type: 'window', w: '1,5', h: '1,4', n: '1', wall: 0 }] }) },
+    { id: 'c' } ];`);
+  const t = run('objectVolumeTotals(rooms)');
+  const row = k => t.rows.find(x => x.key === k);
+  assert.strictEqual(t.counted, 2, 'помещение без замера не считается');
+  near(row('walls').value, 37.8 + 45 - 2.1);
+  assert.strictEqual(row('walls').unit, 'м²');
+  near(row('ceiling').value, 12 + 20);
+  near(row('perimeter').value, 14 + 18);
+  assert.strictEqual(row('perimeter').unit, 'пог. м');
+  const html = run(`objectVolumeHtml(rooms, ['1', '2'], true, r => String((r.measure && r.measure.floor) || '').trim())`);
+  assert.match(html, /Объём работ по всему объекту/);
+  assert.match(html, /По этажам/);
+  assert.match(html, /Помещений с замером: 2 из 3/);
+});

@@ -1204,3 +1204,13 @@ body.assistant-open .add-toast { z-index: 99; }
 .purchase-flag input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: #1d7a4c; }
 .purchase-delivered { padding: 10px 12px; border: 1px solid #dfe3e8; border-radius: 10px; font-weight: 700; }
 .purchase-delivered.on { background: #eef6f1; border-color: #b9dcc8; color: #1d7a4c; }
+/* объём работ по всему объекту (calc-rooms.js) */
+.volume-box { margin: 6px 0 12px; padding: 10px 12px; border: 1px solid #dfe4ea; border-radius: 12px; background: #f7f9fb; }
+.volume-head { font-weight: 700; color: #14181f; }
+.volume-sub { font-size: 12px; color: #8d97a5; margin: 2px 0 6px; }
+.volume-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.volume-table td { padding: 4px 0; border-top: 1px solid #e8ecf0; color: #33404f; }
+.volume-table td + td { text-align: right; white-space: nowrap; font-weight: 600; font-family: var(--narrow, inherit); }
+.volume-table tr.volume-main td { font-weight: 700; color: #14181f; }
+.volume-floors summary { cursor: pointer; margin-top: 8px; font-size: 13px; font-weight: 700; color: #485566; }
+.volume-floor { margin: 8px 0 2px; font-size: 12px; font-weight: 700; color: #5b6573; text-transform: uppercase; letter-spacing: .04em; }
