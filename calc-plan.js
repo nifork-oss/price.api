@@ -188,8 +188,8 @@ const y0 = y;
 y += 7;
 const fmt = x => (x > 0 ? plM2(x) : '—');
 v.all.rows.forEach(row => {
-const main = row.key === 'walls' || row.key === 'ceiling';
-if (main) s += `<rect x="${x0}" y="${y}" width="${total}" height="${rh}" fill="#f2f2f2"/>`;
+const main = row.key === 'walls' || row.key === 'ceiling' || row.key === 'pie';
+if (main) s += `<rect x="${x0}" y="${y}" width="${total}" height="${rh}" fill="${row.key === 'pie' ? '#fff1c2' : '#f2f2f2'}"/>`;
 const vals = [row.value, ...v.byFloor.map(f => { const q = f.t.rows.find(x => x.key === row.key && x.unit === row.unit); return q ? q.value : 0; })];
 s += `<text x="${x0 + 1.8}" y="${y + 4.2}" font-family="${PL_FONT}" font-size="3" font-weight="${main ? 700 : 400}">${plEsc(row.label + ', ' + row.unit)}</text>`;
 vals.forEach((val, i) => { s += `<text x="${x0 + wLabel + i * wVal + wVal / 2}" y="${y + 4.2}" font-family="${PL_FONT}" font-size="3" font-weight="${main || !i ? 700 : 400}" text-anchor="middle">${fmt(val)}</text>`; });
@@ -198,6 +198,7 @@ s += `<line x1="${x0}" y1="${y}" x2="${x0 + total}" y2="${y}" stroke="#000" stro
 });
 s += `<rect x="${x0}" y="${y0}" width="${total}" height="${y - y0}" fill="none" stroke="#000" stroke-width="0.5"/>`;
 for (let i = 0; i <= v.byFloor.length; i++) { const x = x0 + wLabel + i * wVal; s += `<line x1="${x}" y1="${y0}" x2="${x}" y2="${y}" stroke="#000" stroke-width="0.25"/>`; }
+if (v.all.rows.some(x => x.key === 'pie') && typeof VOLUME_PIE_NOTE !== 'undefined') s += `<text x="${x0}" y="${y + 4.5}" font-family="${PL_FONT}" font-size="2.5" fill="#333">${plEsc('Общий объём: ' + VOLUME_PIE_NOTE + '.')}</text>`;
 return s;
 }
 // низ экспликации (таблица и пояснения), мм — чтобы понять, влезет ли объём на тот же лист

@@ -292,6 +292,10 @@ test('объём работ по всему объекту: суммы стен,
   assert.strictEqual(row('walls').unit, 'м²');
   near(row('ceiling').value, 12 + 20);
   near(row('perimeter').value, 14 + 18);
+  // общий объём: стены + потолок + откосы (без углов и периметра)
+  assert.strictEqual(t.rows[0].key, 'pie');
+  near(row('pie').value, row('walls').value + row('ceiling').value + row('slopes').value);
+  assert.ok(row('corners').value > 0, 'углы есть, но в общий объём не входят');
   assert.strictEqual(row('perimeter').unit, 'пог. м');
   const html = run(`objectVolumeHtml(rooms, ['1', '2'], true, r => String((r.measure && r.measure.floor) || '').trim())`);
   assert.match(html, /Объём работ по всему объекту/);
