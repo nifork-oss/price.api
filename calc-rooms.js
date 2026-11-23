@@ -687,6 +687,47 @@ return changed;
 }
 
 /* ---------- помещения на странице объекта ---------- */
+/* ---------- объём работ по всему объекту ----------
+   Сумма поверхностей всех помещений (как в плашках у помещений): стены и потолок в м², погонные метры —
+   периметр, углы, откосы, карниз, плинтус и т. п. Если помещения разнесены по этажам — ещё и по каждому этажу. */
+const VOLUME_SKIP = new Set(['wallsMinus', 'partStrips', 'ceilingNet', 'cornersOut', 'cornersIn']);
+function objectVolumeTotals(rooms) {
+const rows = new Map();
+let perim = 0, counted = 0;
+const add = (key, label, unit, value) => {
+if (!(value > 0)) return;
+const k = key + '|' + unit, row = rows.get(k) || { key, label, unit, value: 0, rooms: 0 };
+row.value += value; row.rooms++;
+rows.set(k, row);
+};
+rooms.forEach(room => {
+if (!room || !room.measure) return;
+let surf, r;
+try { r = computeMeasure(room.measure); surf = roomSurfaces(room); } catch (e) { return; }
+counted++;
+if (r.perimeter > 0) perim += r.perimeter;
+SURFACES.forEach(s => { if (!VOLUME_SKIP.has(s.key) && !s.sub && surf[s.key]) add(s.key, s.label, surf[s.key].unit, surf[s.key].value); });
+});
+const order = SURFACES.map(s => s.key);
+const list = [...rows.values()].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+if (perim > 0) list.splice(list.findIndex(x => x.key === 'ceiling') + 1, 0, { key: 'perimeter', label: 'Периметр помещений', unit: 'пог. м', value: perim, rooms: counted });
+return { rows: list, counted };
+}
+function objectVolumeTableHtml(t) {
+return `<table class="volume-table">${t.rows.map(x => `<tr${x.key === 'walls' || x.key === 'ceiling' ? ' class="volume-main"' : ''}><td>${escapeHtml(x.label)}</td><td>${mFmt(x.value)}&nbsp;${escapeHtml(x.unit)}</td></tr>`).join('')}</table>`;
+}
+function objectVolumeHtml(rooms, floorsOf, grouped, floorOfRoom) {
+const all = objectVolumeTotals(rooms);
+if (!all.rows.length) return '';
+const byFloor = grouped ? floorsOf.map(f => ({ f, t: objectVolumeTotals(rooms.filter(r => floorOfRoom(r) === f)) })).filter(x => x.t.rows.length) : [];
+return `<div class="volume-box">
+<div class="volume-head">Объём работ по всему объекту</div>
+<div class="volume-sub">Помещений с замером: ${all.counted} из ${rooms.length}</div>
+${objectVolumeTableHtml(all)}
+${byFloor.length > 1 ? `<details class="volume-floors"><summary>По этажам</summary>${byFloor.map(x => `<div class="volume-floor">${escapeHtml(roomFloorLabel(x.f) || 'Без этажа')}</div>${objectVolumeTableHtml(x.t)}`).join('')}</details>` : ''}
+</div>`;
+}
+
 function renderObjectRoomsHtml(obj) {
 const rooms = objectRooms(obj);
 const canEdit = !isCurrentClient();
@@ -713,7 +754,9 @@ ${canEdit ? `<button type="button" class="hc-btn hc-btn-more" style="flex:0 0 44
 </div>`;
 }).join('')
 : '<div style="font-size:13px; color:#8d97a5; margin-bottom:8px;">Помещений пока нет. Замерьте их один раз — дальше в калькуляторе останется только отмечать нужные.</div>';
+const floorOfRoom = r => String((r.measure && r.measure.floor) || '').trim();
 return `<h2 style="margin-top:18px;">Помещения${rooms.length ? ` (${rooms.length})` : ''}</h2>
+${rooms.length ? objectVolumeHtml(rooms, floorsOf, grouped, floorOfRoom) : ''}
 ${list}
 ${canEdit ? `<button type="button" class="measure-open-btn" onclick="addRoom('${obj.id}')">+ Помещение</button>` : ''}
 ${typeof objectHasFlat === 'function' && objectHasFlat(obj) ? `<button type="button" class="btn btn-primary plan-btn" onclick="openFlatPlan('${obj.id}')">План квартиры</button>` : ''}
