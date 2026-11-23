@@ -733,17 +733,20 @@ const list = [...rows.values()].sort((a, b) => order.indexOf(a.key) - order.inde
 if (perim > 0) list.splice(list.findIndex(x => x.key === 'ceiling') + 1, 0, { key: 'perimeter', label: 'Периметр помещений', unit: 'пог. м', value: perim, rooms: counted });
 const pie = list.filter(x => VOLUME_PIE.includes(x.key)).reduce((a, x) => a + x.value, 0);
 if (pie > 0) list.unshift({ key: 'pie', label: 'Общий объём', unit: 'м² + пог. м', value: pie, rooms: counted });
+// молдинг для закупки — сразу в штуках планок (по раскрою, обрезки одного помещения идут в другое)
+objectMoldingBuy(rooms).forEach(g => list.push({ key: 'molBuy' + g.mw + '_' + g.plank, label: molBuyName(g) + ' (планки по ' + mFmt(g.plank) + ' м) — купить', unit: 'шт.', value: g.bars.length, rooms: counted }));
 return { rows: list, counted };
 }
 function objectVolumeTableHtml(t) {
 return `<table class="volume-table">${t.rows.map(x => `<tr class="${x.key === 'pie' ? 'volume-pie' : x.key === 'walls' || x.key === 'ceiling' ? 'volume-main' : ''}"><td>${escapeHtml(x.label)}</td><td>${mFmt(x.value)}&nbsp;${escapeHtml(x.unit)}</td></tr>`).join('')}</table>`;
 }
 // закупка молдинга по всему объекту: обрезки одного помещения идут в другое (calc-molding.js)
-function objectMoldingBuyHtml(rooms) {
-if (typeof molPieces !== 'function') return '';
+function objectMoldingBuy(rooms) {
+if (typeof molPieces !== 'function') return [];
 const pieces = rooms.filter(r => r && r.measure).flatMap(r => { try { return molPieces(r.measure, roomName(r) + ' · ', r.id + ':'); } catch (e) { return []; } });
-return pieces.length ? molBuyHtml(molCutPlan(pieces)) : '';
+return pieces.length ? molCutPlan(pieces) : [];
 }
+function objectMoldingBuyHtml(rooms) { const plan = objectMoldingBuy(rooms); return plan.length ? molBuyHtml(plan) : ''; }
 function objectVolumeHtml(rooms, floorsOf, grouped, floorOfRoom) {
 const all = objectVolumeTotals(rooms);
 if (!all.rows.length) return '';
@@ -773,7 +776,8 @@ const fl = String((room.measure && room.measure.floor) || '').trim();
 const floorHead = grouped && fl !== lastFloor ? `<div class="room-floor-head">${escapeHtml(roomFloorLabel(fl) || 'Без этажа')} · помещений: ${ordered.filter(r => String((r.measure && r.measure.floor) || '').trim() === fl).length}</div>` : '';
 lastFloor = fl;
 const surf = roomSurfaces(room);
-const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'partStrips' && s.key !== 'ceilingNet' && s.key !== 'cornersOut' && s.key !== 'cornersIn' && !s.sub && surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('');
+const pills = SURFACES.filter(s => s.key !== 'wallsMinus' && s.key !== 'partStrips' && s.key !== 'ceilingNet' && s.key !== 'cornersOut' && s.key !== 'cornersIn' && !s.sub && surf[s.key].value > 0).map(s => `<span class="obj-pill">${s.label} ${mFmt(surf[s.key].value)} ${surf[s.key].unit}</span>`).join('')
++ objectMoldingBuy([room]).map(g => `<span class="obj-pill obj-pill-buy">${escapeHtml(molBuyName(g))}: купить ${g.bars.length} шт.</span>`).join('');
 return `${floorHead}<div class="room-card">
 <div class="room-head">
 <div class="room-name">${escapeHtml(roomName(room))}</div>

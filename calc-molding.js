@@ -270,9 +270,26 @@ ${[...bars].map(b => { const bi = first.g.bars.indexOf(b) >= 0 ? first.g.bars.in
 document.querySelectorAll('.mol-pick-info').forEach(el => { el.innerHTML = info; el.classList.remove('mp-hint'); });
 document.querySelectorAll('details.mol-cut').forEach(d => { d.open = true; });
 }
+// на стене сторона со стыком — выбирается тот кусок, куда нажали (а не все куски стороны сразу)
+function molPartAt(t, e) {
+const key = t.getAttribute('data-mk'), hl = t.querySelector('.mol-hl'), svg = t.ownerSVGElement;
+const m = hl && /^M([\d.-]+) ([\d.-]+)([HV])([\d.-]+)$/.exec(hl.getAttribute('d'));
+if (!m || !svg || !svg.getScreenCTM) return '';
+const all = [];
+_molPlans.forEach((g, gi) => g.bars.forEach((b, bi) => b.cuts.forEach((c, k) => { if (c.key === key && c.parts) all.push({ c, ci: `${gi}-${bi}-${k}` }); })));
+if (!all.length) return '';
+const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+const from = m[3] === 'H' ? +m[1] : +m[2], span = +m[4] - from, at = ((m[3] === 'H' ? q.x : q.y) - from) / (span || 1);
+all.sort((a, b) => a.c.part - b.c.part);
+const whole = all[0].c.whole || all.reduce((a, x) => a + x.c.len, 0);
+let acc = 0;
+for (const x of all) { acc += x.c.len / whole; if (at <= acc + 1e-6) return x.ci; }
+return all[all.length - 1].ci;
+}
 if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('click', e => {
 const t = e.target && e.target.closest && e.target.closest('.mol-pick');
-if (t) molPick(t.getAttribute('data-mk'), t.getAttribute('data-ci') || '');
+if (t) molPick(t.getAttribute('data-mk'), t.getAttribute('data-ci') || molPartAt(t, e));
 });
 
 // Раскладка молдингов на стене: рамки обходят проёмы и ниши, линии разрываются на них
@@ -541,7 +558,7 @@ if (lay.frames.length || lay.lines.length) {
 const fr = lay.frames.reduce((a, f) => a + molFrameLen(f), 0), ln = lay.lines.reduce((a, l) => a + minLen(l.x1 - l.x0), 0);
 s += `<text x="${x0 + L * k / 2}" y="${yF + 36}" text-anchor="middle" font-size="11" fill="${MOL_INK}">${lay.frames.length ? `${lay.frames.length} рам. ${mFmt(fr)} пог. м` : ''}${lay.frames.length && ln ? ' · ' : ''}${ln ? `линия ${mFmt(ln)} пог. м` : ''}</text>`;
 }
-return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Развёртка стены ${wi + 1}" font-family="inherit">${s}</svg>`;
+return `<svg class="mol-elev-svg" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Развёртка стены ${wi + 1}" font-family="inherit">${s}</svg>`;
 }
 
 // Размерные отметки рамок на развёртке (синим) у первой рамки каждого ряда:
