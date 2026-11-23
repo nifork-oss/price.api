@@ -1235,3 +1235,4 @@ body.assistant-open .add-toast { z-index: 99; }
 .mol-pick-info { margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: #fff; color: #33404f; font-size: 13px; }
 /* на развёртке нажимаются только молдинги: размеры и подписи поверх них нажатие не перехватывают */
 .mol-elev-svg :not(.mol-pick, .mol-pick *) { pointer-events: none; }
+.obj-pill-buy { background: #f6effc; color: #7a3fb0; font-weight: 700; }

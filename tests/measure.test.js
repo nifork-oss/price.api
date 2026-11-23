@@ -390,3 +390,15 @@ test('молдинг для закупки: планки по 2 м, обрезк
   assert.match(buy, /data-mk="w0f1ib"/, 'кусок «рамка 2, внутренняя, низ» на планке');
   assert.match(run('molElevShapes(measure, 0, x => x * 100, y => 300 - y * 100, 4.47, 2.5)'), /data-mk="w0f1ib"/, 'и на развёртке');
 });
+
+test('объём работ: молдинг для закупки — сразу в штуках планок, по всему объекту', () => {
+  const { loadCalc } = require('./load.js');
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-stairs.js', 'calc-rooms.js']);
+  const run = code => vm.runInContext(code, c);
+  run(`var escapeHtml = s => String(s); var rooms = [{ id: 'a', measure: Object.assign(newMeasure(), { room: 'Коридор', shape: 'rect', height: '2,5', walls: ['4,47', '3', '4,47', '3'],
+    molding: { wall: [{ type: 'frame', walls: [0], x: '0,37', w: '1,75', yb: '0,25', yt: '2,3', dbl: true, ind: '0,1', mw: '40', mwIn: '20' },
+      { type: 'frame', walls: [0], x: '3,61', w: '0,55', yb: '0,25', yt: '2,3', dbl: true, ind: '0,1', mw: '40', mwIn: '20' }] } }) }];`);
+  const rows = JSON.parse(run('JSON.stringify(objectVolumeTotals(rooms).rows)')).filter(r => r.unit === 'шт.');
+  assert.deepStrictEqual(rows.map(r => [r.label, r.value]), [['Молдинг 40 мм (планки по 2 м) — купить', 7], ['Молдинг 20 мм (планки по 2 м) — купить', 6]]);
+  assert.match(run(`objectVolumeHtml(rooms, [''], false, r => '')`), /Молдинг 40 мм \(планки по 2 м\) — купить<\/td><td>7&nbsp;шт\./);
+});

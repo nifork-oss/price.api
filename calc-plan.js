@@ -186,11 +186,11 @@ s += `<text x="${x}" y="${y + 4.8}" font-family="${PL_FONT}" font-size="2.8" fon
 });
 const y0 = y;
 y += 7;
-const fmt = x => (x > 0 ? plM2(x) : '—');
 v.all.rows.forEach(row => {
 const main = row.key === 'walls' || row.key === 'ceiling' || row.key === 'pie';
 if (main) s += `<rect x="${x0}" y="${y}" width="${total}" height="${rh}" fill="${row.key === 'pie' ? '#fff1c2' : '#f2f2f2'}"/>`;
 const vals = [row.value, ...v.byFloor.map(f => { const q = f.t.rows.find(x => x.key === row.key && x.unit === row.unit); return q ? q.value : 0; })];
+const fmt = x => (x > 0 ? (row.unit === 'шт.' ? String(Math.round(x)) : plM2(x)) : '—');
 s += `<text x="${x0 + 1.8}" y="${y + 4.2}" font-family="${PL_FONT}" font-size="3" font-weight="${main ? 700 : 400}">${plEsc(row.label + ', ' + row.unit)}</text>`;
 vals.forEach((val, i) => { s += `<text x="${x0 + wLabel + i * wVal + wVal / 2}" y="${y + 4.2}" font-family="${PL_FONT}" font-size="3" font-weight="${main || !i ? 700 : 400}" text-anchor="middle">${fmt(val)}</text>`; });
 y += rh;
