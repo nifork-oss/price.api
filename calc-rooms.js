@@ -691,6 +691,10 @@ return changed;
    Сумма поверхностей всех помещений (как в плашках у помещений): стены и потолок в м², погонные метры —
    периметр, углы, откосы, карниз, плинтус и т. п. Если помещения разнесены по этажам — ещё и по каждому этажу. */
 const VOLUME_SKIP = new Set(['wallsMinus', 'partStrips', 'ceilingNet', 'cornersOut', 'cornersIn']);
+// «Общий объём» — основной малярный пирог: м² и пог. м вместе. Углы, периметр, карнизы и молдинги, плитка,
+// укрывка и лестница сюда не входят; участки стен — уже внутри стен
+const VOLUME_PIE = ['walls', 'ceiling', 'slopes', 'narrow', 'ceilFin', 'ceilFinArea', 'radFin', 'radFinArea'];
+const VOLUME_PIE_NOTE = 'стены и потолок (м²) + откосы, узкие поверхности, обработка ниш и коробов; без углов, периметра, молдингов';
 function objectVolumeTotals(rooms) {
 const rows = new Map();
 let perim = 0, counted = 0;
@@ -711,10 +715,12 @@ SURFACES.forEach(s => { if (!VOLUME_SKIP.has(s.key) && !s.sub && surf[s.key]) ad
 const order = SURFACES.map(s => s.key);
 const list = [...rows.values()].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
 if (perim > 0) list.splice(list.findIndex(x => x.key === 'ceiling') + 1, 0, { key: 'perimeter', label: 'Периметр помещений', unit: 'пог. м', value: perim, rooms: counted });
+const pie = list.filter(x => VOLUME_PIE.includes(x.key)).reduce((a, x) => a + x.value, 0);
+if (pie > 0) list.unshift({ key: 'pie', label: 'Общий объём', unit: 'м² + пог. м', value: pie, rooms: counted });
 return { rows: list, counted };
 }
 function objectVolumeTableHtml(t) {
-return `<table class="volume-table">${t.rows.map(x => `<tr${x.key === 'walls' || x.key === 'ceiling' ? ' class="volume-main"' : ''}><td>${escapeHtml(x.label)}</td><td>${mFmt(x.value)}&nbsp;${escapeHtml(x.unit)}</td></tr>`).join('')}</table>`;
+return `<table class="volume-table">${t.rows.map(x => `<tr class="${x.key === 'pie' ? 'volume-pie' : x.key === 'walls' || x.key === 'ceiling' ? 'volume-main' : ''}"><td>${escapeHtml(x.label)}</td><td>${mFmt(x.value)}&nbsp;${escapeHtml(x.unit)}</td></tr>`).join('')}</table>`;
 }
 function objectVolumeHtml(rooms, floorsOf, grouped, floorOfRoom) {
 const all = objectVolumeTotals(rooms);
@@ -724,6 +730,7 @@ return `<div class="volume-box">
 <div class="volume-head">Объём работ по всему объекту</div>
 <div class="volume-sub">Помещений с замером: ${all.counted} из ${rooms.length}</div>
 ${objectVolumeTableHtml(all)}
+${all.rows.some(x => x.key === 'pie') ? `<div class="volume-sub" style="margin-top:4px;">Общий объём: ${VOLUME_PIE_NOTE}.</div>` : ''}
 ${byFloor.length > 1 ? `<details class="volume-floors"><summary>По этажам</summary>${byFloor.map(x => `<div class="volume-floor">${escapeHtml(roomFloorLabel(x.f) || 'Без этажа')}</div>${objectVolumeTableHtml(x.t)}`).join('')}</details>` : ''}
 </div>`;
 }

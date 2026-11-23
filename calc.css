@@ -1214,3 +1214,4 @@ body.assistant-open .add-toast { z-index: 99; }
 .volume-table tr.volume-main td { font-weight: 700; color: #14181f; }
 .volume-floors summary { cursor: pointer; margin-top: 8px; font-size: 13px; font-weight: 700; color: #485566; }
 .volume-floor { margin: 8px 0 2px; font-size: 12px; font-weight: 700; color: #5b6573; text-transform: uppercase; letter-spacing: .04em; }
+.volume-table tr.volume-pie td { font-weight: 800; color: #14181f; background: #fff4d1; padding-left: 6px; padding-right: 6px; }
