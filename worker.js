@@ -2818,6 +2818,22 @@ function apiGuide(base, key) {
 - PATCH /api/v1/objects/<id> — поправить name, client, address, access, materials (только у объектов, созданных через API).
 - DELETE /api/v1/objects/<id> — удалить свой объект, пока в нём нет помещений и смет.
 - DELETE /api/v1/objects/<id>/plans/<planId> — забрать присланные замеры, пока мастер их не проверил.
+- GET /api/v1/objects/<id>/rooms/<roomId> — помещение подробно: walls:[{n, length_m, height_m}] (стены по порядку, с 1),
+  openings:[{n, wall, type, width_m, height_m, from_left_m, to_m, bottom_m}] — где проём на стене (от левого угла
+  на развёртке), molding — молдинги в замере сейчас (формат ниже).
+- PATCH /api/v1/objects/<id>/rooms/<roomId>/molding — выставить молдинги в замер помещения (сразу, без проверки;
+  прежние мастер может вернуть). Части, которых нет в запросе, остаются как были; прислал часть — она заменяется целиком:
+  {"wall":[{"type":"frame","walls":[1],"x_m":0.37,"width_m":1.4,"bottom_m":0.25,"top_m":2.27,
+            "double":true,"inner_m":0.14,"inner_y_m":0.14},
+           {"type":"frames","walls":[2,3],"bottom_m":0.15,"top_m":0.85,"gap_m":0.1,"width_m":0.6},
+           {"type":"line","walls":null,"y_m":0.9}],
+   "ceil":[{"offset_m":0.3,"double":false}],
+   "cornice":{"on":true,"walls":null},"plinth":{"on":true,"walls":[1,2]}}
+  frame — одна рамка по чертежу: x_m — от левого угла стены до рамки, width_m — ширина, bottom_m/top_m — от пола;
+  double — двойная, inner_m — отступ внутренней рамки по бокам, inner_y_m — сверху и снизу (нет — как по бокам).
+  frames — ряд рамок, калькулятор раскладывает сам (один промежуток gap_m от углов, между рамками и у проёмов).
+  line — горизонтальная линия на высоте y_m. walls: null — все стены. Размеры — в метрах.
+  Сначала прочитай помещение (GET …/rooms/<roomId>) и проверь, что рамки не налезают на проёмы и помещаются на стене.
 - POST /api/v1/objects/<id>/plans — прислать замеры помещений объекта (формат ниже). Мастер увидит их
   у объекта («План от ИИ-агента»), проверит на экране проверки и добавит в замеры. Сразу в замеры они не попадают.
 - GET /api/v1/estimates[?docType=estimate|invoice] — последние 50 смет и счетов.
@@ -3073,6 +3089,108 @@ function apiObjectDetail(o) {
       id: p.id, title: p.title || "", from: p.from || "", at: p.at, rooms: (p.rooms || []).map((r) => (r && r.name) || "Помещение"),
     })),
   };
+}
+
+/* ---------- молдинги через API ----------
+   В замере помещения: measure.molding = { cornice, plinth, ceil, wall } (см. calc-molding.js) — числа там строками
+   в метрах с запятой, стены с 0. В API — числа в метрах, стены с 1. */
+const apiM = (v) => { const n = Number(String(v == null ? "" : v).trim().replace(",", ".")); return isFinite(n) && n > 0 ? Math.round(n * 1000) / 1000 : 0; };
+const apiMStr = (v) => (v > 0 ? String(Math.round(v * 1000) / 1000).replace(".", ",") : "");
+function apiMoldingView(mol) {
+  const d = mol && typeof mol === "object" ? mol : {};
+  const walls = (w) => (Array.isArray(w) ? w.map((i) => i + 1) : null);
+  const edge = (e) => ({ on: !!(e && e.on), walls: walls(e && e.walls), plank_m: apiM(e && e.plank) || null });
+  return {
+    cornice: edge(d.cornice), plinth: edge(d.plinth),
+    ceil: (Array.isArray(d.ceil) ? d.ceil : []).map((f) => ({ offset_m: apiM(f.d), double: !!f.dbl, inner_m: f.dbl ? apiM(f.ind) : 0 })),
+    wall: (Array.isArray(d.wall) ? d.wall : []).map((r) => r.type === "line"
+      ? { type: "line", walls: walls(r.walls), y_m: apiM(r.y) }
+      : r.type === "frame"
+        ? { type: "frame", walls: walls(r.walls), x_m: apiM(r.x), width_m: apiM(r.w), bottom_m: apiM(r.yb), top_m: apiM(r.yt), double: !!r.dbl, inner_m: r.dbl ? apiM(r.ind) : 0, inner_y_m: r.dbl ? apiM(r.indY) || apiM(r.ind) : 0 }
+        : { type: "frames", walls: walls(r.walls), bottom_m: apiM(r.yb), top_m: apiM(r.yt), gap_m: apiM(r.gap), width_m: apiM(r.fw) || null, double: !!r.dbl, inner_m: r.dbl ? apiM(r.ind) : 0 }),
+  };
+}
+// помещение для агента: стены, проёмы на них (где по стене), высоты, молдинги сейчас
+function apiRoomDetail(r) {
+  const m = r.measure || {}, H = apiM(m.height);
+  const lens = (Array.isArray(m.walls) ? m.walls : []).map(apiM);
+  const ops = (Array.isArray(m.openings) ? m.openings : []).map((o, i) => {
+    const L = lens[o.wall] || 0, w = o.type === "balcony" ? apiM(o.w) + apiM(o.dw) : apiM(o.w);
+    const ow = Math.min(w || 0.9, L * 0.9), off = String(o.off == null ? "" : o.off).trim(), v = off === "" ? NaN : Number(off.replace(",", "."));
+    let a0 = (L - ow) / 2;
+    if (isFinite(v) && v >= 0) a0 = o.from === "end" ? Math.max(0, L - Math.min(v, L) - ow) : Math.min(v, Math.max(0, L - ow));
+    const h = apiM(o.h), sill = String(o.sill == null ? "" : o.sill).trim();
+    return { n: i + 1, wall: (Number(o.wall) || 0) + 1, type: o.type || "window", count: Number(o.n) || 1, width_m: w, height_m: h,
+      from_left_m: Math.round(a0 * 1000) / 1000, to_m: Math.round((a0 + ow) * 1000) / 1000, position_known: off !== "",
+      bottom_m: o.type === "door" || o.type === "balcony" ? 0 : sill !== "" ? apiM(sill) : null };
+  });
+  return {
+    id: r.id, name: apiRoomName(r), floor: apiRoomFloor(r), height_m: H || null,
+    walls: lens.map((L, i) => ({ n: i + 1, length_m: L, height_m: apiM((m.wallHeights || [])[i]) || H || null })),
+    openings: ops,
+    molding: apiMoldingView(m.molding),
+  };
+}
+// молдинги от агента → замер; что не прислано — остаётся как было
+function apiMolding(body, room) {
+  const m = room.measure || {}, nWalls = (Array.isArray(m.walls) ? m.walls : []).length, H = apiM(m.height) || 10;
+  const cur = m.molding && typeof m.molding === "object" ? m.molding : {};
+  const out = { cornice: cur.cornice || { on: false, walls: null, plank: "" }, plinth: cur.plinth || { on: false, walls: null, plank: "" }, ceil: Array.isArray(cur.ceil) ? cur.ceil : [], wall: Array.isArray(cur.wall) ? cur.wall : [] };
+  const walls = (w, what) => {
+    if (w == null) return { v: null };
+    if (!Array.isArray(w) || !w.length) return { error: what + ": walls — номера стен списком (с 1) или null — все" };
+    const v = [...new Set(w.map(Number))];
+    if (v.some((i) => !Number.isInteger(i) || i < 1 || i > nWalls)) return { error: `${what}: в помещении стен ${nWalls}, номера — с 1` };
+    return { v: v.map((i) => i - 1).sort((a, b) => a - b) };
+  };
+  const pos = (v, what, max) => { const n = Number(v); if (!isFinite(n) || n < 0 || n > max) return { error: `${what} — число в метрах от 0 до ${max}` }; return { v: n }; };
+  for (const k of ["cornice", "plinth"]) {
+    if (body[k] === undefined) continue;
+    const e = body[k] || {}, w = walls(e.walls, k);
+    if (w.error) return { error: w.error };
+    out[k] = { ...out[k], on: !!e.on, walls: w.v, plank: apiMStr(apiM(e.plank_m)) };
+  }
+  if (body.ceil !== undefined) {
+    if (!Array.isArray(body.ceil) || body.ceil.length > 10) return { error: "ceil — список рамок на потолке (до 10)" };
+    const list = [];
+    for (const f of body.ceil) {
+      const d = pos(f && f.offset_m, "ceil: offset_m", 5); if (d.error || !(d.v > 0)) return { error: d.error || "ceil: offset_m — отступ от стен больше 0" };
+      list.push({ d: apiMStr(d.v), dbl: !!f.double, ind: f.double ? apiMStr(apiM(f.inner_m) || 0.05) : "" });
+    }
+    out.ceil = list;
+  }
+  if (body.wall !== undefined) {
+    if (!Array.isArray(body.wall) || body.wall.length > 40) return { error: "wall — список молдингов на стенах (до 40)" };
+    const list = [];
+    for (const [i, r] of body.wall.entries()) {
+      const what = `wall[${i}]`, t = r && r.type;
+      const w = walls(r && r.walls, what); if (w.error) return { error: w.error };
+      if (t === "line") {
+        const y = pos(r.y_m, what + ": y_m", H); if (y.error || !(y.v > 0)) return { error: what + ": y_m — высота линии от пола, больше 0 и не выше потолка" };
+        list.push({ type: "line", walls: w.v, y: apiMStr(y.v) });
+        continue;
+      }
+      if (t !== "frame" && t !== "frames") return { error: what + ': type — "frame" (рамка по размерам), "frames" (ряд рамок) или "line"' };
+      const yb = pos(r.bottom_m, what + ": bottom_m", H), yt = pos(r.top_m, what + ": top_m", H);
+      if (yb.error || yt.error) return { error: yb.error || yt.error };
+      if (!(yt.v > yb.v)) return { error: what + ": top_m должен быть выше bottom_m" };
+      const dbl = !!r.double, ind = dbl ? apiM(r.inner_m) : 0;
+      if (dbl && !(ind > 0)) return { error: what + ": у двойной рамки нужен inner_m — отступ внутренней рамки" };
+      if (t === "frame") {
+        if (!Array.isArray(r.walls) || r.walls.length !== 1) return { error: what + ": у рамки по размерам — одна стена, walls: [номер]" };
+        const x = pos(r.x_m == null ? 0 : r.x_m, what + ": x_m", 100), fw = apiM(r.width_m);
+        if (x.error) return { error: x.error };
+        if (!(fw > 0)) return { error: what + ": width_m — ширина рамки" };
+        const L = apiM(m.walls[w.v[0]]);
+        if (L > 0 && x.v + fw > L + 0.005) return { error: `${what}: рамка выходит за стену ${w.v[0] + 1} (длина ${L} м): x_m + width_m = ${Math.round((x.v + fw) * 1000) / 1000}` };
+        list.push({ type: "frame", walls: w.v, x: x.v > 0 ? apiMStr(x.v) : "0", w: apiMStr(fw), yb: yb.v > 0 ? apiMStr(yb.v) : "0", yt: apiMStr(yt.v), dbl, ind: dbl ? apiMStr(ind) : "", indY: dbl && apiM(r.inner_y_m) ? apiMStr(apiM(r.inner_y_m)) : "" });
+      } else {
+        list.push({ type: "frames", walls: w.v, yb: yb.v > 0 ? apiMStr(yb.v) : "0", yt: apiMStr(yt.v), gap: apiMStr(apiM(r.gap_m)), fw: apiMStr(apiM(r.width_m)), dbl, ind: dbl ? apiMStr(ind) : "" });
+      }
+    }
+    out.wall = list;
+  }
+  return { molding: out };
 }
 
 function apiObjectView(o) {
@@ -3359,6 +3477,33 @@ async function handleApi(request, env, url) {
     touch();
     await writeBin(env, record);
     return request.method === "DELETE" ? apiJson({ ok: true }) : apiJson(apiObjectDetail(obj));
+  }
+
+  // помещение подробно (стены, проёмы, молдинги) и молдинги в его замер
+  const roomPath = path.match(/^\/api\/v1\/objects\/([^/]+)\/rooms\/([^/]+)(\/molding)?$/);
+  if (roomPath) {
+    const obj = findObject(decodeURIComponent(roomPath[1]));
+    if (!obj) return apiJson({ error: "Объект не найден" }, 404);
+    const room = (Array.isArray(obj.rooms) ? obj.rooms : []).find((r) => r && r.measure && r.id === decodeURIComponent(roomPath[2]));
+    if (!room) return apiJson({ error: "Помещение не найдено" }, 404);
+    if (!roomPath[3] && request.method === "GET") { await touchIfOld(); return apiJson(apiRoomDetail(room)); }
+    if (roomPath[3] && request.method === "PATCH") {
+      if (await limited()) return apiJson({ error: "Не больше 10 изменений в минуту на один ключ" }, 429);
+      const read = await readApiBody(request, 50000);
+      if (read.error) return apiJson({ error: read.error }, read.status);
+      const parsed = apiMolding(read.body || {}, room);
+      if (parsed.error) return apiJson({ error: parsed.error }, 400);
+      const space = apiSpace(record, user, entry, false);
+      // прежние молдинги — чтобы мастер мог вернуть (кнопка у помещения)
+      room.moldingPrev = { at: Date.now(), from: entry.name, molding: room.measure.molding || null };
+      room.measure.molding = parsed.molding;
+      room.moldingFrom = { at: Date.now(), from: entry.name };
+      bumpRev(record, space.key, ["objects"]);
+      touch();
+      await writeBin(env, record);
+      return apiJson({ ok: true, room: apiRoomDetail(room), note: "Молдинги записаны в замер. Длины в surfaces появятся, когда мастер откроет кабинет" });
+    }
+    return apiJson({ error: "Такого запроса нет: GET …/rooms/<id> или PATCH …/rooms/<id>/molding" }, 405);
   }
 
   const onePlan = path.match(/^\/api\/v1\/objects\/([^/]+)\/plans\/([^/]+)$/);
