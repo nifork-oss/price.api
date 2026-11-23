@@ -222,13 +222,59 @@ y += RH + GAP;
 });
 return `<svg class="mol-cut-svg" viewBox="0 0 ${W} ${y}" width="100%" style="max-width:${W * 1.4}px" data-g="${gi}">${s}</svg>`;
 }
-function molBuyHtml(plan) {
+function molBuyHtml(plan, sendable) {
 if (!plan.length) return '';
 _molPlans = plan;
 return `<div class="mol-buy"><b>Для закупки:</b> ${plan.map(g => `${escapeHtml(molBuyName(g))} — <b>${g.bars.length} ${molPlanksWord(g.bars.length)}</b> по ${mFmt(g.plank)} м`).join('; ')}
+${sendable && typeof purchaseShareKey === 'function' ? `<div id="molSendBox"><button type="button" class="mol-send-btn" onclick="molSendOpen()">📤 Отправить заказчику на закупку…</button></div>` : ''}
 <details class="mol-cut"><summary>Раскрой планок</summary>${plan.map((g, gi) => `<div class="mol-cut-g">${escapeHtml(molBuyName(g))}: ${g.bars.length} ${molPlanksWord(g.bars.length)}</div>${molCutSvg(g, gi)}`).join('')}
 <div class="mol-pick-info mp-hint">Нажмите на молдинг на развёртке или на кусок планки: он подсветится оранжевым, а синим — то, что режется из остатка той же планки.</div></details></div>`;
 }
+/* ---------- отправить заказчику: закупка молдинга с правкой количества ----------
+   На объекте может уже лежать часть молдинга — у каждого профиля «Есть на объекте» и «Купить» (можно поправить).
+   «Создать закупку и отправить» — обычная закупка объекта (calc-purchases.js) со ссылкой для заказчика. */
+function molSendOpen() {
+const box = document.getElementById('molSendBox');
+if (!box || !_molPlans.length) return;
+box.innerHTML = `<div class="mol-send">${_molPlans.map((g, i) => `<div class="mol-send-row" data-i="${i}">
+<div class="mol-send-name">${escapeHtml(molBuyName(g))}, планки по ${mFmt(g.plank)} м <span>нужно ${g.bars.length} шт.</span></div>
+<label>Есть на объекте<input type="number" min="0" inputmode="numeric" class="mol-send-have" value="0" oninput="molSendHave(${i})"></label>
+<label>Купить, шт.<input type="number" min="0" inputmode="numeric" class="mol-send-buy" value="${g.bars.length}"></label></div>`).join('')}
+<label class="mol-send-note">Кому<input type="text" id="molSendTo" placeholder="Заказчику" maxlength="100"></label>
+<div class="mol-send-btns"><button type="button" class="btn btn-primary" onclick="molSendGo()">Создать закупку и отправить</button><button type="button" class="hc-btn" onclick="molSendClose()">Отмена</button></div>
+<div class="mp-hint">Список появится во вкладке «Закупки» объекта — по ссылке заказчик отметит, что купил и доставил.</div></div>`;
+}
+function molSendClose() { const box = document.getElementById('molSendBox'); if (box) box.innerHTML = `<button type="button" class="mol-send-btn" onclick="molSendOpen()">📤 Отправить заказчику на закупку…</button>`; }
+// «есть на объекте» — купить столько, сколько не хватает
+function molSendHave(i) {
+const row = document.querySelector(`.mol-send-row[data-i="${i}"]`), g = _molPlans[i];
+if (!row || !g) return;
+const have = Math.max(0, Math.round(Number(row.querySelector('.mol-send-have').value) || 0));
+row.querySelector('.mol-send-buy').value = Math.max(0, g.bars.length - have);
+}
+async function molSendGo() {
+const obj = (cloudData.objects || []).find(o => o.id === currentObjectId);
+if (!obj || typeof purchaseSend !== 'function') return;
+const items = [], had = [];
+_molPlans.forEach((g, i) => {
+const row = document.querySelector(`.mol-send-row[data-i="${i}"]`);
+if (!row) return;
+const buy = Math.max(0, Math.round(Number(row.querySelector('.mol-send-buy').value) || 0)), have = Math.max(0, Math.round(Number(row.querySelector('.mol-send-have').value) || 0));
+const name = `${molBuyName(g)}, планка ${mFmt(g.plank)} м`;
+if (buy > 0) items.push({ id: purchaseId(), name, qty: buy, unit: 'шт.', done: false, price: '' });
+if (have > 0) had.push(`${name} — ${have} шт.`);
+});
+if (!items.length) { showAddToast('Покупать нечего: всё уже есть на объекте'); return; }
+const to = ((document.getElementById('molSendTo') || {}).value || '').trim();
+const p = { id: purchaseId(), title: 'Молдинг', to: to || 'Заказчику', note: had.length ? 'Уже есть на объекте: ' + had.join('; ') : '', createdAt: Date.now(),
+author: typeof currentUser === 'string' ? currentUser : '', items, total: '', files: [], delivered: false, inStats: true };
+obj.purchases = [...purchaseList(obj), p];
+objectHistorySubTab = 'purchase';
+purchaseOpenId = p.id;
+renderObjectDetail();
+await purchaseSend();
+}
+
 // нажали на кусок: подсветить его во всех схемах, а куски из остатка той же планки — другим цветом
 // (наклеили этот кусок — остаток этой же планки идёт туда, целую планку не режут). Сторона рамки со стыком
 // на стене подсвечивается не целиком, а именно своим куском: первый — сверху (слева), следующий — ниже (правее)

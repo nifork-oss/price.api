@@ -746,7 +746,7 @@ if (typeof molPieces !== 'function') return [];
 const pieces = rooms.filter(r => r && r.measure).flatMap(r => { try { return molPieces(r.measure, roomName(r) + ' · ', r.id + ':'); } catch (e) { return []; } });
 return pieces.length ? molCutPlan(pieces) : [];
 }
-function objectMoldingBuyHtml(rooms) { const plan = objectMoldingBuy(rooms); return plan.length ? molBuyHtml(plan) : ''; }
+function objectMoldingBuyHtml(rooms) { const plan = objectMoldingBuy(rooms); return plan.length ? molBuyHtml(plan, typeof isCurrentClient === 'function' && !isCurrentClient()) : ''; }
 function objectVolumeHtml(rooms, floorsOf, grouped, floorOfRoom) {
 const all = objectVolumeTotals(rooms);
 if (!all.rows.length) return '';
