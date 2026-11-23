@@ -420,3 +420,17 @@ test('объём работ: малярный пирог сверху, оста�
   assert.match(html, /<summary>Углы и периметр/);
   assert.match(run('plVolumeSvg(plVolumeData(rooms), 25, 16)'), />Углы и периметр</, 'и в обмерном плане');
 });
+
+test('молдинг для закупки: «закуплено» зачёркивает строку и даёт «Удалить»; понадобилось больше — строка возвращается', () => {
+  const { run } = setup({});
+  run('var escapeHtml = s => String(s); var g = { mw: 40, plank: 2, bars: [1, 2, 3, 4, 5, 6, 7] };');
+  assert.match(run('molBuyRowHtml(g, {})'), /type="checkbox" (?!checked)/);
+  const done = run('molBuyRowHtml(g, { molBuy: { "40|2": { n: 7 } } })');
+  assert.match(done, /mol-buy-row done/);
+  assert.match(done, /checked/);
+  assert.match(done, /Удалить/);
+  assert.strictEqual(run('molBuyRowHtml(g, { molBuy: { "40|2": { n: 7, hidden: true } } })'), '', 'удалённое — не видно');
+  const more = run('molBuyRowHtml(g, { molBuy: { "40|2": { n: 5, hidden: true } } })');
+  assert.match(more, /закуплено 5, нужно ещё 2/, 'стало нужно больше — строка вернулась');
+  assert.doesNotMatch(more, /mol-buy-row done/);
+});
