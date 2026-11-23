@@ -298,3 +298,20 @@ test('объём работ по всему объекту: суммы стен,
   assert.match(html, /По этажам/);
   assert.match(html, /Помещений с замером: 2 из 3/);
 });
+
+test('обмерный план: объём работ под экспликацией (по этажам), много помещений — отдельным листом', () => {
+  const { loadCalc } = require('./load.js');
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-stairs.js', 'calc-rooms.js', 'calc-plan.js']);
+  const run = code => vm.runInContext(code, c);
+  run(`var escapeHtml = s => String(s); var mk = (n, f) => ({ id: n, measure: Object.assign(newMeasure(), { room: n, floor: f, shape: 'rect', height: '2,7', walls: ['4', '3', '4', '3'] }) });
+    var rooms = [mk('Кухня', '1'), mk('Спальня', '2')], info = { company: 'М', client: 'А', address: '', object: 'Дом', date: '' };`);
+  const svg = run('plExplicationPage(rooms.map(plRoomRow), info, 2, plVolumeData(rooms))');
+  assert.match(svg, /Объём работ по всему объекту/);
+  assert.match(svg, />1 этаж</);
+  assert.match(svg, />Стены, м²</);
+  assert.match(svg, />75,60</, 'стены всего — по двум комнатам');
+  // 20 помещений — экспликация занимает лист, объём не влезает над штампом
+  run('var many = Array.from({ length: 20 }, (_, i) => mk("К" + i, "1"));');
+  assert.ok(run('plExplicationEnd(many.map(plRoomRow)) + 1 + plVolumeHeight(plVolumeData(many)) > PL_VOL_LIMIT'));
+  assert.match(run('plVolumePage(plVolumeData(many), info, 2, 9)'), /Объём работ по всему объекту/);
+});
