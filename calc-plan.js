@@ -172,7 +172,8 @@ const floors = [...new Set(rooms.filter(r => r && r.measure).map(flOf))]
 const byFloor = floors.length > 1 && floors.length <= 3 ? floors.map(f => ({ label: (typeof roomFloorLabel === 'function' && roomFloorLabel(f)) || 'Без этажа', t: objectVolumeTotals(rooms.filter(r => r && flOf(r) === f)) })) : [];
 return { all, byFloor };
 }
-function plVolumeHeight(v) { return v ? 9 + 7 + v.all.rows.length * 6 + 6 : 0; }
+const plVolumeGroups = v => (typeof objectVolumeGroups === 'function' ? objectVolumeGroups(v.all.rows) : [{ title: '', rows: v.all.rows }]);
+function plVolumeHeight(v) { return v ? 9 + 7 + v.all.rows.length * 6 + plVolumeGroups(v).filter(g => g.title).length * 5 + 6 : 0; }
 function plVolumeSvg(v, x0, y) {
 let s = `<text x="${x0}" y="${y + 5}" font-family="${PL_FONT}" font-size="4" font-weight="700">Объём работ по всему объекту</text>`;
 s += `<text x="${x0 + 176}" y="${y + 5}" font-family="${PL_FONT}" font-size="2.6" fill="#444" text-anchor="end">помещений с замером: ${v.all.counted}</text>`;
@@ -186,7 +187,16 @@ s += `<text x="${x}" y="${y + 4.8}" font-family="${PL_FONT}" font-size="2.8" fon
 });
 const y0 = y;
 y += 7;
-v.all.rows.forEach(row => {
+let heads2 = '';
+plVolumeGroups(v).forEach(gr => {
+// подзаголовок группы (лепнина, углы и т. п.) — строкой во всю ширину
+if (gr.title) {
+// поверх линий колонок (их рисуют в конце) — полосой во всю ширину
+heads2 += `<rect x="${x0 + 0.3}" y="${y + 0.15}" width="${total - 0.6}" height="4.7" fill="#f3eafb"/><text x="${x0 + 1.8}" y="${y + 3.6}" font-family="${PL_FONT}" font-size="2.8" font-weight="700" fill="#5b2a86">${plEsc(gr.title)}</text>`;
+y += 5;
+s += `<line x1="${x0}" y1="${y}" x2="${x0 + total}" y2="${y}" stroke="#000" stroke-width="0.2"/>`;
+}
+gr.rows.forEach(row => {
 const main = row.key === 'walls' || row.key === 'ceiling' || row.key === 'pie';
 if (main) s += `<rect x="${x0}" y="${y}" width="${total}" height="${rh}" fill="${row.key === 'pie' ? '#fff1c2' : '#f2f2f2'}"/>`;
 const vals = [row.value, ...v.byFloor.map(f => { const q = f.t.rows.find(x => x.key === row.key && x.unit === row.unit); return q ? q.value : 0; })];
@@ -196,8 +206,10 @@ vals.forEach((val, i) => { s += `<text x="${x0 + wLabel + i * wVal + wVal / 2}" 
 y += rh;
 s += `<line x1="${x0}" y1="${y}" x2="${x0 + total}" y2="${y}" stroke="#000" stroke-width="0.2"/>`;
 });
+});
 s += `<rect x="${x0}" y="${y0}" width="${total}" height="${y - y0}" fill="none" stroke="#000" stroke-width="0.5"/>`;
 for (let i = 0; i <= v.byFloor.length; i++) { const x = x0 + wLabel + i * wVal; s += `<line x1="${x}" y1="${y0}" x2="${x}" y2="${y}" stroke="#000" stroke-width="0.25"/>`; }
+s += heads2;
 if (v.all.rows.some(x => x.key === 'pie') && typeof VOLUME_PIE_NOTE !== 'undefined') s += `<text x="${x0}" y="${y + 4.5}" font-family="${PL_FONT}" font-size="2.5" fill="#333">${plEsc('Общий объём: ' + VOLUME_PIE_NOTE + '.')}</text>`;
 return s;
 }

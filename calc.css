@@ -1248,3 +1248,8 @@ body.assistant-open .add-toast { z-index: 99; }
 .mol-send-btns { display: flex; gap: 8px; margin-top: 10px; }
 .mol-send-btns .btn { flex: 1; margin: 0; }
 .mol-send .mp-hint { margin-top: 10px; }
+/* объём работ: группы под подзаголовками (лепнина, углы и т. п.) */
+.volume-group { border-top: 1px solid #e8ecf0; }
+.volume-group summary { cursor: pointer; padding: 7px 0; font-size: 14px; font-weight: 700; color: #5b2a86; }
+.volume-group summary span { margin-left: 4px; font-weight: 500; font-size: 12px; color: #8d97a5; }
+.volume-group .volume-table { margin-bottom: 4px; }

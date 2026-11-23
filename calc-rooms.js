@@ -737,8 +737,25 @@ if (pie > 0) list.unshift({ key: 'pie', label: 'Общий объём', unit: '�
 objectMoldingBuy(rooms).forEach(g => list.push({ key: 'molBuy' + g.mw + '_' + g.plank, label: molBuyName(g) + ' (планки по ' + mFmt(g.plank) + ' м) — купить', unit: 'шт.', value: g.bars.length, rooms: counted }));
 return { rows: list, counted };
 }
+// группы объёма: сверху — малярный пирог (без заголовка), дальше — по подзаголовкам (раскрываются)
+const VOLUME_GROUPS = [
+{ title: '', test: k => k === 'pie' || VOLUME_PIE.includes(k) },
+{ title: 'Лепнина', test: k => /^mol/.test(k) },
+{ title: 'Углы и периметр', test: k => k === 'perimeter' || /^corners/.test(k) },
+{ title: 'Плитка', test: k => /^tile/.test(k) },
+{ title: 'Укрывка', test: k => /^mask/.test(k) },
+{ title: 'Лестница', test: k => /^stair/.test(k) },
+{ title: 'Прочее', test: () => true },
+];
+function objectVolumeGroups(rows) {
+const used = new Set();
+return VOLUME_GROUPS.map(g => ({ title: g.title, rows: rows.filter(r => !used.has(r) && g.test(r.key) && used.add(r)) })).filter(g => g.rows.length);
+}
 function objectVolumeTableHtml(t) {
-return `<table class="volume-table">${t.rows.map(x => `<tr class="${x.key === 'pie' ? 'volume-pie' : x.key === 'walls' || x.key === 'ceiling' ? 'volume-main' : ''}"><td>${escapeHtml(x.label)}</td><td>${mFmt(x.value)}&nbsp;${escapeHtml(x.unit)}</td></tr>`).join('')}</table>`;
+const tr = x => `<tr class="${x.key === 'pie' ? 'volume-pie' : x.key === 'walls' || x.key === 'ceiling' ? 'volume-main' : ''}"><td>${escapeHtml(x.label)}</td><td>${mFmt(x.value)}&nbsp;${escapeHtml(x.unit)}</td></tr>`;
+return objectVolumeGroups(t.rows).map(g => (g.title
+? `<details class="volume-group"><summary>${escapeHtml(g.title)} <span>${g.rows.length}</span></summary><table class="volume-table">${g.rows.map(tr).join('')}</table></details>`
+: `<table class="volume-table">${g.rows.map(tr).join('')}</table>`)).join('');
 }
 // закупка молдинга по всему объекту: обрезки одного помещения идут в другое (calc-molding.js)
 function objectMoldingBuy(rooms) {
