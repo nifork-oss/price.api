@@ -134,6 +134,119 @@ const molFrameLen = f => molFrameSides(f).reduce((a, v) => a + minLen(v), 0);
 const molCm = v => { const n = Number(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) && n > 0 && n < 1000 ? n : 0; };
 const molCmTxt = mm => String(mm).replace('.', ',') + ' мм';
 
+/* ---------- закупка молдинга: планки и раскрой ----------
+   Молдинг продаётся планками (по умолчанию 2 м, короче не купить). Каждая сторона рамки и каждый кусок линии —
+   отдельная деталь (у рамки — по внешнему краю, с запилом 45°). Детали длиннее планки — из нескольких планок со
+   стыком. Раскрой — «длинные первыми, каждая — в самый подходящий обрезок» (Best Fit Decreasing): обрезки идут
+   в другие места, а не в мусор; на рез — 3 мм. Считается отдельно по каждому профилю (ширина + длина планки). */
+const MOL_PLANK_DEF = 2, MOL_KERF = 0.003;
+const molPlankOf = row => { const v = mNum(row && row.plank); return v >= 0.3 && v <= 6 ? v : MOL_PLANK_DEF; };
+// детали молдинга на стенах помещения: [{ len, mw, plank, label }]
+function molPieces(m, prefix = '', keyPre = '') {
+const out = [], lens = molWallLens(m);
+lens.forEach((L, wi) => {
+if (!(L > 0)) return;
+const lay = molWallLayout(m, wi);
+const frames = lay.frames.slice().sort((a, b) => a.x0 - b.x0);
+frames.forEach((f, k) => {
+const name = `${prefix}стена ${wi + 1}, рамка ${k + 1}${frames.length === 1 ? '' : ` (${mFmt(f.x1 - f.x0)}×${mFmt(f.y1 - f.y0)})`}`;
+[[f, 'наружная'], [f.inner, 'внутренняя']].forEach(([r, kind]) => {
+if (!r) return;
+const tag = f.inner ? `${name}, ${kind}` : name, w = r.x1 - r.x0, h = r.y1 - r.y0, mw = r.mw || 0, plank = f.plank || MOL_PLANK_DEF;
+[['верх', w, 't'], ['низ', w, 'b'], ['лево', h, 'l'], ['право', h, 'r']].forEach(([side, len, sk]) => out.push({ len, mw, plank, label: `${tag}: ${side}`, key: `${keyPre}w${wi}f${k}${r === f ? 'o' : 'i'}${sk}` }));
+});
+});
+lay.lines.forEach((l, j) => out.push({ len: l.x1 - l.x0, mw: l.mw || 0, plank: l.plank || MOL_PLANK_DEF, label: `${prefix}стена ${wi + 1}, линия на ${mFmt(l.y)} м${lay.lines.length > 1 ? `, кусок ${j + 1}` : ''}`, key: `${keyPre}w${wi}l${j}` }));
+});
+return out.filter(p => p.len > 0.005);
+}
+// раскрой по профилям: [{ mw, plank, bars: [{ cuts: [{ len, label }], rest }], need, waste }]
+function molCutPlan(pieces, kerf = MOL_KERF) {
+const groups = new Map();
+pieces.forEach(p => {
+const key = (p.mw || 0) + '|' + p.plank;
+if (!groups.has(key)) groups.set(key, { mw: p.mw || 0, plank: p.plank, raw: [] });
+groups.get(key).raw.push(p);
+});
+// детали длиннее планки — целые планки и добавка со стыком не короче minJoin (огрызок стыковать — плохая работа)
+const split = (g, minJoin) => g.raw.flatMap(p => {
+if (!(p.len > p.plank + 1e-9)) return [{ len: p.len, label: p.label, key: p.key, whole: p.len }];
+const n = Math.ceil(p.len / p.plank - 1e-9), lens = Array.from({ length: n }, () => p.plank);
+lens[n - 1] = p.len - p.plank * (n - 1);
+if (lens[n - 1] < minJoin) { const add = minJoin - lens[n - 1]; lens[n - 2] -= add; lens[n - 1] += add; }
+return lens.map((len, i) => ({ len, label: `${p.label} (${i + 1} из ${n}, стык)`, key: p.key, whole: p.len, part: i + 1, parts: n }));
+});
+// длинные первыми, каждая — в самый подходящий обрезок (Best Fit Decreasing)
+const pack = (parts, plank) => {
+const bars = [];
+parts.slice().sort((a, b) => b.len - a.len).forEach(part => {
+let best = null;
+bars.forEach(b => { if (b.rest + 1e-9 >= part.len && (!best || b.rest < best.rest)) best = b; });
+if (!best) { best = { cuts: [], rest: plank }; bars.push(best); }
+best.cuts.push(part);
+best.rest = Math.max(0, best.rest - part.len - kerf);
+});
+return bars;
+};
+return [...groups.values()].sort((a, b) => b.mw - a.mw || b.plank - a.plank).map(g => {
+// место стыка подбираем: добавка от 20 до 50 см — где меньше планок (при равенстве — добавка длиннее)
+let best = null;
+[0.5, 0.4, 0.35, 0.3, 0.25, 0.22, 0.2].forEach(mj => {
+const parts = split(g, mj), bars = pack(parts, g.plank);
+if (!best || bars.length < best.bars.length) best = { parts, bars };
+});
+const need = best.parts.reduce((a, p) => a + p.len, 0);
+return { mw: g.mw, plank: g.plank, bars: best.bars, need, waste: best.bars.reduce((a, b) => a + b.rest, 0) };
+});
+}
+const molBuyName = g => (g.mw ? 'Молдинг ' + molCmTxt(g.mw) : 'Молдинг (ширина не указана)') + (g.plank !== MOL_PLANK_DEF ? `, планка ${mFmt(g.plank)} м` : '');
+const molPlanksWord = n => n % 10 === 1 && n % 100 !== 11 ? 'планка' : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'планки' : 'планок';
+// закупка и раскрой — для замера помещения и для всего объекта: итог строкой, планки — схемой. Нажатие на кусок
+// (или на молдинг на развёртке) подсвечивает его везде и показывает цифры только по нему (molPick)
+const MOL_CUT_COLORS = ['#a78bfa', '#60a5fa', '#34d399', '#fbbf24', '#f472b6', '#22d3ee', '#fb923c', '#a3e635'];
+const molKeyColor = key => { let h = 0; for (const ch of String(key).replace(/[tblr]$/, '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return MOL_CUT_COLORS[h % MOL_CUT_COLORS.length]; };
+let _molPlans = []; // последние показанные раскрои — чтобы по нажатию найти, где резать кусок
+function molCutSvg(g, gi) {
+const W = 330, L = 22, RH = 20, GAP = 6, k = (W - L - 4) / g.plank;
+let y = 0, s = '';
+g.bars.forEach((b, i) => {
+s += `<text x="${L - 6}" y="${y + 14}" text-anchor="end" font-size="11" font-weight="700" fill="#7a3fb0">${i + 1}</text>`;
+s += `<rect x="${L}" y="${y}" width="${g.plank * k}" height="${RH}" rx="3" fill="#f1f3f6" stroke="#cbd2da" stroke-width="0.8"/>`;
+let x = L;
+b.cuts.forEach(c => {
+const w = c.len * k;
+s += `<g class="mol-pick" data-mk="${c.key}"><rect class="mol-seg" x="${x}" y="${y}" width="${Math.max(1, w - 1)}" height="${RH}" rx="3" fill="${molKeyColor(c.key)}"/>${w > 30 ? `<text x="${x + w / 2}" y="${y + 14}" text-anchor="middle" font-size="10.5" fill="#14181f" pointer-events="none">${mFmt(c.len)}</text>` : ''}</g>`;
+x += w + MOL_KERF * k;
+});
+y += RH + GAP;
+});
+return `<svg class="mol-cut-svg" viewBox="0 0 ${W} ${y}" width="100%" style="max-width:${W * 1.4}px" data-g="${gi}">${s}</svg>`;
+}
+function molBuyHtml(plan) {
+if (!plan.length) return '';
+_molPlans = plan;
+return `<div class="mol-buy"><b>Для закупки:</b> ${plan.map(g => `${escapeHtml(molBuyName(g))} — <b>${g.bars.length} ${molPlanksWord(g.bars.length)}</b> по ${mFmt(g.plank)} м`).join('; ')}
+<details class="mol-cut"><summary>Раскрой планок</summary>${plan.map((g, gi) => `<div class="mol-cut-g">${escapeHtml(molBuyName(g))}: ${g.bars.length} ${molPlanksWord(g.bars.length)}</div>${molCutSvg(g, gi)}`).join('')}
+<div class="mol-pick-info mp-hint">Нажмите на кусок планки или на молдинг на развёртке — он подсветится, и здесь будет, куда он идёт и из какой планки его резать.</div></details></div>`;
+}
+// нажали на кусок: подсветить его во всех схемах и показать цифры
+function molPick(key) {
+document.querySelectorAll('.mol-pick.sel').forEach(el => el.classList.remove('sel'));
+if (!key) return;
+document.querySelectorAll(`.mol-pick[data-mk="${CSS.escape(key)}"]`).forEach(el => el.classList.add('sel'));
+const parts = [];
+_molPlans.forEach(g => g.bars.forEach((b, i) => b.cuts.forEach(c => { if (c.key === key) parts.push({ g, i, c }); })));
+const info = parts.length
+? `<b>${escapeHtml(parts[0].c.label.replace(/ \(\d+ из \d+, стык\)$/, ''))}</b> — ${mFmt(parts[0].c.whole || parts[0].c.len)} м${parts[0].g.mw ? `, молдинг ${molCmTxt(parts[0].g.mw)}` : ''}<br>${parts.map(p => `${p.c.parts ? `${p.c.part}-й кусок ` : 'Резать '}${mFmt(p.c.len)} м — из планки <b>${p.i + 1}</b>${p.g.bars[p.i].cuts[0] !== p.c ? ' (из обрезка)' : ''}`).join('<br>')}${parts.some(p => p.c.parts) ? '<br>Сторона длиннее планки — со стыком.' : ''}`
+: 'Этот молдинг не попал в раскрой.';
+document.querySelectorAll('.mol-pick-info').forEach(el => { el.innerHTML = info; el.classList.remove('mp-hint'); });
+document.querySelectorAll('details.mol-cut').forEach(d => { d.open = true; });
+}
+if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('click', e => {
+const t = e.target && e.target.closest && e.target.closest('.mol-pick');
+if (t) molPick(t.getAttribute('data-mk'));
+});
+
 // Раскладка молдингов на стене: рамки обходят проёмы и ниши, линии разрываются на них
 function molWallLayout(m, wi) {
 const L = mNum((m.walls || [])[wi]);
@@ -154,9 +267,9 @@ const y = mNum(row.y);
 if (!(y > 0) || y >= Hh) return;
 const cuts = ops.filter(o => o.y0 < y && o.y1 > y).map(o => [o.a0, o.a1]).sort((a, b) => a[0] - b[0]);
 let x = 0;
-const mw = molCm(row.mw);
-cuts.forEach(([c0, c1]) => { if (c0 > x + 0.01) res.lines.push({ ri, x0: x, x1: c0, y, mw }); x = Math.max(x, c1); });
-if (L > x + 0.01) res.lines.push({ ri, x0: x, x1: L, y, mw });
+const mw = molCm(row.mw), plank = molPlankOf(row);
+cuts.forEach(([c0, c1]) => { if (c0 > x + 0.01) res.lines.push({ ri, x0: x, x1: c0, y, mw, plank }); x = Math.max(x, c1); });
+if (L > x + 0.01) res.lines.push({ ri, x0: x, x1: L, y, mw, plank });
 return;
 }
 // рамка по размерам — ровно там, где задана (проёмы не обходит: её ставят по чертежу)
@@ -167,7 +280,7 @@ if (x0 + w > L + 0.005) { res.outside = true; return; }
 const mw = molCm(row.mw), mwIn = molCm(row.mwIn) || mw, add = mw / 1000;
 const ind0 = molInd(row), iy0 = row.dbl && String(row.indY == null ? '' : row.indY).trim() !== '' ? mNum(row.indY) : ind0;
 const ind = ind0 > 0 ? ind0 + add : 0, iy = iy0 > 0 ? iy0 + add : 0;
-const fr = { ri, x0, x1: x0 + w, y0: fb, y1: ft, gap: 0, fixed: true, mw };
+const fr = { ri, x0, x1: x0 + w, y0: fb, y1: ft, gap: 0, fixed: true, mw, plank: molPlankOf(row) };
 if (ind > 0 || iy > 0) {
 if (w - 2 * ind >= 0.05 && ft - fb - 2 * iy >= 0.05) fr.inner = { x0: x0 + ind, x1: x0 + w - ind, y0: fb + iy, y1: ft - iy, mw: mwIn };
 else fr.innerBad = true;
@@ -195,7 +308,7 @@ let w = (s - gap * (n - 1)) / n;
 while (n > 1 && w < 0.15) { n--; w = (s - gap * (n - 1)) / n; }
 for (let k = 0; k < n; k++) {
 const x0 = f0 + k * (w + gap);
-const fr = { ri, x0, x1: x0 + w, y0: yb, y1: yt, gap, mw };
+const fr = { ri, x0, x1: x0 + w, y0: yb, y1: yt, gap, mw, plank: molPlankOf(row) };
 // внутренняя рамка — если после отступа остаётся хотя бы 10 см
 if (ind > 0) {
 if (w - 2 * ind >= 0.1 && yt - yb - 2 * ind >= 0.1) fr.inner = { x0: x0 + ind, x1: x0 + w - ind, y0: yb + ind, y1: yt - ind, mw: mwIn };
@@ -349,6 +462,14 @@ if (!t) return `<rect x="${xL}" y="${yT}" width="${xR - xL}" height="${yB - yT}"
 return `<rect x="${xL + t / 2}" y="${yT + t / 2}" width="${Math.max(0, xR - xL - t)}" height="${Math.max(0, yB - yT - t)}" fill="none" stroke="#c9a8e6" stroke-width="${t}"/><rect x="${xL}" y="${yT}" width="${xR - xL}" height="${yB - yT}" fill="none" stroke="${MOL_INK}" stroke-width="0.8"/>`;
 };
 lay.frames.forEach(f => { s += band(f, 1.6); if (f.inner) s += band(f.inner, 1.2); });
+// стороны рамок и куски линий — нажимаются: подсветка здесь и в раскрое планок (molPick), ключи — как в molPieces
+const hit = (key, d) => `<g class="mol-pick" data-mk="${key}"><path class="mol-hl" d="${d}" fill="none" stroke-width="4" stroke-linecap="round"/><path d="${d}" fill="none" stroke="transparent" stroke-width="14"/></g>`;
+lay.frames.slice().sort((a, b) => a.x0 - b.x0).forEach((f, k) => [[f, 'o'], [f.inner, 'i']].forEach(([r, oi]) => {
+if (!r) return;
+const xa = XA(r.x0), xb = XA(r.x1), yt = Yh(r.y1), yb = Yh(r.y0);
+s += hit(`w${wi}f${k}${oi}t`, `M${xa} ${yt}H${xb}`) + hit(`w${wi}f${k}${oi}b`, `M${xa} ${yb}H${xb}`) + hit(`w${wi}f${k}${oi}l`, `M${xa} ${yt}V${yb}`) + hit(`w${wi}f${k}${oi}r`, `M${xb} ${yt}V${yb}`);
+}));
+lay.lines.forEach((l, j) => { s += hit(`w${wi}l${j}`, `M${XA(l.x0)} ${Yh(l.y)}H${XA(l.x1)}`); });
 lay.lines.forEach(l => {
 s += `<path d="M${XA(l.x0)} ${Yh(l.y)}H${XA(l.x1)}" stroke="${MOL_INK}" stroke-width="2"/>`;
 });
@@ -418,6 +539,8 @@ if (seen.has(f.ri)) return;
 seen.add(f.ri);
 const xL = Math.min(XA(f.x0), XA(f.x1)), xR = Math.max(XA(f.x0), XA(f.x1));
 s += `<text x="${(xL + xR) / 2}" y="${(Yh(f.y0) + Yh(f.y1)) / 2 + 4}" text-anchor="middle" font-size="10.5" font-weight="700" fill="${MOL_INK}" paint-order="stroke" stroke="#ffffff" stroke-width="3">${mFmt(f.x1 - f.x0)}×${mFmt(f.y1 - f.y0)}</text>`;
+// ширина профиля — под размером рамки: «молдинг 40 мм», у двойной с другим внутренним — «40 / 20 мм»
+if (f.mw > 0) s += `<text x="${(xL + xR) / 2}" y="${(Yh(f.y0) + Yh(f.y1)) / 2 + 17}" text-anchor="middle" font-size="9.5" fill="${MOL_INK}" paint-order="stroke" stroke="#ffffff" stroke-width="3">молдинг ${f.inner && f.inner.mw && f.inner.mw !== f.mw ? `${f.mw} / ${f.inner.mw}` : f.mw} мм</text>`;
 // по вертикали — цепочкой: до ближайшей рамки другого ряда снизу и сверху, иначе до пола и потолка
 const others = lay.frames.filter(g => g.ri !== f.ri && overlap(f, g));
 const below = Math.max(0, ...others.filter(g => g.y1 <= f.y0 + 0.001).map(g => g.y1));
@@ -541,7 +664,8 @@ ${d.wall.map((row, i) => `<div class="mp-open">
 </div>
 ${chips(row.walls, wi => `molRowWall(${i}, ${wi})`, `molRowAll(${i})`)}
 ${row.type === 'line'
-? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Высота от пола ↕${mIn(`molding.wall.${i}.y`, row.y, '0,9')}</label><span class="mp-x">·</span><label>Молдинг, мм${mIn(`molding.wall.${i}.mw`, row.mw, '40')}</label></div>`
+? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Высота от пола ↕${mIn(`molding.wall.${i}.y`, row.y, '0,9')}</label><span class="mp-x">·</span><label>Молдинг, мм${mIn(`molding.wall.${i}.mw`, row.mw, '40')}</label></div>
+<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Длина планки, м${mIn(`molding.wall.${i}.plank`, row.plank, '2')}</label><span></span><span></span></div>`
 : row.type === 'frame'
 ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>От левого угла ↔${mIn(`molding.wall.${i}.x`, row.x, '0,37')}</label><span class="mp-x">·</span><label>Ширина ↔${mIn(`molding.wall.${i}.w`, row.w, '1,4')}</label></div>
 <div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Низ от пола ↕${mIn(`molding.wall.${i}.yb`, row.yb, '0,25')}</label><span class="mp-x">·</span><label>Верх от пола ↕${mIn(`molding.wall.${i}.yt`, row.yt, '2,27')}</label></div>
@@ -559,12 +683,14 @@ ${molProfHtml(row, i)}`}
 <button type="button" class="mp-add" onclick="molAddRow('frame')">+ Рамка по размерам</button>
 </div>
 <div class="mp-calc" id="mpCalcMolWall"></div>
+<div class="mp-calc" id="mpCalcMolBuy"></div>
 </section>`;
 }
 
 // Ширина профиля рамок (мм): наружной и, у двойной, внутренней — длина считается по каждому профилю отдельно
 function molProfHtml(row, i) {
 return `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Молдинг${row.dbl ? ' наружной' : ''}, мм${mIn(`molding.wall.${i}.mw`, row.mw, '40')}</label>${row.dbl ? `<span class="mp-x">·</span><label>Молдинг внутренней, мм${mIn(`molding.wall.${i}.mwIn`, row.mwIn, 'как наружной')}</label>` : '<span></span><span></span>'}</div>
+<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Длина планки, м${mIn(`molding.wall.${i}.plank`, row.plank, '2')}</label><span></span><span class="mp-hint" style="margin:0;align-self:center;">для закупки и раскроя</span></div>
 ${row.dbl && molCm(row.mw) ? '<div class="mp-hint">С шириной молдинга отступ внутренней рамки — просвет между молдингами, как на чертеже.</div>' : ''}`;
 }
 // Переключатель «двойная рамка» и отступ внутренней рамки
@@ -617,6 +743,7 @@ set('mpCalcMolCornice', mo.lines.cornice ? escapeHtml(mo.lines.cornice) : '');
 set('mpCalcMolPlinth', mo.lines.plinth ? escapeHtml(mo.lines.plinth) : '');
 set('mpCalcMolCeil', [mo.lines.ceil, mo.lines.ceilBad].filter(Boolean).map(escapeHtml).join('<br>'));
 set('mpCalcMolWall', [mo.lines.wall, mo.lines.wallProf, mo.lines.wallBad].filter(Boolean).map(escapeHtml).join('<br>'));
+{ const box = document.getElementById('mpCalcMolBuy'), open = box && box.querySelector('details[open]'); set('mpCalcMolBuy', molBuyHtml(molCutPlan(molPieces(measure)))); if (open && box) { const d = box.querySelector('details'); if (d) d.open = true; } }
 mo.ceil.forEach(f => set('mpMolCeilRes' + f.fi, f.poly ? `= ${mFmt(f.len)}` : ''));
 molGet(measure).wall.forEach((row, ri) => {
 let len = 0;

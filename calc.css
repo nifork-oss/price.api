@@ -1215,3 +1215,13 @@ body.assistant-open .add-toast { z-index: 99; }
 .volume-floors summary { cursor: pointer; margin-top: 8px; font-size: 13px; font-weight: 700; color: #485566; }
 .volume-floor { margin: 8px 0 2px; font-size: 12px; font-weight: 700; color: #5b6573; text-transform: uppercase; letter-spacing: .04em; }
 .volume-table tr.volume-pie td { font-weight: 800; color: #14181f; background: #fff4d1; padding-left: 6px; padding-right: 6px; }
+/* закупка молдинга и раскрой (calc-molding.js): планки схемой, нажатый кусок — подсвечен везде */
+.mol-buy { margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f6effc; color: #33404f; font-size: 13px; line-height: 1.45; }
+.mol-cut summary { cursor: pointer; margin-top: 6px; font-weight: 700; color: #7a3fb0; }
+.mol-cut-g { margin: 10px 0 4px; font-weight: 700; color: #14181f; }
+.mol-cut-svg { display: block; }
+.mol-pick { cursor: pointer; }
+.mol-pick .mol-hl { stroke: transparent; }
+.mol-pick.sel .mol-hl { stroke: #f97316; }
+.mol-pick.sel .mol-seg { stroke: #c2410c; stroke-width: 2.5; }
+.mol-pick-info { margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: #fff; color: #33404f; font-size: 13px; }
