@@ -402,3 +402,21 @@ test('объём работ: молдинг для закупки — сразу
   assert.deepStrictEqual(rows.map(r => [r.label, r.value]), [['Молдинг 40 мм (планки по 2 м) — купить', 7], ['Молдинг 20 мм (планки по 2 м) — купить', 6]]);
   assert.match(run(`objectVolumeHtml(rooms, [''], false, r => '')`), /Молдинг 40 мм \(планки по 2 м\) — купить<\/td><td>7&nbsp;шт\./);
 });
+
+test('объём работ: малярный пирог сверху, остальное — по подзаголовкам (лепнина, углы и периметр…)', () => {
+  const { loadCalc } = require('./load.js');
+  const c = loadCalc(['calc-measure.js', 'calc-ruler.js', 'calc-molding.js', 'calc-tile.js', 'calc-mask.js', 'calc-stairs.js', 'calc-rooms.js', 'calc-plan.js']);
+  const run = code => vm.runInContext(code, c);
+  run(`var escapeHtml = s => String(s); var rooms = [{ id: 'a', measure: Object.assign(newMeasure(), { room: 'Коридор', shape: 'rect', height: '2,5', walls: ['4,47', '3', '4,47', '3'],
+    openings: [{ type: 'window', w: '1,5', h: '1,4', n: '1', wall: 1 }],
+    molding: { wall: [{ type: 'frame', walls: [0], x: '0,37', w: '1,75', yb: '0,25', yt: '2,3', mw: '40' }] } }) }];`);
+  const groups = JSON.parse(run('JSON.stringify(objectVolumeGroups(objectVolumeTotals(rooms).rows).map(g => [g.title, g.rows.map(r => r.key)]))'));
+  assert.deepStrictEqual(groups.map(g => g[0]), ['', 'Лепнина', 'Углы и периметр']);
+  assert.deepStrictEqual(groups[0][1], ['pie', 'walls', 'ceiling', 'slopes']);
+  assert.ok(groups[1][1].includes('molWall') && groups[1][1].some(k => /^molBuy/.test(k)), 'молдинг и закупка — в лепнине');
+  assert.deepStrictEqual(groups[2][1], ['perimeter', 'corners']);
+  const html = run(`objectVolumeHtml(rooms, [''], false, r => '')`);
+  assert.match(html, /<details class="volume-group"><summary>Лепнина/);
+  assert.match(html, /<summary>Углы и периметр/);
+  assert.match(run('plVolumeSvg(plVolumeData(rooms), 25, 16)'), />Углы и периметр</, 'и в обмерном плане');
+});
