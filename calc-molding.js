@@ -222,10 +222,50 @@ y += RH + GAP;
 });
 return `<svg class="mol-cut-svg" viewBox="0 0 ${W} ${y}" width="100%" style="max-width:${W * 1.4}px" data-g="${gi}">${s}</svg>`;
 }
-function molBuyHtml(plan, sendable) {
+// отметки «закуплено» у объекта: obj.molBuy = { 'ширина|планка': { n — сколько планок было, когда отметили, hidden — убрано } }.
+// Понадобилось больше, чем закуплено, — строка возвращается: «закуплено N, нужно ещё M»
+const molBuyKey = g => (g.mw || 0) + '|' + g.plank;
+function molBuyRowHtml(g, obj) {
+const st = obj && obj.molBuy && obj.molBuy[molBuyKey(g)], n = g.bars.length;
+const more = st && n > st.n ? n - st.n : 0, done = !!st && !more;
+if (done && st.hidden) return '';
+const text = `${escapeHtml(molBuyName(g))} — <b>${n} ${molPlanksWord(n)}</b> по ${mFmt(g.plank)} м${more ? ` <span class="mol-buy-more">закуплено ${st.n}, нужно ещё ${more}</span>` : ''}`;
+if (!obj) return `<div class="mol-buy-row"><span>${text}</span></div>`;
+const k = escapeHtml(molBuyKey(g));
+return `<div class="mol-buy-row${done ? ' done' : ''}"><label class="mol-buy-chk"><input type="checkbox" ${done ? 'checked' : ''} onchange="molBuySet('${k}', ${n}, this.checked)"><span>${text}</span></label>
+${done ? `<button type="button" class="mol-buy-del" onclick="molBuyHide('${k}')">Удалить</button>` : ''}</div>`;
+}
+function molBuyObj() { return typeof currentObjectId !== 'undefined' && (cloudData.objects || []).find(o => o.id === currentObjectId) || null; }
+async function molBuySet(key, n, on) {
+const obj = molBuyObj();
+if (!obj) return;
+const all = { ...(obj.molBuy || {}) };
+if (on) all[key] = { n, at: Date.now() }; else delete all[key];
+obj.molBuy = all;
+renderObjectDetail();
+await saveCloudData();
+}
+async function molBuyHide(key) {
+const obj = molBuyObj();
+if (!obj || !obj.molBuy || !obj.molBuy[key]) return;
+obj.molBuy = { ...obj.molBuy, [key]: { ...obj.molBuy[key], hidden: true } };
+renderObjectDetail();
+await saveCloudData();
+}
+// вернуть убранные строки
+async function molBuyShowAll() {
+const obj = molBuyObj();
+if (!obj || !obj.molBuy) return;
+obj.molBuy = Object.fromEntries(Object.entries(obj.molBuy).map(([k, v]) => [k, { ...v, hidden: false }]));
+renderObjectDetail();
+await saveCloudData();
+}
+function molBuyHtml(plan, sendable, obj) {
 if (!plan.length) return '';
 _molPlans = plan;
-return `<div class="mol-buy"><b>Для закупки:</b> ${plan.map(g => `${escapeHtml(molBuyName(g))} — <b>${g.bars.length} ${molPlanksWord(g.bars.length)}</b> по ${mFmt(g.plank)} м`).join('; ')}
+const rows = plan.map(g => molBuyRowHtml(g, obj)).join(''), hidden = obj ? plan.filter(g => !molBuyRowHtml(g, obj)).length : 0;
+return `<div class="mol-buy"><b>Для закупки:</b>${rows || ' всё закуплено'}
+${hidden ? `<button type="button" class="mol-buy-show" onclick="molBuyShowAll()">Закупленное убрано: ${hidden} — показать</button>` : ''}
 ${sendable && typeof purchaseShareKey === 'function' ? `<div id="molSendBox"><button type="button" class="mol-send-btn" onclick="molSendOpen()">📤 Отправить заказчику на закупку…</button></div>` : ''}
 <details class="mol-cut"><summary>Раскрой планок</summary>${plan.map((g, gi) => `<div class="mol-cut-g">${escapeHtml(molBuyName(g))}: ${g.bars.length} ${molPlanksWord(g.bars.length)}</div>${molCutSvg(g, gi)}`).join('')}
 <div class="mol-pick-info mp-hint">Нажмите на молдинг на развёртке или на кусок планки: он подсветится оранжевым, а синим — то, что режется из остатка той же планки.</div></details></div>`;
@@ -239,18 +279,20 @@ if (!box || !_molPlans.length) return;
 box.innerHTML = `<div class="mol-send">${_molPlans.map((g, i) => `<div class="mol-send-row" data-i="${i}">
 <div class="mol-send-name">${escapeHtml(molBuyName(g))}, планки по ${mFmt(g.plank)} м <span>нужно ${g.bars.length} шт.</span></div>
 <label>Есть на объекте<input type="number" min="0" inputmode="numeric" class="mol-send-have" value="0" oninput="molSendHave(${i})"></label>
-<label>Купить, шт.<input type="number" min="0" inputmode="numeric" class="mol-send-buy" value="${g.bars.length}"></label></div>`).join('')}
+<label>Купить, шт.<input type="number" min="0" inputmode="numeric" class="mol-send-buy" value="${molSendLeft(g)}"></label></div>`).join('')}
 <label class="mol-send-note">Кому<input type="text" id="molSendTo" placeholder="Заказчику" maxlength="100"></label>
 <div class="mol-send-btns"><button type="button" class="btn btn-primary" onclick="molSendGo()">Создать закупку и отправить</button><button type="button" class="hc-btn" onclick="molSendClose()">Отмена</button></div>
 <div class="mp-hint">Список появится во вкладке «Закупки» объекта — по ссылке заказчик отметит, что купил и доставил.</div></div>`;
 }
+// сколько ещё купить: отмеченное «закуплено» не предлагаем снова (понадобилось больше — только недостающее)
+function molSendLeft(g) { const obj = molBuyObj(), st = obj && obj.molBuy && obj.molBuy[molBuyKey(g)]; return st ? Math.max(0, g.bars.length - st.n) : g.bars.length; }
 function molSendClose() { const box = document.getElementById('molSendBox'); if (box) box.innerHTML = `<button type="button" class="mol-send-btn" onclick="molSendOpen()">📤 Отправить заказчику на закупку…</button>`; }
 // «есть на объекте» — купить столько, сколько не хватает
 function molSendHave(i) {
 const row = document.querySelector(`.mol-send-row[data-i="${i}"]`), g = _molPlans[i];
 if (!row || !g) return;
 const have = Math.max(0, Math.round(Number(row.querySelector('.mol-send-have').value) || 0));
-row.querySelector('.mol-send-buy').value = Math.max(0, g.bars.length - have);
+row.querySelector('.mol-send-buy').value = Math.max(0, molSendLeft(g) - have);
 }
 async function molSendGo() {
 const obj = (cloudData.objects || []).find(o => o.id === currentObjectId);
