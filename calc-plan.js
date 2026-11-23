@@ -103,7 +103,7 @@ return best;
 }
 
 /* ---------- лист экспликации ---------- */
-function plExplicationPage(rows, info, sheetCount) {
+function plExplicationPage(rows, info, sheetCount, vol) {
 let s = '';
 s += `<text x="105" y="20" font-family="${PL_FONT}" font-size="6" font-weight="700" text-anchor="middle">Экспликация помещений</text>`;
 const cols = [ // ширина колонок, мм
@@ -153,8 +153,57 @@ note('Размеры на чертежах — в миллиметрах, по �
 note('Площадь пола считается по контуру, если комната сошлась при замере.');
 note('Окна и двери показаны на стене, к которой привязаны при замере; положение вдоль стены условное.');
 if (rows.some(r => r.ceilEls)) note('Ниши (Н) и короба (К) потолка — штриховой линией: ширина от стены × высота, L — длина по стенам; точки — подсветка.');
+if (vol) s += plVolumeSvg(vol, x0, y + 1);
 s += plFrame(info, 1, sheetCount, 'Экспликация помещений');
 return s;
+}
+
+/* ---------- объём работ по всему объекту (как в карточке объекта, calc-rooms.js) ----------
+   Таблица: вид работ — всего — по этажам (до трёх этажей колонками; больше — только «Всего»). */
+const PL_VOL_LIMIT = PL_H - 5 - 40 - 4; // низ места над штампом
+function plVolumeData(rooms) {
+if (typeof objectVolumeTotals !== 'function') return null;
+const all = objectVolumeTotals(rooms);
+if (!all.rows.length) return null;
+const flOf = r => String((r.measure && r.measure.floor) || '').trim();
+const fnum = f => (/^-?\d+$/.test(f) ? Number(f) : null);
+const floors = [...new Set(rooms.filter(r => r && r.measure).map(flOf))]
+.sort((a, b) => (fnum(a) !== null && fnum(b) !== null ? fnum(a) - fnum(b) : a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'ru')));
+const byFloor = floors.length > 1 && floors.length <= 3 ? floors.map(f => ({ label: (typeof roomFloorLabel === 'function' && roomFloorLabel(f)) || 'Без этажа', t: objectVolumeTotals(rooms.filter(r => r && flOf(r) === f)) })) : [];
+return { all, byFloor };
+}
+function plVolumeHeight(v) { return v ? 9 + 7 + v.all.rows.length * 6 + 6 : 0; }
+function plVolumeSvg(v, x0, y) {
+let s = `<text x="${x0}" y="${y + 5}" font-family="${PL_FONT}" font-size="4" font-weight="700">Объём работ по всему объекту</text>`;
+s += `<text x="${x0 + 176}" y="${y + 5}" font-family="${PL_FONT}" font-size="2.6" fill="#444" text-anchor="end">помещений с замером: ${v.all.counted}</text>`;
+y += 9;
+const wLabel = v.byFloor.length ? 68 : 120, wVal = v.byFloor.length ? (176 - wLabel) / (1 + v.byFloor.length) : 56;
+const heads = ['Вид работ', 'Всего', ...v.byFloor.map(f => f.label)], total = 176, rh = 6;
+s += `<rect x="${x0}" y="${y}" width="${total}" height="7" fill="#ffc83d"/>`;
+heads.forEach((t, i) => {
+const x = i ? x0 + wLabel + (i - 1) * wVal + wVal / 2 : x0 + 1.8;
+s += `<text x="${x}" y="${y + 4.8}" font-family="${PL_FONT}" font-size="2.8" font-weight="700" text-anchor="${i ? 'middle' : 'start'}">${plEsc(t)}</text>`;
+});
+const y0 = y;
+y += 7;
+const fmt = x => (x > 0 ? plM2(x) : '—');
+v.all.rows.forEach(row => {
+const main = row.key === 'walls' || row.key === 'ceiling';
+if (main) s += `<rect x="${x0}" y="${y}" width="${total}" height="${rh}" fill="#f2f2f2"/>`;
+const vals = [row.value, ...v.byFloor.map(f => { const q = f.t.rows.find(x => x.key === row.key && x.unit === row.unit); return q ? q.value : 0; })];
+s += `<text x="${x0 + 1.8}" y="${y + 4.2}" font-family="${PL_FONT}" font-size="3" font-weight="${main ? 700 : 400}">${plEsc(row.label + ', ' + row.unit)}</text>`;
+vals.forEach((val, i) => { s += `<text x="${x0 + wLabel + i * wVal + wVal / 2}" y="${y + 4.2}" font-family="${PL_FONT}" font-size="3" font-weight="${main || !i ? 700 : 400}" text-anchor="middle">${fmt(val)}</text>`; });
+y += rh;
+s += `<line x1="${x0}" y1="${y}" x2="${x0 + total}" y2="${y}" stroke="#000" stroke-width="0.2"/>`;
+});
+s += `<rect x="${x0}" y="${y0}" width="${total}" height="${y - y0}" fill="none" stroke="#000" stroke-width="0.5"/>`;
+for (let i = 0; i <= v.byFloor.length; i++) { const x = x0 + wLabel + i * wVal; s += `<line x1="${x}" y1="${y0}" x2="${x}" y2="${y}" stroke="#000" stroke-width="0.25"/>`; }
+return s;
+}
+// низ экспликации (таблица и пояснения), мм — чтобы понять, влезет ли объём на тот же лист
+function plExplicationEnd(rows) { return 28 + 10 + rows.length * 8 + 8 + 10 + (rows.some(r => r.ceilEls) ? 4 : 3) * 5; }
+function plVolumePage(v, info, sheetNo, sheetCount) {
+return plVolumeSvg(v, 25, 16) + plFrame(info, sheetNo, sheetCount, 'Объём работ');
 }
 
 /* ---------- чертёж комнаты ---------- */
@@ -918,9 +967,13 @@ for (let i = 0; i < rooms.length; i++) {
 if (fitsHalf(rooms[i]) && i + 1 < rooms.length && fitsHalf(rooms[i + 1])) { pagesRooms.push([rooms[i], rooms[i + 1]]); i++; }
 else pagesRooms.push([rooms[i]]);
 }
-const sheetCount = 1 + pagesRooms.length;
-const pages = [plExplicationPage(rooms.map(plRoomRow), info, sheetCount)];
-pagesRooms.forEach((pr, i) => pages.push(plRoomPage(pr, info, i + 2, sheetCount)));
+const rows = rooms.map(plRoomRow), vol = plVolumeData(rooms);
+// объём работ — под экспликацией, если влезает над штампом; иначе — своим листом после неё
+const volApart = !!vol && plExplicationEnd(rows) + 1 + plVolumeHeight(vol) > PL_VOL_LIMIT;
+const sheetCount = 1 + (volApart ? 1 : 0) + pagesRooms.length;
+const pages = [plExplicationPage(rows, info, sheetCount, volApart ? null : vol)];
+if (volApart) pages.push(plVolumePage(vol, info, 2, sheetCount));
+pagesRooms.forEach((pr, i) => pages.push(plRoomPage(pr, info, i + 2 + (volApart ? 1 : 0), sheetCount)));
 const { jsPDF } = window.jspdf;
 const pdf = new jsPDF('p', 'mm', 'a4');
 for (let i = 0; i < pages.length; i++) {
