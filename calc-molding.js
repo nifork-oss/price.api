@@ -213,9 +213,9 @@ g.bars.forEach((b, i) => {
 s += `<text x="${L - 6}" y="${y + 14}" text-anchor="end" font-size="11" font-weight="700" fill="#7a3fb0">${i + 1}</text>`;
 s += `<rect x="${L}" y="${y}" width="${g.plank * k}" height="${RH}" rx="3" fill="#f1f3f6" stroke="#cbd2da" stroke-width="0.8"/>`;
 let x = L;
-b.cuts.forEach(c => {
+b.cuts.forEach((c, ci) => {
 const w = c.len * k;
-s += `<g class="mol-pick" data-mk="${c.key}"><rect class="mol-seg" x="${x}" y="${y}" width="${Math.max(1, w - 1)}" height="${RH}" rx="3" fill="${molKeyColor(c.key)}"/>${w > 30 ? `<text x="${x + w / 2}" y="${y + 14}" text-anchor="middle" font-size="10.5" fill="#14181f" pointer-events="none">${mFmt(c.len)}</text>` : ''}</g>`;
+s += `<g class="mol-pick" data-mk="${c.key}" data-ci="${gi}-${i}-${ci}"><rect class="mol-seg" x="${x}" y="${y}" width="${Math.max(1, w - 1)}" height="${RH}" rx="3" fill="${molKeyColor(c.key)}"/>${w > 30 ? `<text x="${x + w / 2}" y="${y + 14}" text-anchor="middle" font-size="10.5" fill="#14181f" pointer-events="none">${mFmt(c.len)}</text>` : ''}</g>`;
 x += w + MOL_KERF * k;
 });
 y += RH + GAP;
@@ -229,29 +229,50 @@ return `<div class="mol-buy"><b>Для закупки:</b> ${plan.map(g => `${es
 <details class="mol-cut"><summary>Раскрой планок</summary>${plan.map((g, gi) => `<div class="mol-cut-g">${escapeHtml(molBuyName(g))}: ${g.bars.length} ${molPlanksWord(g.bars.length)}</div>${molCutSvg(g, gi)}`).join('')}
 <div class="mol-pick-info mp-hint">Нажмите на молдинг на развёртке или на кусок планки: он подсветится оранжевым, а синим — то, что режется из остатка той же планки.</div></details></div>`;
 }
-// нажали на кусок: подсветить его во всех схемах, а «соседей» по планке — тех, кто режется из её остатка, —
-// другим цветом: наклеили этот кусок — остаток этой же планки идёт туда, целую планку не режут
-function molPick(key) {
+// нажали на кусок: подсветить его во всех схемах, а куски из остатка той же планки — другим цветом
+// (наклеили этот кусок — остаток этой же планки идёт туда, целую планку не режут). Сторона рамки со стыком
+// на стене подсвечивается не целиком, а именно своим куском: первый — сверху (слева), следующий — ниже (правее)
+function molPick(key, ci) {
 document.querySelectorAll('.mol-pick.sel, .mol-pick.mate').forEach(el => el.classList.remove('sel', 'mate'));
+document.querySelectorAll('.mol-part-hl').forEach(el => el.remove());
 if (!key) return;
-const parts = [];
-_molPlans.forEach(g => g.bars.forEach((b, i) => b.cuts.forEach(c => { if (c.key === key) parts.push({ g, i, b, c }); })));
-const mates = new Set();
-parts.forEach(p => p.b.cuts.forEach(c => { if (c.key !== key) mates.add(c.key); }));
-const mark = (k, cls) => document.querySelectorAll(`.mol-pick[data-mk="${CSS.escape(k)}"]`).forEach(el => el.classList.add(cls));
-mates.forEach(k => mark(k, 'mate'));
-mark(key, 'sel');
+const all = [];
+_molPlans.forEach((g, gi) => g.bars.forEach((b, bi) => b.cuts.forEach((c, k) => all.push({ g, gi, b, bi, c, ci: `${gi}-${bi}-${k}` }))));
+// нажали на кусок планки — только он; на стене — все куски этой стороны
+const picked = all.filter(x => (ci ? x.ci === ci : x.c.key === key));
+const bars = new Set(picked.map(x => x.b));
+const mates = all.filter(x => bars.has(x.b) && !picked.includes(x));
+const mark = (x, cls) => {
+document.querySelectorAll(`.mol-pick[data-ci="${x.ci}"]`).forEach(el => el.classList.add(cls));
+// на стене: целая сторона — подсветкой группы; кусок стороны со стыком — своим отрезком поверх
+document.querySelectorAll(`.mol-pick[data-mk="${CSS.escape(x.c.key)}"]:not([data-ci])`).forEach(el => {
+if (!x.c.parts) { el.classList.add(cls); return; }
+const hl = el.querySelector('.mol-hl'), m = hl && /^M([\d.-]+) ([\d.-]+)([HV])([\d.-]+)$/.exec(hl.getAttribute('d'));
+if (!m) return;
+const sibs = all.filter(y => y.c.key === x.c.key).map(y => y.c).sort((a, b) => a.part - b.part);
+const before = sibs.filter(y => y.part < x.c.part).reduce((a, y) => a + y.len, 0), whole = x.c.whole || sibs.reduce((a, y) => a + y.len, 0);
+const x0 = +m[1], y0 = +m[2], end = +m[4], from = m[3] === 'H' ? x0 : y0, span = end - from;
+const a = from + span * before / whole, b = from + span * (before + x.c.len) / whole;
+const d = m[3] === 'H' ? `M${a} ${y0}H${b}` : `M${x0} ${a}V${b}`;
+const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+path.setAttribute('d', d); path.setAttribute('class', 'mol-part-hl ' + cls);
+el.parentNode.insertBefore(path, el.nextSibling);
+});
+};
+mates.forEach(x => mark(x, 'mate'));
+picked.forEach(x => mark(x, 'sel'));
 const plain = l => escapeHtml(l.replace(/ \(\d+ из \d+, стык\)$/, ''));
-const info = parts.length
-? `<b>${plain(parts[0].c.label)}</b> — ${mFmt(parts[0].c.whole || parts[0].c.len)} м${parts[0].g.mw ? `, молдинг ${molCmTxt(parts[0].g.mw)}` : ''}${parts.some(p => p.c.parts) ? ' (длиннее планки — со стыком)' : ''}
-${parts.map(p => `<div class="mol-pick-bar"><b>Планка ${p.i + 1}</b>: ${p.b.cuts.map(c => c === p.c ? `<span class="mol-pick-me">${mFmt(c.len)} — сюда</span>` : `<span class="mol-pick-mate">${mFmt(c.len)} — ${plain(c.label)}</span>`).join(' → ')}${p.b.rest > 0.005 ? ` → обрезок ${mFmt(p.b.rest)}` : ''}</div>`).join('')}`
+const first = picked[0];
+const info = first
+? `<b>${plain(first.c.label)}</b> — ${mFmt(first.c.whole || first.c.len)} м${first.g.mw ? `, молдинг ${molCmTxt(first.g.mw)}` : ''}${first.c.parts ? ` (длиннее планки — со стыком${ci ? `, это ${first.c.part}-й кусок из ${first.c.parts}` : ''})` : ''}
+${[...bars].map(b => { const bi = first.g.bars.indexOf(b) >= 0 ? first.g.bars.indexOf(b) : picked.find(x => x.b === b).bi; return `<div class="mol-pick-bar"><b>Планка ${bi + 1}</b>: ${b.cuts.map(c => (picked.some(x => x.c === c) ? `<span class="mol-pick-me">${mFmt(c.len)} — сюда</span>` : `<span class="mol-pick-mate">${mFmt(c.len)} — ${plain(c.label)}${c.parts ? ` (${c.part}-й кусок)` : ''}</span>`)).join(' → ')}${b.rest > 0.005 ? ` → обрезок ${mFmt(b.rest)}` : ''}</div>`; }).join('')}`
 : 'Этот молдинг не попал в раскрой.';
 document.querySelectorAll('.mol-pick-info').forEach(el => { el.innerHTML = info; el.classList.remove('mp-hint'); });
 document.querySelectorAll('details.mol-cut').forEach(d => { d.open = true; });
 }
 if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('click', e => {
 const t = e.target && e.target.closest && e.target.closest('.mol-pick');
-if (t) molPick(t.getAttribute('data-mk'));
+if (t) molPick(t.getAttribute('data-mk'), t.getAttribute('data-ci') || '');
 });
 
 // Раскладка молдингов на стене: рамки обходят проёмы и ниши, линии разрываются на них
