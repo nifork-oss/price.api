@@ -1261,3 +1261,10 @@ body.assistant-open .add-toast { z-index: 99; }
 .mol-buy-del { flex: 0 0 auto; padding: 4px 10px; border-radius: 8px; border: 1px solid #f1c4bb; background: #fff; color: #c2361f; font-size: 12px; font-weight: 700; cursor: pointer; }
 .mol-buy-more { display: block; font-size: 12px; color: #c2410c; }
 .mol-buy-show { margin-top: 6px; padding: 0; border: 0; background: none; color: #7a3fb0; font-size: 12px; text-decoration: underline; cursor: pointer; }
+/* «Молдинг для закупки» — отдельной кнопкой под объёмом работ */
+.mol-buy-wrap { margin: -4px 0 12px; }
+.mol-buy-btn { list-style: none; cursor: pointer; padding: 11px 14px; border-radius: 12px; border: 1px solid #d9c3ef; background: #f6effc; color: #5b2a86; font-weight: 700; font-size: 15px; }
+.mol-buy-btn::-webkit-details-marker { display: none; }
+.mol-buy-btn span { display: block; margin-top: 2px; font-weight: 500; font-size: 13px; color: #7a3fb0; }
+.mol-buy-wrap[open] .mol-buy-btn { border-radius: 12px 12px 0 0; }
+.mol-buy-wrap .mol-buy { margin-top: 0; border-radius: 0 0 12px 12px; border: 1px solid #d9c3ef; border-top: 0; }

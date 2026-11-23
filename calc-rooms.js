@@ -767,8 +767,13 @@ function objectMoldingBuyHtml(rooms) {
 const plan = objectMoldingBuy(rooms), master = typeof isCurrentClient === 'function' && !isCurrentClient();
 // отметки «закуплено» — у объекта (только у мастера; у замера помещения отметок нет)
 const obj = master && typeof currentObjectId !== 'undefined' ? (cloudData.objects || []).find(o => o.id === currentObjectId) : null;
-return plan.length ? molBuyHtml(plan, master, obj) : '';
+if (!plan.length) return '';
+// отдельной кнопкой под объёмом работ: на кнопке — коротко, сколько купить; раскрыто — галочки, отправка, раскрой
+const left = plan.map(g => { const st = obj && obj.molBuy && obj.molBuy[molBuyKey(g)]; return { g, n: st ? Math.max(0, g.bars.length - st.n) : g.bars.length }; }).filter(x => x.n > 0);
+const short = left.length ? left.map(x => `${x.g.mw ? molCmTxt(x.g.mw) : 'молдинг'} — ${x.n} шт.`).join(', ') : 'всё закуплено';
+return `<details class="mol-buy-wrap"${objectMoldingBuyOpen ? ' open' : ''} ontoggle="objectMoldingBuyOpen = this.open"><summary class="mol-buy-btn">🛒 Молдинг для закупки <span>${escapeHtml(short)}</span></summary>${molBuyHtml(plan, master, obj).replace('<b>Для закупки:</b>', '')}</details>`;
 }
+let objectMoldingBuyOpen = false; // раскрыта ли кнопка — чтобы после отметки «закуплено» не сворачивалась
 function objectVolumeHtml(rooms, floorsOf, grouped, floorOfRoom) {
 const all = objectVolumeTotals(rooms);
 if (!all.rows.length) return '';
@@ -778,9 +783,9 @@ return `<div class="volume-box">
 <div class="volume-sub">Помещений с замером: ${all.counted} из ${rooms.length}</div>
 ${objectVolumeTableHtml(all)}
 ${all.rows.some(x => x.key === 'pie') ? `<div class="volume-sub" style="margin-top:4px;">Общий объём: ${VOLUME_PIE_NOTE}.</div>` : ''}
-${objectMoldingBuyHtml(rooms)}
 ${byFloor.length > 1 ? `<details class="volume-floors"><summary>По этажам</summary>${byFloor.map(x => `<div class="volume-floor">${escapeHtml(roomFloorLabel(x.f) || 'Без этажа')}</div>${objectVolumeTableHtml(x.t)}`).join('')}</details>` : ''}
-</div>`;
+</div>
+${objectMoldingBuyHtml(rooms)}`;
 }
 
 function renderObjectRoomsHtml(obj) {
