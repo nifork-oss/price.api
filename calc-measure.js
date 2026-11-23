@@ -1018,6 +1018,10 @@ r.molCornice = mo.cornice ? mo.cornice.len : 0;
 r.molPlinth = mo.plinth ? mo.plinth.len : 0;
 r.molCeil = mo.ceilLen;
 r.molWall = mo.wallLen;
+// с шириной профиля — ещё отдельно: наружные рамки и линии / внутренние рамки
+const profOn = Object.keys(mo.prof || {}).some(cm => Number(cm) > 0);
+r.molWallOut = profOn ? mo.wallOut : 0;
+r.molWallIn = profOn ? mo.wallIn : 0;
 Object.keys(mo.lines).forEach(k => { r.lines['mol_' + k] = mo.lines[k]; });
 }
 // Плитка: стены и пол
@@ -1056,7 +1060,12 @@ if (tab === 'tileAll') return { value: r.tileAll || 0, unit: 'м²', label: 'П�
 if (tab === 'mask') return { value: r.maskLen || 0, unit: 'пог. м', label: 'Укрывка', text: [r.lines.mask_len, r.lines.mask_loose].filter(Boolean).join('\n') };
 if (typeof MASK_SURFACES !== 'undefined' && MASK_SURFACES[tab]) return { value: r[tab] || 0, unit: 'пог. м', label: { maskWindows: 'Укрывка: окна', maskDoors: 'Укрывка: двери', maskCovers: 'Укрывка: мебель', maskFloor: 'Укрывка: пол', maskCeiling: 'Укрывка: потолок', maskWalls: 'Укрывка: готовые стены', maskShadow: 'Укрывка: теневые профили' }[tab], text: r.lines['mask_' + tab] || '' };
 if (tab === 'maskArea') return { value: r.maskArea || 0, unit: 'м²', label: 'Укрывка плёнкой', text: r.lines.mask_area || '' };
-if (tab === 'molWall') return { value: r.molWall || 0, unit: 'пог. м', label: 'Молдинг на стенах', text: r.lines.mol_wall || '' };
+if (tab === 'molWall') return { value: r.molWall || 0, unit: 'пог. м', label: 'Молдинг на стенах', text: [r.lines.mol_wall, r.lines.mol_wallProf].filter(Boolean).join('\n') };
+if (tab === 'molWallOut' || tab === 'molWallIn') {
+const cms = ((r.mol && r.mol[tab === 'molWallIn' ? 'cmIn' : 'cmOut']) || []).filter(cm => cm > 0);
+const lbl = (tab === 'molWallIn' ? 'Молдинг: внутренние рамки' : 'Молдинг: наружные рамки и линии') + (cms.length === 1 ? ' ' + molCmTxt(cms[0]) : '');
+return { value: r[tab] || 0, unit: 'пог. м', label: lbl, text: r.lines.mol_wallProf || '' };
+}
 if (tab === 'corners' || tab === 'cornersOut' || tab === 'cornersIn') {
 const cmin = r.cornersMin ? MIN_NOTE : '';
 if (tab === 'cornersOut') return { value: r.cornersOut, unit: 'пог. м', label: 'Углы наружные', text: (r.lines.cornersOut || '') + cmin };

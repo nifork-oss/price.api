@@ -342,3 +342,21 @@ test('молдинг: рамка по размерам — точно по че�
   near(r.molWall, 6.84 + 5.88 + 6.04, 0.01);
   assert.match(run('moldingCompute(measure).lines.wall'), /стена 1: 2 рам\. \(двойных 1\)/);
 });
+
+test('молдинг: ширина профиля — просвет до внутренней рамки и длина по профилям', () => {
+  const { run } = setup({ shape: 'rect', height: '2,5', walls: ['4,47', '3', '4,47', '3'],
+    molding: { wall: [{ type: 'frame', walls: [0], x: '0,37', w: '1,75', yb: '0,25', yt: '2,3', dbl: true, ind: '0,1', indY: '', mw: '40', mwIn: '20' }] } });
+  const f = run('molWallLayout(measure, 0)').frames[0];
+  near(f.inner.x0, 0.37 + 0.14, 0.0001); // просвет 100 мм + молдинг 40 мм
+  near(f.inner.x1 - f.inner.x0, 1.47, 0.0001);
+  const r = run('computeMeasure(measure)');
+  near(r.molWallOut, 2 * (1.75 + 2.05));
+  near(r.molWallIn, 2 * (1.47 + 1.77));
+  near(r.molWall, r.molWallOut + r.molWallIn);
+  assert.match(run('moldingCompute(measure).lines.wallProf'), /молдинг 40 мм — 7,6 пог\. м; молдинг 20 мм — 6,48 пог\. м/);
+  assert.match(run('measureValueForTab(computeMeasure(measure), "molWallIn").label'), /внутренние рамки 20 мм/);
+  // без ширины — как раньше: отступ от края до края, отдельных длин нет
+  run('measure.molding.wall[0].mw = ""; measure.molding.wall[0].mwIn = "";');
+  near(run('molWallLayout(measure, 0)').frames[0].inner.x0, 0.47, 0.0001);
+  assert.strictEqual(run('computeMeasure(measure).molWallOut'), 0);
+});

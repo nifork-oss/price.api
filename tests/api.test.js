@@ -751,8 +751,16 @@ test('молдинги через API: помещение со стенами и
   assert.deepStrictEqual(ok.data.room.molding.wall[0], { type: 'frame', walls: [1], x_m: 0.37, width_m: 1.4, bottom_m: 0.25, top_m: 2.27, double: true, inner_m: 0.14, inner_y_m: 0.14 });
   assert.strictEqual(ok.data.room.molding.cornice.on, true, 'чего не прислали — осталось');
   const saved = (await call('GET', '/appdata', { token })).data.data.objects[0].rooms[0];
-  assert.deepStrictEqual(saved.measure.molding.wall[0], { type: 'frame', walls: [0], x: '0,37', w: '1,4', yb: '0,25', yt: '2,27', dbl: true, ind: '0,14', indY: '' });
+  assert.deepStrictEqual(saved.measure.molding.wall[0], { type: 'frame', walls: [0], x: '0,37', w: '1,4', yb: '0,25', yt: '2,27', dbl: true, ind: '0,14', indY: '', mw: '', mwIn: '' });
   assert.strictEqual(saved.measure.molding.wall[1].walls, null);
   assert.deepStrictEqual(saved.moldingPrev.molding, { cornice: { on: true, walls: null, plank: '' } }, 'прежние — для возврата');
   assert.strictEqual(saved.moldingFrom.from, 'Агент');
+  // ширина профиля: наружный 40 мм, внутренний 20 мм
+  const pr = await call('PATCH', '/api/v1/objects/o1/rooms/r1/molding', { key, body: { wall: [
+    { type: 'frame', walls: [1], x_m: 0.37, width_m: 1.4, bottom_m: 0.25, top_m: 2.27, double: true, inner_m: 0.1, profile_mm: 40, inner_profile_mm: 20 }] } });
+  assert.strictEqual(pr.status, 200);
+  assert.deepStrictEqual([pr.data.room.molding.wall[0].profile_mm, pr.data.room.molding.wall[0].inner_profile_mm], [40, 20]);
+  const s2 = (await call('GET', '/appdata', { token })).data.data.objects[0].rooms[0].measure.molding.wall[0];
+  assert.deepStrictEqual([s2.mw, s2.mwIn], ['40', '20']);
+  assert.strictEqual((await call('PATCH', '/api/v1/objects/o1/rooms/r1/molding', { key, body: { wall: [{ type: 'line', walls: null, y_m: 0.9, profile_mm: 'широкий' }] } })).status, 400);
 });

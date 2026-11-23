@@ -14,6 +14,8 @@
 //               dbl, ind, indY }]                            — w — ширина; у двойной indY — отступ сверху и снизу (пусто — как ind)
 // }
 // Всё считается в погонных метрах по фактической длине.
+// Ширина профиля (по желанию): mw — молдинг рамки/линии, мм; mwIn — внутренней рамки, мм (пусто — как mw).
+// С шириной отступ внутренней рамки ind — просвет между молдингами (как на чертеже), без неё — от края до края.
 
 let molElevWall = 0;          // какая стена на развёртке вкладки
 let measureMolPick = 'molCornice';
@@ -128,6 +130,9 @@ const molInd = f => (f && f.dbl ? mNum(f.ind) : 0);
 // стороны рамки на стене — каждая отдельный кусок; у двойной ещё четыре внутренние
 const molFrameSides = f => [f, f.inner].filter(Boolean).flatMap(r => [r.x1 - r.x0, r.x1 - r.x0, r.y1 - r.y0, r.y1 - r.y0]);
 const molFrameLen = f => molFrameSides(f).reduce((a, v) => a + minLen(v), 0);
+// ширина профиля, мм (0 — не указана)
+const molCm = v => { const n = Number(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) && n > 0 && n < 1000 ? n : 0; };
+const molCmTxt = mm => String(mm).replace('.', ',') + ' мм';
 
 // Раскладка молдингов на стене: рамки обходят проёмы и ниши, линии разрываются на них
 function molWallLayout(m, wi) {
@@ -149,8 +154,9 @@ const y = mNum(row.y);
 if (!(y > 0) || y >= Hh) return;
 const cuts = ops.filter(o => o.y0 < y && o.y1 > y).map(o => [o.a0, o.a1]).sort((a, b) => a[0] - b[0]);
 let x = 0;
-cuts.forEach(([c0, c1]) => { if (c0 > x + 0.01) res.lines.push({ ri, x0: x, x1: c0, y }); x = Math.max(x, c1); });
-if (L > x + 0.01) res.lines.push({ ri, x0: x, x1: L, y });
+const mw = molCm(row.mw);
+cuts.forEach(([c0, c1]) => { if (c0 > x + 0.01) res.lines.push({ ri, x0: x, x1: c0, y, mw }); x = Math.max(x, c1); });
+if (L > x + 0.01) res.lines.push({ ri, x0: x, x1: L, y, mw });
 return;
 }
 // рамка по размерам — ровно там, где задана (проёмы не обходит: её ставят по чертежу)
@@ -158,10 +164,12 @@ if (row.type === 'frame') {
 const x0 = Math.max(0, mNum(row.x)), w = mNum(row.w), fb = mNum(row.yb), ft = Math.min(Hh, mNum(row.yt));
 if (!(w > 0) || !(ft > fb)) return;
 if (x0 + w > L + 0.005) { res.outside = true; return; }
-const ind = molInd(row), iy = row.dbl && String(row.indY == null ? '' : row.indY).trim() !== '' ? mNum(row.indY) : ind;
-const fr = { ri, x0, x1: x0 + w, y0: fb, y1: ft, gap: 0, fixed: true };
+const mw = molCm(row.mw), mwIn = molCm(row.mwIn) || mw, add = mw / 1000;
+const ind0 = molInd(row), iy0 = row.dbl && String(row.indY == null ? '' : row.indY).trim() !== '' ? mNum(row.indY) : ind0;
+const ind = ind0 > 0 ? ind0 + add : 0, iy = iy0 > 0 ? iy0 + add : 0;
+const fr = { ri, x0, x1: x0 + w, y0: fb, y1: ft, gap: 0, fixed: true, mw };
 if (ind > 0 || iy > 0) {
-if (w - 2 * ind >= 0.05 && ft - fb - 2 * iy >= 0.05) fr.inner = { x0: x0 + ind, x1: x0 + w - ind, y0: fb + iy, y1: ft - iy };
+if (w - 2 * ind >= 0.05 && ft - fb - 2 * iy >= 0.05) fr.inner = { x0: x0 + ind, x1: x0 + w - ind, y0: fb + iy, y1: ft - iy, mw: mwIn };
 else fr.innerBad = true;
 }
 res.frames.push(fr);
@@ -170,7 +178,8 @@ return;
 const yb = mNum(row.yb), yt = Math.min(Hh, mNum(row.yt));
 const gap = Math.max(0, evalMeasureExpr(row.gap) || 0);
 const fw = mNum(row.fw);
-const ind = molInd(row);
+const mw = molCm(row.mw), mwIn = molCm(row.mwIn) || mw;
+const ind = molInd(row) > 0 ? molInd(row) + mw / 1000 : 0;
 if (!(yt > yb)) return;
 // свободные участки стены: от угла до угла за вычетом проёмов в этой полосе (с промежутком)
 const blocks = ops.filter(o => o.y0 < yt && o.y1 > yb).map(o => [o.a0 - gap, o.a1 + gap]).sort((a, b) => a[0] - b[0]);
@@ -186,10 +195,10 @@ let w = (s - gap * (n - 1)) / n;
 while (n > 1 && w < 0.15) { n--; w = (s - gap * (n - 1)) / n; }
 for (let k = 0; k < n; k++) {
 const x0 = f0 + k * (w + gap);
-const fr = { ri, x0, x1: x0 + w, y0: yb, y1: yt, gap };
+const fr = { ri, x0, x1: x0 + w, y0: yb, y1: yt, gap, mw };
 // внутренняя рамка — если после отступа остаётся хотя бы 10 см
 if (ind > 0) {
-if (w - 2 * ind >= 0.1 && yt - yb - 2 * ind >= 0.1) fr.inner = { x0: x0 + ind, x1: x0 + w - ind, y0: yb + ind, y1: yt - ind };
+if (w - 2 * ind >= 0.1 && yt - yb - 2 * ind >= 0.1) fr.inner = { x0: x0 + ind, x1: x0 + w - ind, y0: yb + ind, y1: yt - ind, mw: mwIn };
 else fr.innerBad = true;
 }
 res.frames.push(fr);
@@ -242,7 +251,7 @@ function moldingCompute(m) {
 const d = molGet(m);
 const g = molGeom(m);
 const lens = molWallLens(m);
-const out = { cornice: null, plinth: null, ceil: [], ceilLen: 0, wallLen: 0, wallParts: [], lines: {}, min: false };
+const out = { cornice: null, plinth: null, ceil: [], ceilLen: 0, wallLen: 0, wallOut: 0, wallIn: 0, prof: {}, cmOut: [], cmIn: [], wallParts: [], lines: {}, min: false };
 const planks = (len, plank) => { const p = mNum(plank); return p > 0 && len > 0 ? Math.ceil(len * 1.1 / p) : 0; };
 // куски: каждый короче метра — за 1 пог. м (как откосы и узкие)
 const sumMin = list => list.reduce((a, v) => a + minLen(v), 0);
@@ -290,6 +299,12 @@ const sides = lay.frames.flatMap(molFrameSides);
 const segs = lay.lines.map(l => l.x1 - l.x0);
 const fr = sumMin(sides), ln = sumMin(segs);
 if (hasMin(sides) || hasMin(segs)) out.min = true;
+lay.frames.forEach(f => {
+const o = sumMin([f.x1 - f.x0, f.x1 - f.x0, f.y1 - f.y0, f.y1 - f.y0]);
+out.wallOut += o; out.prof[f.mw || 0] = (out.prof[f.mw || 0] || 0) + o; if (!out.cmOut.includes(f.mw || 0)) out.cmOut.push(f.mw || 0);
+if (f.inner) { const i = sumMin([f.inner.x1 - f.inner.x0, f.inner.x1 - f.inner.x0, f.inner.y1 - f.inner.y0, f.inner.y1 - f.inner.y0]); out.wallIn += i; out.prof[f.inner.mw || 0] = (out.prof[f.inner.mw || 0] || 0) + i; if (!out.cmIn.includes(f.inner.mw || 0)) out.cmIn.push(f.inner.mw || 0); }
+});
+lay.lines.forEach(l => { const v = minLen(l.x1 - l.x0); out.wallOut += v; out.prof[l.mw || 0] = (out.prof[l.mw || 0] || 0) + v; if (!out.cmOut.includes(l.mw || 0)) out.cmOut.push(l.mw || 0); });
 if (fr + ln > 0) {
 out.wallLen += fr + ln;
 const dbl = lay.frames.filter(f => f.inner).length;
@@ -297,6 +312,8 @@ out.wallParts.push(`стена ${wi + 1}: ${[lay.frames.length ? `${lay.frames.l
 }
 });
 if (out.wallParts.length) out.lines.wall = `Молдинг на стенах: ${out.wallParts.join('; ')} = ${mFmt(out.wallLen)} пог. м`;
+const profs = Object.keys(out.prof).map(Number).filter(cm => out.prof[cm] > 0);
+if (profs.some(cm => cm > 0)) out.lines.wallProf = 'По профилям: ' + profs.sort((a, b) => b - a).map(cm => `${cm ? 'молдинг ' + molCmTxt(cm) : 'ширина не указана'} — ${mFmt(out.prof[cm])} пог. м`).join('; ');
 if (lens.some((L, wi) => L > 0 && molWallLayout(m, wi).frames.some(f => f.innerBad))) out.lines.wallBad = 'Внутренняя рамка не помещается в узкие рамки — там рамка одинарная';
 if (lens.some((L, wi) => L > 0 && molWallLayout(m, wi).outside)) out.lines.wallBad = [out.lines.wallBad, 'Рамка по размерам выходит за край стены — проверьте отступ от угла и ширину'].filter(Boolean).join('. ');
 }
@@ -324,14 +341,14 @@ const seg = (a, b) => { if (b - a > 0.005) s += `<rect x="${Math.min(XA(a), XA(b
 doors.forEach(([a0, a1]) => { seg(x, a0); x = Math.max(x, a1); });
 seg(x, L);
 }
-lay.frames.forEach(f => {
-const xL = Math.min(XA(f.x0), XA(f.x1)), xR = Math.max(XA(f.x0), XA(f.x1));
-s += `<rect x="${xL}" y="${Yh(f.y1)}" width="${xR - xL}" height="${Yh(f.y0) - Yh(f.y1)}" fill="none" stroke="${MOL_INK}" stroke-width="1.6"/>`;
-if (f.inner) {
-const iL = Math.min(XA(f.inner.x0), XA(f.inner.x1)), iR = Math.max(XA(f.inner.x0), XA(f.inner.x1));
-s += `<rect x="${iL}" y="${Yh(f.inner.y1)}" width="${iR - iL}" height="${Yh(f.inner.y0) - Yh(f.inner.y1)}" fill="none" stroke="${MOL_INK}" stroke-width="1.2"/>`;
-}
-});
+// рамка — полосой ширины профиля (внутрь от края), без ширины — линией
+const band = (r, def) => {
+const xL = Math.min(XA(r.x0), XA(r.x1)), xR = Math.max(XA(r.x0), XA(r.x1)), yT = Yh(r.y1), yB = Yh(r.y0);
+const t = r.mw > 0 ? Math.max(1, r.mw / 1000 * k) : 0;
+if (!t) return `<rect x="${xL}" y="${yT}" width="${xR - xL}" height="${yB - yT}" fill="none" stroke="${MOL_INK}" stroke-width="${def}"/>`;
+return `<rect x="${xL + t / 2}" y="${yT + t / 2}" width="${Math.max(0, xR - xL - t)}" height="${Math.max(0, yB - yT - t)}" fill="none" stroke="#c9a8e6" stroke-width="${t}"/><rect x="${xL}" y="${yT}" width="${xR - xL}" height="${yB - yT}" fill="none" stroke="${MOL_INK}" stroke-width="0.8"/>`;
+};
+lay.frames.forEach(f => { s += band(f, 1.6); if (f.inner) s += band(f.inner, 1.2); });
 lay.lines.forEach(l => {
 s += `<path d="M${XA(l.x0)} ${Yh(l.y)}H${XA(l.x1)}" stroke="${MOL_INK}" stroke-width="2"/>`;
 });
@@ -524,15 +541,17 @@ ${d.wall.map((row, i) => `<div class="mp-open">
 </div>
 ${chips(row.walls, wi => `molRowWall(${i}, ${wi})`, `molRowAll(${i})`)}
 ${row.type === 'line'
-? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Высота от пола ↕${mIn(`molding.wall.${i}.y`, row.y, '0,9')}</label><span></span><span></span></div>`
+? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Высота от пола ↕${mIn(`molding.wall.${i}.y`, row.y, '0,9')}</label><span class="mp-x">·</span><label>Молдинг, мм${mIn(`molding.wall.${i}.mw`, row.mw, '40')}</label></div>`
 : row.type === 'frame'
 ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>От левого угла ↔${mIn(`molding.wall.${i}.x`, row.x, '0,37')}</label><span class="mp-x">·</span><label>Ширина ↔${mIn(`molding.wall.${i}.w`, row.w, '1,4')}</label></div>
 <div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Низ от пола ↕${mIn(`molding.wall.${i}.yb`, row.yb, '0,25')}</label><span class="mp-x">·</span><label>Верх от пола ↕${mIn(`molding.wall.${i}.yt`, row.yt, '2,27')}</label></div>
 ${molDblHtml(`molDbl('wall', ${i}, this.checked)`, row, `molding.wall.${i}.ind`)}
-${row.dbl ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Отступ сверху и снизу, м${mIn(`molding.wall.${i}.indY`, row.indY, 'как по бокам')}</label><span></span><span></span></div>` : ''}`
+${row.dbl ? `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Отступ сверху и снизу, м${mIn(`molding.wall.${i}.indY`, row.indY, 'как по бокам')}</label><span></span><span></span></div>` : ''}
+${molProfHtml(row, i)}`
 : `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Низ рамок от пола ↕${mIn(`molding.wall.${i}.yb`, row.yb, '0,15')}</label><span class="mp-x">·</span><label>Верх рамок от пола ↕${mIn(`molding.wall.${i}.yt`, row.yt, '0,85')}</label></div>
 <div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Промежуток ↔${mIn(`molding.wall.${i}.gap`, row.gap, '0,1')}</label><span class="mp-x">·</span><label>Ширина рамки ↔${mIn(`molding.wall.${i}.fw`, row.fw, 'на весь участок')}</label></div>
-${molDblHtml(`molDbl('wall', ${i}, this.checked)`, row, `molding.wall.${i}.ind`)}`}
+${molDblHtml(`molDbl('wall', ${i}, this.checked)`, row, `molding.wall.${i}.ind`)}
+${molProfHtml(row, i)}`}
 </div>`).join('')}
 <div class="mp-add-row">
 <button type="button" class="mp-add" onclick="molAddRow('frames')">+ Ряд рамок</button>
@@ -543,6 +562,11 @@ ${molDblHtml(`molDbl('wall', ${i}, this.checked)`, row, `molding.wall.${i}.ind`)
 </section>`;
 }
 
+// Ширина профиля рамок (мм): наружной и, у двойной, внутренней — длина считается по каждому профилю отдельно
+function molProfHtml(row, i) {
+return `<div class="mp-dims mp-dims-2" style="margin-top:6px;"><label>Молдинг${row.dbl ? ' наружной' : ''}, мм${mIn(`molding.wall.${i}.mw`, row.mw, '40')}</label>${row.dbl ? `<span class="mp-x">·</span><label>Молдинг внутренней, мм${mIn(`molding.wall.${i}.mwIn`, row.mwIn, 'как наружной')}</label>` : '<span></span><span></span>'}</div>
+${row.dbl && molCm(row.mw) ? '<div class="mp-hint">С шириной молдинга отступ внутренней рамки — просвет между молдингами, как на чертеже.</div>' : ''}`;
+}
 // Переключатель «двойная рамка» и отступ внутренней рамки
 function molDblHtml(onchange, f, path) {
 return `<label class="mp-check mp-ce-light"><input type="checkbox" ${f.dbl ? 'checked' : ''} onchange="${onchange}"><span>Двойная рамка — внутри вторая рамка с отступом</span></label>
@@ -592,7 +616,7 @@ renderMolViews(mo);
 set('mpCalcMolCornice', mo.lines.cornice ? escapeHtml(mo.lines.cornice) : '');
 set('mpCalcMolPlinth', mo.lines.plinth ? escapeHtml(mo.lines.plinth) : '');
 set('mpCalcMolCeil', [mo.lines.ceil, mo.lines.ceilBad].filter(Boolean).map(escapeHtml).join('<br>'));
-set('mpCalcMolWall', [mo.lines.wall, mo.lines.wallBad].filter(Boolean).map(escapeHtml).join('<br>'));
+set('mpCalcMolWall', [mo.lines.wall, mo.lines.wallProf, mo.lines.wallBad].filter(Boolean).map(escapeHtml).join('<br>'));
 mo.ceil.forEach(f => set('mpMolCeilRes' + f.fi, f.poly ? `= ${mFmt(f.len)}` : ''));
 molGet(measure).wall.forEach((row, ri) => {
 let len = 0;
