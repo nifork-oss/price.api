@@ -100,10 +100,24 @@ if (inp) inp.focus();
 function purchaseOpen(id) { purchaseOpenId = id; renderObjectDetail(); }
 function purchaseBack() { purchaseOpenId = null; renderObjectDetail(); }
 
+// что поменяли в составе по ссылке (заменили в магазине, докупили, убрали лишнее) — p.linkChanges от сервера
+function purchaseLinkChangesHtml(p) {
+const list = Array.isArray(p.linkChanges) ? p.linkChanges : [];
+if (!list.length) return '';
+return `<details class="purchase-changes" open><summary>✏️ Изменено по ссылке: ${list.length}</summary>
+${list.slice(-20).reverse().map(c => `<div><span>${new Date(c.at || Date.now()).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span> ${escapeHtml(c.t || '')}</div>`).join('')}
+<button type="button" class="link-text" onclick="purchaseChangesClear()">Понятно, убрать</button></details>`;
+}
+function purchaseChangesClear() {
+const p = purchaseCur();
+if (!p) return;
+p.linkChanges = [];
+purchaseChanged(true);
+}
 function purchaseEditorHtml(obj, p) {
 const pr = purchaseProgress(p), itemsSum = purchaseItemsSum(p);
 const units = (cur) => [...new Set([cur || 'шт.', ...PURCHASE_UNITS])].map(u => `<option ${u === (cur || 'шт.') ? 'selected' : ''}>${escapeHtml(u)}</option>`).join('');
-const rows = (p.items || []).map(it => `<div class="purchase-row${it.done ? ' done' : ''}" data-item="${it.id}">
+const rows = (p.items || []).map(it => `<div class="purchase-row${it.done ? ' done' : ''}${it.by === 'link' ? ' by-link' : ''}" data-item="${it.id}"${it.by === 'link' ? ' title="Добавлено по ссылке"' : ''}>
 <input type="checkbox" class="purchase-check" ${it.done ? 'checked' : ''} onchange="purchaseToggle('${it.id}', this.checked)" aria-label="Куплено">
 <input type="text" class="purchase-name" value="${escapeHtml(it.name)}" maxlength="120" onchange="purchaseItemSet('${it.id}', 'name', this.value)" aria-label="Материал">
 <input type="text" class="purchase-qty" inputmode="decimal" value="${escapeHtml(String(it.qty ?? ''))}" placeholder="кол-во" onchange="purchaseItemSet('${it.id}', 'qty', this.value)" aria-label="Количество">
@@ -123,6 +137,7 @@ return `<span class="link-text" onclick="purchaseBack()">← К закупкам
 <div class="form-group"><label>Кому (необязательно)</label><input type="text" id="purchaseTo" value="${escapeHtml(p.to || '')}" maxlength="60" placeholder="Снабженец, прораб…" onchange="purchaseSet('to', this.value)"></div>
 
 <label>Материалы <span id="purchaseProgress" style="font-weight:400; text-transform:none; letter-spacing:0; color:#8d97a5;">${pr.all ? `· куплено ${pr.done} из ${pr.all}` : ''}</span></label>
+${purchaseLinkChangesHtml(p)}
 <div id="purchaseRows">${rows || '<div class="purchase-empty">Список пуст — добавьте материалы ниже.</div>'}</div>
 <div class="purchase-add">
 <textarea id="purchaseAddName" rows="1" placeholder="Материал и количество: Грунтовка 10 л" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); purchaseAdd(); }"></textarea>

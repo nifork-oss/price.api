@@ -626,7 +626,45 @@ function purchaseLinkView(obj, p) {
     total: price(p.total),
     items: (Array.isArray(p.items) ? p.items : []).map((it) => ({ id: String((it && it.id) ?? ""), name: String((it && it.name) || ""), qty: String((it && it.qty) ?? ""), unit: String((it && it.unit) || ""), done: !!(it && it.done), price: price(it && it.price) })),
     files: (Array.isArray(p.files) ? p.files : []).filter((f) => f && f.url).map((f) => ({ url: String(f.url), name: String(f.name || ""), type: String(f.type || ""), mine: f.by === "link", id: f.by === "link" ? String(f.publicId || "") : "" })),
+    changes: (Array.isArray(p.linkChanges) ? p.linkChanges : []).slice(-10).map((c) => ({ at: Number(c && c.at) || 0, t: String((c && c.t) || "") })),
   };
+}
+
+// Правка состава закупки по ссылке: { edit: [{ id, name?, qty?, unit? }], add: [{ name, qty, unit }], remove: [id] }.
+// В магазине бывает другое подходящее, что-то надо докупить или лишнее вписали. Каждое изменение — строкой
+// в p.linkChanges (мастер видит, что поменяли по ссылке); p.listAt — когда по ссылке меняли состав.
+function purchaseLinkList(p, list) {
+  const str = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+  const items = Array.isArray(p.items) ? p.items : (p.items = []);
+  const qtyTxt = (it) => (it.qty !== "" && it.qty != null ? ` — ${it.qty}${it.unit ? " " + it.unit : ""}` : "");
+  const log = [];
+  for (const e of (Array.isArray(list.edit) ? list.edit : []).slice(0, PURCHASE_ITEMS_MAX)) {
+    const it = items.find((x) => x && String(x.id) === String(e && e.id));
+    if (!it) continue;
+    const before = `${it.name}${qtyTxt(it)}`;
+    if (e.name !== undefined && str(e.name, 120)) it.name = str(e.name, 120);
+    if (e.qty !== undefined) it.qty = str(e.qty, 20);
+    if (e.unit !== undefined) it.unit = str(e.unit, 12);
+    const after = `${it.name}${qtyTxt(it)}`;
+    if (after !== before) log.push(`изменено: ${before} → ${after}`);
+  }
+  const del = new Set((Array.isArray(list.remove) ? list.remove : []).map(String));
+  if (del.size) {
+    items.filter((x) => x && del.has(String(x.id))).forEach((x) => log.push(`убрано: ${x.name}${qtyTxt(x)}`));
+    p.items = items.filter((x) => !(x && del.has(String(x.id))));
+  }
+  for (const a of (Array.isArray(list.add) ? list.add : []).slice(0, 50)) {
+    const name = str(a && a.name, 120);
+    if (!name || p.items.length >= PURCHASE_ITEMS_MAX) continue;
+    const it = { id: "pl" + Date.now().toString(36) + randomHex(3), name, qty: str(a.qty, 20), unit: str(a.unit, 12), done: false, price: "", by: "link" };
+    p.items.push(it);
+    log.push(`добавлено: ${name}${qtyTxt(it)}`);
+  }
+  if (!log.length) return false;
+  const at = Date.now();
+  p.linkChanges = [...(Array.isArray(p.linkChanges) ? p.linkChanges : []), ...log.map((t) => ({ at, t }))].slice(-50);
+  p.listAt = Math.max(at, (Number(p.listAt) || 0) + 1);
+  return true;
 }
 
 // Мастер сохраняет объект целиком. Если его страница ещё не видела отметок, поставленных по ссылке
@@ -639,6 +677,12 @@ function keepPurchaseLinkEdits(stored, incoming) {
     for (const p of obj.purchases) {
       const wp = p && was.purchases.find((x) => x && x.id === p.id);
       if (!wp || !((Number(wp.linkAt) || 0) > (Number(p.linkAt) || 0))) continue;
+      // состав меняли по ссылке, а страница мастера этого ещё не видела — берём список с сервера
+      if ((Number(wp.listAt) || 0) > (Number(p.listAt) || 0)) {
+        p.items = Array.isArray(wp.items) ? wp.items.map((x) => ({ ...x })) : [];
+        p.listAt = wp.listAt;
+        p.linkChanges = wp.linkChanges;
+      }
       for (const it of Array.isArray(p.items) ? p.items : []) {
         const wi = it && (Array.isArray(wp.items) ? wp.items : []).find((x) => x && x.id === it.id);
         if (wi) { it.done = !!wi.done; if (wi.price !== undefined) it.price = wi.price; }
@@ -852,7 +896,7 @@ const handler = {
       }
 
       // Отметки по ссылке: «куплено», сумма за позицию и за весь закуп, «доставлено на объект»,
-      // удаление своего (загруженного по ссылке) фото. Менять состав списка по ссылке нельзя.
+      // удаление своего (загруженного по ссылке) фото, правка состава списка (list: изменить, добавить, убрать).
       if (path === "/purchase" && request.method === "POST") {
         if (await isRateLimited(env.AUTH_LIMITER, "purchase-w:" + clientIp(request))) return tooManyRequests();
         let body;
@@ -874,6 +918,7 @@ const handler = {
           if (typeof e.done === "boolean" && !!it.done !== e.done) { it.done = e.done; changed = true; }
           if (e.price !== undefined) { const v = money(e.price); if (v !== undefined && it.price !== v) { it.price = v; changed = true; } }
         }
+        if (body && body.list && typeof body.list === "object" && purchaseLinkList(p, body.list)) changed = true;
         if (body && body.total !== undefined) { const v = money(body.total); if (v !== undefined && p.total !== v) { p.total = v; changed = true; } }
         if (body && typeof body.delivered === "boolean" && !!p.delivered !== body.delivered) {
           p.delivered = body.delivered;

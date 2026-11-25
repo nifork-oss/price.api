@@ -627,14 +627,14 @@ test('закупка по ссылке: открывается без входа
   assert.strictEqual(got.status, 200);
   assert.deepStrictEqual(got.data, { title: 'Черновые материалы', to: 'Олег', note: 'к пятнице', createdAt: 5, delivered: true, deliveredAt: 0, objectName: 'Квартира', address: 'ул. Ленина, 5', total: 9000,
     items: [{ id: 'i1', name: 'Грунтовка', qty: '10', unit: 'л', done: true, price: 1250 }, { id: 'i2', name: 'Валик', qty: '', unit: 'шт.', done: false, price: '' }],
-    files: [{ url: 'https://files.test/chek.jpg', name: 'чек', type: '', mine: false, id: '' }] });
+    files: [{ url: 'https://files.test/chek.jpg', name: 'чек', type: '', mine: false, id: '' }], changes: [] });
   assert.ok(!JSON.stringify(got.data).includes('Анна'), 'заказчик и прочие данные объекта по ссылке не отдаются');
   assert.strictEqual((await call('GET', '/purchase?k=' + 'z'.repeat(26))).status, 404);
   assert.strictEqual((await call('GET', '/purchase?k=p1')).status, 404, 'по номеру закупки — нельзя, только по ключу ссылки');
   assert.strictEqual((await call('POST', '/purchase?k=' + 'z'.repeat(26), { body: { delivered: true } })).status, 404);
 });
 
-test('закупка по ссылке: галочки, суммы и «доставлено» сохраняются и видны мастеру; состав списка по ссылке не меняется', async () => {
+test('закупка по ссылке: галочки, суммы и «доставлено» сохраняются и видны мастеру; отметками состав не меняется', async () => {
   const { call, token } = await setup();
   const page = await call('GET', '/appdata', { token });
   const share = 'e'.repeat(24);
@@ -794,4 +794,32 @@ test('молдинги от API не затирает открытая стра�
   await call('PUT', '/appdata', { token, body: { baseRev: u.rev, ops: { objects: { upsert: [uo], delete: [] } } } });
   r = (await call('GET', '/api/v1/objects/o1/rooms/r1', { key })).data;
   assert.deepStrictEqual(r.molding.wall, []);
+});
+
+test('закупка по ссылке: изменить позицию, добавить, убрать; мастер видит изменения, старая копия кабинета их не затирает', async () => {
+  const { call, token } = await setup();
+  const page = await call('GET', '/appdata', { token });
+  const share = 'z'.repeat(24);
+  const obj = { id: 'o-ed', name: 'Горянка', purchases: [{ id: 'p1', share, title: 'Молдинг', items: [
+    { id: 'i1', name: 'Молдинг 40 мм, планка 2 м', qty: '7', unit: 'шт.' }, { id: 'i2', name: 'Клей', qty: '2', unit: 'шт.' }, { id: 'i3', name: 'Лишнее', qty: '1', unit: 'шт.' }] }] };
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, ops: { objects: { upsert: [obj], delete: [] } } } });
+  const stale = await call('GET', '/appdata', { token }); // кабинет мастера открыт со старой копией
+  const r = await call('POST', '/purchase?k=' + share, { body: { list: {
+    edit: [{ id: 'i1', name: 'Молдинг 45 мм, планка 2,4 м', qty: '6', unit: 'шт.' }, { id: 'нет', name: 'x' }],
+    add: [{ name: 'Герметик', qty: '1', unit: 'шт.' }, { name: '   ' }],
+    remove: ['i3'] } } });
+  assert.strictEqual(r.status, 200, JSON.stringify(r.data));
+  assert.deepStrictEqual(r.data.items.map((it) => it.name + ' ' + it.qty), ['Молдинг 45 мм, планка 2,4 м 6', 'Клей 2', 'Герметик 1']);
+  assert.deepStrictEqual(r.data.changes.map((c) => c.t), [
+    'изменено: Молдинг 40 мм, планка 2 м — 7 шт. → Молдинг 45 мм, планка 2,4 м — 6 шт.', 'убрано: Лишнее — 1 шт.', 'добавлено: Герметик — 1 шт.']);
+  // кабинет со старой копией сохраняет объект целиком (например, переименовал закупку) — состав со ссылки не теряется
+  const old = stale.data.data.objects.find((o) => o.id === 'o-ed');
+  old.purchases[0].title = 'Молдинг и клей';
+  const fresh = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: fresh.data.rev, ops: { objects: { upsert: [old], delete: [] } } } });
+  const saved = (await call('GET', '/appdata', { token })).data.data.objects.find((o) => o.id === 'o-ed').purchases[0];
+  assert.strictEqual(saved.title, 'Молдинг и клей');
+  assert.deepStrictEqual(saved.items.map((it) => it.name), ['Молдинг 45 мм, планка 2,4 м', 'Клей', 'Герметик']);
+  assert.strictEqual(saved.items[2].by, 'link', 'добавленное по ссылке помечено');
+  assert.strictEqual(saved.linkChanges.length, 3, 'мастер видит, что поменяли');
 });
