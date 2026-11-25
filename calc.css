@@ -1268,3 +1268,10 @@ body.assistant-open .add-toast { z-index: 99; }
 .mol-buy-btn span { display: block; margin-top: 2px; font-weight: 500; font-size: 13px; color: #7a3fb0; }
 .mol-buy-wrap[open] .mol-buy-btn { border-radius: 12px 12px 0 0; }
 .mol-buy-wrap .mol-buy { margin-top: 0; border-radius: 0 0 12px 12px; border: 1px solid #d9c3ef; border-top: 0; }
+/* закупка: что поменяли в составе по ссылке (calc-purchases.js) */
+.purchase-changes { margin: 6px 0 10px; padding: 8px 10px; border-radius: 10px; background: #fff7e0; border: 1px solid #f1dc9b; font-size: 13px; color: #33404f; }
+.purchase-changes summary { cursor: pointer; font-weight: 700; color: #7a5a00; }
+.purchase-changes div { margin-top: 4px; }
+.purchase-changes div span { color: #8d97a5; margin-right: 4px; }
+.purchase-changes .link-text { display: inline-block; margin-top: 6px; font-size: 13px; }
+.purchase-row.by-link .purchase-name { border-color: #f1dc9b; background: #fffaf0; }

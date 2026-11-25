@@ -73,6 +73,19 @@ body { font-family: "Golos Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
 .actions { display: grid; gap: 10px; margin-top: 16px; }
 .btn { min-height: 50px; border-radius: 8px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; border: 2px solid var(--ink); background: var(--ink); color: #fff; }
 .ruler { height: 12px; margin-top: 30px; background: repeating-linear-gradient(90deg, var(--ink) 0 1px, transparent 1px 10px); opacity: .25; }
+.edit-bar { display: flex; justify-content: flex-end; margin: 8px 0 2px; }
+.btn-sm { min-height: 38px; padding: 6px 14px; border-radius: 8px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; border: 2px solid var(--ink); background: #fff; color: var(--ink); }
+.ed-row { display: grid; grid-template-columns: minmax(0, 1fr) 4.6rem 4.2rem 38px; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.ed-row input { min-width: 0; width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 15px; background: #fff; color: var(--ink); }
+.ed-row input:focus { outline: 2px solid var(--acc); border-color: var(--ink); }
+.ed-row.gone { opacity: .45; }
+.ed-row.gone input { text-decoration: line-through; }
+.ed-del { width: 38px; height: 40px; border-radius: 8px; border: 1px solid #f1c4bb; background: #fff; color: #b3261e; font-size: 16px; cursor: pointer; }
+.ed-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.ed-hint { font-size: 12px; color: var(--ink3); margin-top: 6px; }
+.changes { margin-top: 10px; font-size: 12.5px; color: var(--ink2); }
+.changes summary { cursor: pointer; font-weight: 600; }
+.changes div { margin-top: 3px; }
 .foot { text-align: center; font-size: 12px; color: var(--ink3); margin-top: 10px; }
 </style>
 </head>
@@ -169,13 +182,14 @@ async function flush() {
 // Свежие данные с сервера: поля, в которых человек сейчас печатает, не трогаем
 function adopt(data) {
   state = data;
+  if (editing) return; // правим состав — не перерисовываем под рукой
   const a = document.activeElement;
   if (a && a.classList && a.classList.contains('money')) refreshTotals(); else render();
 }
 window.addEventListener('beforeunload', (e) => { if (pending || saving) { flush(); e.preventDefault(); e.returnValue = ''; } });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') { if (pending) { clearTimeout(saveTimer); flush(); } }
-  else if (state && !pending && !saving && !uploading) load(true);
+  else if (state && !pending && !saving && !uploading && !editing) load(true);
 });
 
 function toggleItem(id) {
@@ -279,6 +293,59 @@ async function removeFile(id) {
   } catch (e) { setStatus('Не удалось убрать файл', true); }
 }
 
+// ---- Правка состава: заменить в магазине на подходящее, докупить, убрать лишнее ----
+const UNITS = ['шт.', 'уп.', 'кг', 'л', 'м', 'м²', 'м³', 'пог. м', 'меш.', 'компл.'];
+let editing = null; // { rows: [{ id, name, qty, unit, gone, isNew }] }
+async function editStart() {
+  if (pending || saving) { clearTimeout(saveTimer); await flush(); }
+  editing = { rows: (state.items || []).map(it => ({ id: it.id, name: it.name, qty: it.qty, unit: it.unit, gone: false, isNew: false })), n: 0 };
+  render();
+}
+function editCancel() { editing = null; render(); }
+function edSet(i, k, v) { if (editing && editing.rows[i]) editing.rows[i][k] = v; }
+function edDel(i) {
+  const r = editing && editing.rows[i];
+  if (!r) return;
+  if (r.isNew) editing.rows.splice(i, 1); else r.gone = !r.gone;
+  render();
+}
+function edAdd() {
+  editing.rows.push({ id: 'new' + (++editing.n), name: '', qty: '', unit: 'шт.', gone: false, isNew: true });
+  render();
+  const inputs = document.querySelectorAll('.ed-row .ed-name'); if (inputs.length) inputs[inputs.length - 1].focus();
+}
+async function editSave(btn) {
+  const was = new Map((state.items || []).map(it => [it.id, it]));
+  const list = { edit: [], add: [], remove: [] };
+  editing.rows.forEach(r => {
+    const name = String(r.name || '').trim();
+    if (r.isNew) { if (name) list.add.push({ name, qty: String(r.qty || '').trim(), unit: String(r.unit || '').trim() }); return; }
+    if (r.gone) { list.remove.push(r.id); return; }
+    const o = was.get(r.id);
+    if (o && (name && name !== o.name || String(r.qty || '').trim() !== String(o.qty || '') || String(r.unit || '').trim() !== String(o.unit || ''))) list.edit.push({ id: r.id, name: name || o.name, qty: String(r.qty || '').trim(), unit: String(r.unit || '').trim() });
+  });
+  if (!list.edit.length && !list.add.length && !list.remove.length) { editCancel(); return; }
+  if (list.remove.length && !confirm(`Убрать из списка: ${list.remove.length}?`)) return;
+  btn.disabled = true; btn.textContent = 'Сохраняю…';
+  try {
+    const res = await fetch(`${WORKER_URL}/purchase?k=${encodeURIComponent(KEY)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ list }) });
+    let data = null; try { data = await res.json(); } catch (e) { /* пусто */ }
+    if (!res.ok || !data) throw new Error((data && data.error) || 'Не сохранилось');
+    editing = null; state = data; render(); setStatus('Список изменён ✓ — мастер увидит, что поменяли');
+  } catch (e) { btn.disabled = false; btn.textContent = 'Сохранить'; setStatus(e.message && e.message !== 'Failed to fetch' ? e.message : 'Не сохранилось — проверьте интернет', true); }
+}
+function editorHtml() {
+  return `<datalist id="unitList">${UNITS.map(u => `<option value="${esc(u)}">`).join('')}</datalist>
+    ${editing.rows.map((r, i) => `<div class="ed-row${r.gone ? ' gone' : ''}">
+      <input class="ed-name" type="text" maxlength="120" placeholder="Материал" value="${esc(r.name)}" oninput="edSet(${i}, 'name', this.value)" ${r.gone ? 'disabled' : ''} aria-label="Материал">
+      <input type="text" inputmode="decimal" maxlength="20" placeholder="кол-во" value="${esc(r.qty)}" oninput="edSet(${i}, 'qty', this.value)" ${r.gone ? 'disabled' : ''} aria-label="Количество">
+      <input type="text" list="unitList" maxlength="12" placeholder="ед." value="${esc(r.unit)}" oninput="edSet(${i}, 'unit', this.value)" ${r.gone ? 'disabled' : ''} aria-label="Единица">
+      <button type="button" class="ed-del" onclick="edDel(${i})" aria-label="${r.gone ? 'Вернуть' : 'Убрать'}">${r.gone ? '↩' : '🗑'}</button>
+    </div>`).join('')}
+    <div class="actions"><button type="button" class="btn ghost" onclick="edAdd()">＋ Добавить позицию</button></div>
+    <div class="ed-actions"><button type="button" class="btn" onclick="editSave(this)">Сохранить</button><button type="button" class="btn ghost" onclick="editCancel()">Отмена</button></div>
+    <div class="ed-hint">Поменяйте название или количество (например, в магазине нашлось другое подходящее), добавьте нужное или уберите лишнее. Мастер увидит, что изменили.</div>`;
+}
 function render() {
   const s = state, items = s.items || [];
   document.getElementById('loadingState').style.display = 'none';
@@ -294,11 +361,13 @@ function render() {
       <div class="summary" id="summary">${summaryHtml()}</div>
     </div>
     ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
+    ${(s.changes || []).length ? `<details class="changes"><summary>Изменения по этой ссылке: ${s.changes.length}</summary>${s.changes.slice().reverse().map(c => `<div>${esc(c.t)}</div>`).join('')}</details>` : ''}
+    ${editing ? editorHtml() : `<div class="edit-bar"><button type="button" class="btn-sm" onclick="editStart()">✏️ Изменить позиции</button></div>
     ${items.length ? items.map((it) => `<div class="item${it.done ? ' done' : ''}" data-id="${esc(it.id)}">
         <button type="button" class="item-check" role="checkbox" aria-checked="${it.done ? 'true' : 'false'}" aria-label="Куплено: ${esc(it.name)}" onclick="toggleItem('${esc(it.id)}')">✓</button>
         <span class="item-main" onclick="toggleItem('${esc(it.id)}')"><span class="item-name">${esc(it.name)}</span>${it.qty ? `<span class="item-qty">${esc(it.qty)} ${esc(it.unit || '')}</span>` : ''}</span>
         <input class="money" type="text" inputmode="decimal" placeholder="сумма, ₽" aria-label="Сумма за «${esc(it.name)}»" value="${val(it.price)}" oninput="setPrice('${esc(it.id)}', this.value)">
-      </div>`).join('') : '<div class="loader">В списке пока нет материалов.</div>'}
+      </div>`).join('') : '<div class="loader">В списке пока нет материалов.</div>'}`}
     <div class="total">
       <div class="total-row"><span>Сумма по позициям</span><b id="itemsSum">${money(itemsSum())}</b></div>
       <div class="total-row"><label for="totalInput">Сумма за весь закуп</label><input id="totalInput" class="money" type="text" inputmode="decimal" placeholder="необязательно" value="${val(s.total)}" oninput="setTotal(this.value)"></div>
