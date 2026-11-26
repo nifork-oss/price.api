@@ -9,7 +9,8 @@
 
 const WORK_UNITS = ['м²', 'пог. м', 'шт.', 'компл.', 'час', 'усл.'];
 const WORK_PERIODS = { today: 'Сегодня', week: '7 дней', month: 'Этот месяц', prev: 'Прошлый месяц', all: 'Всё время' };
-let workForm = null;          // открытая форма записи: { id?, date, name, unit, qty, price, sum, min, note }
+let workForm = null;          // правка одной записи: { id, date, name, unit, qty, price, sum, min, note }
+let workDraft = null;         // новые записи списком, как в закупках: { date, rows: [{ name, qty, unit, price, sum, min }], min — общее время }
 let workPeriod = 'month';     // период статистики
 let workTick = 0;             // таймер на экране
 
@@ -116,6 +117,138 @@ ${c.rows.map(r => { const left = Math.max(0, r.qty - r.done.qty); return `<tr${r
 <div class="work-hint">Сравнение — по названию работы и единице: записывайте работу так же, как она названа в счёте.</div>`;
 }
 
+/* ---------- запись списком, как закупки: «Шпаклёвка стен 12 м² 1:30» → работа, количество, единица, время ---------- */
+const WORK_UNIT_ALIASES = [[/^(м²|м2|кв\.?\s?м\.?|квм)$/i, 'м²'], [/^(пог\.?\s?м\.?|п\.?\s?м\.?|м\.?\s?п\.?|пм|мп)$/i, 'пог. м'], [/^шт\.?$/i, 'шт.'], [/^компл\.?$/i, 'компл.'], [/^усл\.?$/i, 'усл.']];
+function workUnitOf(u) { const t = String(u || '').trim(); const hit = WORK_UNIT_ALIASES.find(([re]) => re.test(t)); return hit ? hit[1] : t.slice(0, 10); }
+// работа из прайса: точное название, иначе — самое длинное название прайса внутри строки (или строка внутри него)
+function workServiceFor(name) {
+const low = String(name || '').trim().toLowerCase();
+if (low.length < 3) return null;
+const list = (cloudData.services || []).filter(x => x && !x.isCategory && x.name);
+return list.find(x => x.name.toLowerCase() === low)
+|| list.filter(x => low.includes(x.name.toLowerCase()) || x.name.toLowerCase().includes(low)).sort((a, b) => b.name.length - a.name.length)[0] || null;
+}
+function workParseLine(text) {
+let t = ' ' + String(text || '').replace(/\s+/g, ' ').trim().replace(/^(?:[-•*]\s*|\d+[.)]\s+)/, '') + ' ';
+if (!t.trim()) return null;
+// время в строке: «1:30», «2 ч», «1,5 часа», «40 мин», «2ч 15мин»
+let min = 0;
+t = t.replace(/[\s,;](\d{1,2}):(\d{2})(?=[\s,;])/, (m, h, mm) => { min += Number(h) * 60 + Number(mm); return ' '; });
+t = t.replace(/[\s,;](\d+(?:[.,]\d+)?)\s*(?:ч|час|часа|часов)\.?(?=[\s,;])/i, (m, h) => { min += Math.round(Number(h.replace(',', '.')) * 60); return ' '; });
+t = t.replace(/[\s,;](\d+)\s*(?:мин|минут|минуты)\.?(?=[\s,;])/i, (m, mm) => { min += Number(mm); return ' '; });
+t = t.replace(/\s+/g, ' ').trim().replace(/[\s,;:—–-]+$/, '');
+if (!t) return null;
+const m = /^(.*?)[\s,;:—–-]+(\d+(?:[.,]\d+)?)\s*([^\d\s][^\d]{0,9})?$/.exec(t);
+let name = t, qty = '', unit = '';
+if (m && m[1].trim()) { name = m[1].trim(); qty = m[2].replace(',', '.'); unit = workUnitOf(m[3] || ''); }
+const srv = workServiceFor(name);
+return { name: name.slice(0, 120), qty, unit: unit || (srv && srv.unit) || 'м²', price: srv ? Number(srv.price) || '' : '', sum: '', min };
+}
+// общее время — работам списка без своего времени: по долям сумм (нет сумм — поровну); итог сходится до минуты
+function workShareTime(rows, total) {
+const free = rows.filter(r => !(Number(r.min) > 0));
+if (!(total > 0) || !free.length) return rows;
+const sums = free.map(r => workSum(r)), all = sums.reduce((a, v) => a + v, 0);
+let left = Math.round(total);
+free.forEach((r, i) => {
+const part = i === free.length - 1 ? left : Math.round(total * (all ? sums[i] / all : 1 / free.length));
+r.min = Math.max(0, Math.min(left, part)); r.shared = true; left -= r.min;
+});
+return rows;
+}
+function workDraftOpen(min) {
+workForm = null;
+workDraft = { date: workDay(), rows: [], min: min || 0 };
+renderObjectDetail();
+const el = document.getElementById('workAdd'); if (el) el.focus();
+}
+function workDraftClose() {
+if (workDraft && workDraft.rows.length && !confirm('Убрать несохранённый список работ?')) return;
+workDraft = null; renderObjectDetail();
+}
+function workDraftAdd() {
+const inp = document.getElementById('workAdd');
+if (!workDraft || !inp) return;
+const rows = String(inp.value || '').split('\n').map(workParseLine).filter(Boolean);
+if (!rows.length) return;
+workDraft.rows.push(...rows);
+renderObjectDetail();
+const again = document.getElementById('workAdd'); if (again) again.focus();
+}
+function workDraftSumHint(i) {
+const r = workDraft && workDraft.rows[i], el = document.querySelector(`.work-drow[data-i="${i}"] .work-dsum`);
+if (r && el) el.placeholder = r.price !== '' && workNum(r.qty) ? workQty(workNum(r.price) * workNum(r.qty)) + ' ₽' : 'сумма';
+}
+function workDraftSet(i, k, v) {
+const r = workDraft && workDraft.rows[i];
+if (!r) return;
+r[k] = v;
+if (k === 'name') {
+const srv = workServiceFor(v);
+if (srv) { r.price = Number(srv.price) || ''; if (srv.unit) { r.unit = srv.unit; const s = document.querySelector(`.work-drow[data-i="${i}"] .work-dunit`); if (s && [...s.options].some(o => o.value === srv.unit)) s.value = srv.unit; } }
+}
+workDraftSumHint(i);
+}
+function workDraftDel(i) { if (workDraft) { workDraft.rows.splice(i, 1); renderObjectDetail(); } }
+function workDraftPaste(e) { // вставили несколько строк — сразу в список
+const txt = e.clipboardData && e.clipboardData.getData('text');
+if (!txt || !/\n/.test(txt.trim())) return;
+e.preventDefault();
+e.target.value = (e.target.value ? e.target.value + '\n' : '') + txt;
+workDraftAdd();
+}
+function workDraftHtml() {
+const d = workDraft, tm = m => (m ? Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0') : '');
+const names = (cloudData.services || []).filter(s => s && !s.isCategory && s.name).map(s => s.name);
+const own = d.rows.filter(r => Number(r.min) > 0).length;
+return `<div class="work-form work-draft">
+<datalist id="workNames">${names.map(n => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
+<label class="work-draft-date">Работы за <input type="date" value="${escapeHtml(d.date)}" onchange="workDraft.date = this.value"></label>
+${d.rows.map((r, i) => `<div class="work-drow" data-i="${i}">
+<input class="work-dname" type="text" list="workNames" maxlength="120" value="${escapeHtml(r.name)}" oninput="workDraftSet(${i}, 'name', this.value)" aria-label="Работа">
+<input class="work-dqty" type="text" inputmode="decimal" placeholder="кол-во" value="${escapeHtml(String(r.qty ?? ''))}" oninput="workDraftSet(${i}, 'qty', this.value)" aria-label="Сделано">
+<select class="work-dunit" onchange="workDraftSet(${i}, 'unit', this.value)" aria-label="Единица">${[...new Set([r.unit, ...WORK_UNITS])].filter(Boolean).map(u => `<option ${u === r.unit ? 'selected' : ''}>${escapeHtml(u)}</option>`).join('')}</select>
+<input class="work-dtime" type="text" placeholder="своё время" value="${tm(Number(r.min) || 0)}" onchange="workDraftSet(${i}, 'min', workParseTime(this.value))" aria-label="Своё время на эту работу">
+<input class="work-dsum" type="text" inputmode="decimal" placeholder="${r.price !== '' && workNum(r.qty) ? workQty(workNum(r.price) * workNum(r.qty)) + ' ₽' : 'сумма'}" value="${escapeHtml(String(r.sum ?? ''))}" oninput="workDraftSet(${i}, 'sum', this.value)" aria-label="Сумма">
+<button type="button" class="work-ddel" onclick="workDraftDel(${i})" aria-label="Убрать">✕</button>
+</div>`).join('')}
+<div class="purchase-add">
+<textarea id="workAdd" rows="1" placeholder="Работа и количество: Шпаклёвка стен 12 м²" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); workDraftAdd(); }" onpaste="workDraftPaste(event)"></textarea>
+<button type="button" class="hc-btn" onclick="workDraftAdd()">Добавить</button>
+</div>
+<div class="work-hint">Enter — добавить работу. Можно вставить сразу несколько строк — каждая станет отдельной работой. Цена и единица — из прайса. Своё время можно дописать в строку: «Шпаклёвка стен 12 м² 1:30» или «… 2 ч».</div>
+<label class="work-draft-time">${own && own === d.rows.length ? 'Общее время (у всех работ уже есть своё)' : own ? 'Общее время на работы без своего времени' : 'Общее время на все эти работы'}<input id="workDraftMin" type="text" placeholder="например 6:30" value="${tm(Number(d.min) || 0)}" onchange="workDraft.min = workParseTime(this.value)"></label>
+<div class="work-hint">Общее время делится между работами по их суммам — так виден заработок в час по каждой.</div>
+<div class="work-form-btns"><button type="button" class="btn btn-primary" onclick="workDraftSave()">Сохранить${d.rows.length ? ' (' + d.rows.length + ')' : ''}</button><button type="button" class="hc-btn" onclick="workDraftClose()">Отмена</button></div>
+</div>`;
+}
+// черновик → записи obj.works (общее время уже разложено по работам)
+function workDraftRecords(d, at) {
+const date = /^\d{4}-\d{2}-\d{2}$/.test(d.date || '') ? d.date : workDay();
+const recs = d.rows.filter(r => String(r.name || '').trim()).map((r, i) => ({
+id: 'w' + at.toString(36) + i + Math.random().toString(36).slice(2, 5), at: at + i, date, name: String(r.name).trim().slice(0, 120), unit: r.unit || '',
+qty: workNum(r.qty) || '', price: r.price === '' ? '' : workNum(r.price), sum: String(r.sum ?? '').trim() === '' ? '' : workNum(r.sum),
+min: Math.max(0, Math.round(Number(r.min) || 0)), note: ''
+}));
+workShareTime(recs, Number(d.min) || 0);
+recs.forEach(w => { if (!w.shared) delete w.shared; });
+return recs;
+}
+async function workDraftSave() {
+const obj = workObj(), d = workDraft;
+if (!obj || !d) return;
+const inp = document.getElementById('workAdd');
+if (inp && inp.value.trim()) workDraftAdd(); // недобавленная строка в поле — тоже в список
+const mi = document.getElementById('workDraftMin');
+if (mi) d.min = workParseTime(mi.value);
+const recs = workDraftRecords(d, Date.now());
+if (!recs.length) { alert('Добавьте хотя бы одну работу'); return; }
+obj.works = [...workList(obj), ...recs];
+workDraft = null;
+await workSave();
+if (typeof showAddToast === 'function') showAddToast(`Записано работ: ${recs.length} · ${workRub(recs.reduce((a, w) => a + workSum(w), 0))}`);
+}
+
 /* ---------- вкладка «Работы» у объекта ---------- */
 function workObj() { return (cloudData.objects || []).find(o => o.id === currentObjectId) || null; }
 function workTabHtml(obj) {
@@ -126,8 +259,9 @@ list.forEach(w => { if (!days.has(w.date)) days.set(w.date, []); days.get(w.date
 return `<div class="work-timer${t ? ' on' : ''}">
 ${t ? `<div class="work-clock" id="workClock">${workClock(t)}</div><div class="work-timer-sub">Таймер идёт${obj.workTimer.name ? ': ' + escapeHtml(obj.workTimer.name) : ''}</div>
 <button type="button" class="btn btn-primary" onclick="workTimerStop()">⏹ Стоп и записать</button><button type="button" class="hc-btn" onclick="workTimerCancel()">Сбросить</button>`
-: `<button type="button" class="btn btn-primary" onclick="workTimerStart()">▶ Запустить таймер</button><button type="button" class="hc-btn" onclick="workFormOpen()">＋ Записать вручную</button>`}
+: `<button type="button" class="btn btn-primary" onclick="workTimerStart()">▶ Запустить таймер</button><button type="button" class="hc-btn" onclick="workDraftOpen()">＋ Записать работы</button>`}
 </div>
+${workDraft ? workDraftHtml() : ''}
 ${workForm ? workFormHtml() : ''}
 <h3 class="work-h">Статистика</h3>
 ${workPeriodChips('workSetPeriod')}
@@ -170,10 +304,11 @@ const obj = workObj();
 if (!obj || !obj.workTimer) return;
 const min = Math.max(1, Math.round((Date.now() - obj.workTimer.start) / 60000));
 delete obj.workTimer;
-workForm = { date: workDay(), name: '', unit: 'м²', qty: '', price: '', sum: '', min, note: '' };
-await workSave();
+await saveCloudData();
+workDraftOpen(min); // время с таймера — общим на работы, которые сейчас впишут
 }
 function workFormOpen(id) {
+workDraft = null;
 const obj = workObj(), w = id && workList(obj).find(x => x.id === id);
 workForm = w ? { ...w } : { date: workDay(), name: '', unit: 'м²', qty: '', price: '', sum: '', min: 0, note: '' };
 renderObjectDetail();
