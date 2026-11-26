@@ -1335,3 +1335,26 @@ body.assistant-open .add-toast { z-index: 99; }
 .work-draft-time { margin-top: 8px; }
 .work-draft .purchase-add textarea { padding: 10px; border: 1px solid #d5dbe2; border-radius: 8px; font: inherit; font-size: 16px; box-sizing: border-box; }
 .work-draft .purchase-add .hc-btn { min-height: 42px; }
+/* виджет таймера работ */
+.work-chip { position: fixed; right: 12px; bottom: calc(128px + env(safe-area-inset-bottom, 0px)); z-index: 60; display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 24px); padding: 10px 14px; border: 0; border-radius: 999px; background: #14181f; color: #fff; font-size: 15px; box-shadow: 0 6px 20px rgba(0, 0, 0, .25); cursor: pointer; }
+.work-chip b { font-variant-numeric: tabular-nums; }
+.work-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; opacity: .85; }
+.work-chip-dot { width: 10px; height: 10px; border-radius: 50%; background: #ff5a4e; animation: work-chip-blink 1.2s infinite; flex: 0 0 auto; }
+@keyframes work-chip-blink { 50% { opacity: .25; } }
+.work-q-in { max-width: 480px; }
+.work-q-run { margin: 12px 0; padding: 14px; border-radius: 14px; background: #fff7d6; text-align: center; }
+.work-q-obj { font-weight: 700; }
+.work-q-run .work-clock { font-size: 42px; }
+.work-q-btns { display: flex; gap: 8px; margin-top: 8px; }
+.work-q-btns > * { flex: 1; min-height: 46px; }
+.work-q-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0; }
+.work-q-stat { display: flex; flex-direction: column; padding: 10px 12px; border-radius: 12px; background: #f6effc; }
+.work-q-stat span, .work-q-stat small { font-size: 12px; color: #6b5a7d; }
+.work-q-stat b { font-size: 20px; color: #3d1a5e; }
+.work-q-list { display: flex; flex-direction: column; gap: 6px; }
+.work-q-start { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid #e3e7ec; border-radius: 12px; background: #fff; font-size: 16px; text-align: left; cursor: pointer; }
+.work-q-start span { color: #1d8a4e; }
+.work-q-more { margin-top: 14px; }
+.work-all-row { display: flex; gap: 8px; }
+.work-all-row .work-all-btn { flex: 1 1 auto; }
+.work-all-row .work-q-btn { flex: 0 0 auto; text-align: center; }

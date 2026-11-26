@@ -27,5 +27,20 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Таймер работ",
+      "short_name": "Таймер",
+      "description": "Запустить или остановить таймер, заработок за сегодня",
+      "url": "./calc.html?w=timer",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }
