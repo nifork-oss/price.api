@@ -1321,3 +1321,17 @@ body.assistant-open .add-toast { z-index: 99; }
 .work-timer > .btn, .work-timer > .hc-btn { flex: 1 1 40%; min-height: 46px; }
 .work-table td:nth-child(n+2) { white-space: nowrap; }
 .work-table td:first-child { white-space: normal; }
+/* учёт работ: запись списком, как закупки */
+.work-draft-date { flex-direction: row !important; align-items: center; gap: 8px !important; font-size: 13px !important; }
+.work-draft-date input { width: auto !important; }
+.work-drow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 40px; grid-template-areas: "n n n del" "q u t t" "s s s s"; gap: 6px; padding: 8px 0; border-bottom: 1px solid #eef1f4; }
+.work-drow .work-dname { grid-area: n; font-weight: 600; }
+.work-drow .work-dqty { grid-area: q; }
+.work-drow .work-dunit { grid-area: u; }
+.work-drow .work-dtime { grid-area: t; }
+.work-drow .work-dsum { grid-area: s; }
+.work-drow .work-ddel { grid-area: del; border: 1px solid #f1c4bb; background: #fff; color: #c2361f; border-radius: 8px; cursor: pointer; }
+.work-drow input, .work-drow select { width: 100%; min-width: 0; box-sizing: border-box; padding: 8px; border: 1px solid #d5dbe2; border-radius: 8px; font-size: 16px; background: #fff; }
+.work-draft-time { margin-top: 8px; }
+.work-draft .purchase-add textarea { padding: 10px; border: 1px solid #d5dbe2; border-radius: 8px; font: inherit; font-size: 16px; box-sizing: border-box; }
+.work-draft .purchase-add .hc-btn { min-height: 42px; }

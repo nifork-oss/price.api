@@ -55,3 +55,26 @@ test('сравнение со сметой: по счетам объекта, с
   assert.strictEqual(c.doneSum, 10 * 500 + 24 * 500);
   assert.deepStrictEqual(c.rows.map(r => [r.name, r.qty, r.done.qty]), [['Шпаклёвка стен', 40, 10], ['Монтаж молдингов', 24, 24]]);
 });
+
+test('строка работы: название, количество, единица, время; цена и единица — из прайса', () => {
+  const run = setup();
+  assert.deepStrictEqual(run('workParseLine("Шпаклёвка стен 12 м² 1:30")'), { name: 'Шпаклёвка стен', qty: '12', unit: 'м²', price: 500, sum: '', min: 90 });
+  assert.deepStrictEqual(run('workParseLine("- Монтаж молдингов, 26,2 пм 2 ч")'), { name: 'Монтаж молдингов', qty: '26.2', unit: 'пог. м', price: 500, sum: '', min: 120 });
+  assert.deepStrictEqual(run('workParseLine("Монтаж молдингов 8")'), { name: 'Монтаж молдингов', qty: '8', unit: 'пог. м', price: 500, sum: '', min: 0 });
+  assert.deepStrictEqual(run('workParseLine("Уборка 40 мин")'), { name: 'Уборка', qty: '', unit: 'м²', price: '', sum: '', min: 40 });
+  assert.strictEqual(run('workParseLine("Стены 5 м").unit'), 'м');
+  assert.strictEqual(run('workParseLine("   ")'), null);
+});
+
+test('список: общее время делится по суммам между работами без своего времени', () => {
+  const run = setup();
+  const recs = run(`workDraftRecords({ date: "2026-11-26", min: 300, rows: [
+    { name: "Шпаклёвка стен", qty: "20", unit: "м²", price: 500, sum: "", min: 0 },
+    { name: "Монтаж молдингов", qty: "10", unit: "пог. м", price: 500, sum: "", min: 0 },
+    { name: "Уборка", qty: "", unit: "усл.", price: "", sum: "1000", min: 45 },
+    { name: "  ", qty: "1", unit: "м²", price: "", sum: "", min: 0 }] }, 1000)`);
+  assert.strictEqual(recs.length, 3);
+  assert.deepStrictEqual(recs.map(w => [w.date, w.min, !!w.shared, w.sum]), [['2026-11-26', 200, true, ''], ['2026-11-26', 100, true, ''], ['2026-11-26', 45, false, 1000]]);
+  // без сумм — поровну, остаток минут — последней
+  assert.deepStrictEqual(run('workShareTime([{ min: 0 }, { min: 0 }, { min: 0 }], 100).map(r => r.min)'), [33, 33, 34]);
+});
