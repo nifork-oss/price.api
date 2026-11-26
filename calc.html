@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<!-- Сборка 20261126-3. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
+<!-- Сборка 20261126-6. При любой правке частей calc-*.js / calc.css меняйте номер здесь и в ссылках ниже. -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="description" content="Замер, смета и счёт для отделочников: помещения, планы, прайс мастера и ссылка заказчику.">
@@ -31,11 +31,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="calc.css?v=846b42af">
+<link rel="stylesheet" href="calc.css?v=a96c9638">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
 <symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h1M12 11h.01M15.5 11h.5M8 15h1M12 15h.01M15.5 15h.5M8 18.5h8"/></symbol>
+<symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9.5 2h5"/></symbol>
 <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/></symbol>
 <symbol id="i-list" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h7"/></symbol>
 <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-3.4 4-5 7-5s5.8 1.6 7 5"/></symbol>
@@ -282,6 +283,7 @@
 <div class="bottom-nav-inner">
 <button type="button" class="nav-tab active" id="tabCalcBtn" onclick="switchTab('calc')"><span class="nav-tab-icon" aria-hidden="true"><svg class="ic"><use href="#i-calc"/></svg></span>Калькулятор</button>
 <button type="button" class="nav-tab" id="tabObjectsBtn" onclick="switchTab('objects')"><span class="nav-tab-icon" aria-hidden="true"><svg class="ic"><use href="#i-home"/></svg></span>Объекты</button>
+<button type="button" class="nav-tab" id="tabTimerBtn" onclick="workQuickOpen()"><span class="nav-tab-icon" aria-hidden="true"><svg class="ic"><use href="#i-timer"/></svg></span>Таймер</button>
 <button type="button" class="nav-tab" id="tabHistoryBtn" onclick="switchTab('history')"><span class="nav-tab-icon" aria-hidden="true"><svg class="ic"><use href="#i-list"/></svg></span>История</button>
 </div>
 </nav>
@@ -690,7 +692,7 @@
 </div>
 </div>
 
-<script src="calc-app.js?v=6a5af62f"></script>
+<script src="calc-app.js?v=d14e7147"></script>
 <script src="calc-geo.js?v=7519180b"></script>
 
 <script src="calc-measure.js?v=94739080"></script>
@@ -731,7 +733,7 @@
 <script src="calc-apikeys.js?v=5750629f"></script>
 <script src="calc-foreman.js?v=236963f2"></script>
 <script src="calc-purchases.js?v=0622739f"></script>
-<script src="calc-work.js?v=1ec80fa6"></script>
+<script src="calc-work.js?v=2a3c6f55"></script>
 
 <div class="update-banner" id="updateBanner" role="status" aria-live="polite">
 <div class="update-banner-text">Сайт обновлён<small>Обновите страницу, чтобы получить новую версию</small></div>

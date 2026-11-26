@@ -697,6 +697,48 @@ function keepPurchaseLinkEdits(stored, incoming) {
   }
 }
 
+// Таймер работ и заработок (как во вкладке «Работы» кабинета) — для GET /api/v1/timer и виджета.
+const apiWorkNum = (v) => { const n = Number(String(v ?? "").replace(/\s/g, "").replace(",", ".")); return Number.isFinite(n) && n > 0 ? n : 0; };
+const apiWorkSum = (w) => (w.sum !== "" && w.sum != null && apiWorkNum(w.sum) ? apiWorkNum(w.sum) : Math.round(apiWorkNum(w.price) * apiWorkNum(w.qty) * 100) / 100);
+const apiRub = (n) => Math.round(n).toLocaleString("ru-RU").replace(/\s/g, " ") + " ₽";
+function apiDur(min) { const m = Math.round(Number(min) || 0), h = Math.floor(m / 60), r = m % 60; return h ? `${h} ч${r ? " " + r + " мин" : ""}` : `${r} мин`; }
+function apiClock(ms) { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}`; }
+function apiLocalDay(ms, tz) { return new Date(ms + tz * 60000).toISOString().slice(0, 10); }
+function apiWorkPeriod(list) {
+  const total = list.reduce((a, w) => a + apiWorkSum(w), 0), min = list.reduce((a, w) => a + (Number(w.min) || 0), 0);
+  const timed = list.filter((w) => Number(w.min) > 0), tMin = timed.reduce((a, w) => a + Number(w.min), 0);
+  const perHour = tMin ? timed.reduce((a, w) => a + apiWorkSum(w), 0) / (tMin / 60) : 0;
+  return { earned: Math.round(total), minutes: min, per_hour: Math.round(perHour) };
+}
+function apiTimerView(objs, now, tz) {
+  const last = (o) => Math.max(o.workTimer ? Number(o.workTimer.start) || 0 : 0, ...(Array.isArray(o.works) ? o.works : []).map((w) => Number(w && w.at) || 0), Number(o.workTimerAt) || 0, 0);
+  const sorted = objs.slice().sort((a, b) => last(b) - last(a));
+  const works = objs.flatMap((o) => (Array.isArray(o.works) ? o.works : []).filter((w) => w && w.date));
+  const today = apiLocalDay(now, tz), weekFrom = apiLocalDay(now - 6 * 86400000, tz);
+  const t = apiWorkPeriod(works.filter((w) => w.date === today)), wk = apiWorkPeriod(works.filter((w) => w.date >= weekFrom && w.date <= today));
+  const running = objs.filter((o) => o.workTimer && o.workTimer.start).map((o) => ({ object_id: o.id, name: o.name || "Объект", started_at: o.workTimer.start, minutes: Math.floor((now - o.workTimer.start) / 60000), clock: apiClock(now - o.workTimer.start) }));
+  const pending = objs.filter((o) => o.workTimerDone && Number(o.workTimerDone.min) > 0).map((o) => ({ object_id: o.id, name: o.name || "Объект", minutes: Number(o.workTimerDone.min) }));
+  const per = (p) => `${apiRub(p.earned)}${p.minutes ? " · " + apiDur(p.minutes) : ""}${p.per_hour ? " · " + apiRub(p.per_hour) + "/ч" : ""}`;
+  const lines = [
+    ...running.map((r) => `⏱ ${r.name} — ${r.clock}`),
+    `Сегодня: ${per(t)}`,
+    `7 дней: ${per(wk)}`,
+    ...pending.map((p) => `Не записано: ${p.name}, ${apiDur(p.minutes)}`),
+  ];
+  return { running, today: t, week: wk, pending, objects: sorted.map((o) => ({ id: o.id, name: o.name || "Объект", running: !!(o.workTimer && o.workTimer.start) })), names: sorted.filter((o) => !(o.workTimer && o.workTimer.start)).map((o) => o.name || "Объект"), text: lines.join("\n") };
+}
+
+// Таймер, запущенный или остановленный с виджета (через API), новее копии на открытой странице: страница с
+// более старой отметкой workTimerAt при сохранении вернула бы прежнее состояние таймера — оставляем то, что на сервере.
+function keepWorkTimer(stored, incoming) {
+  const old = new Map((Array.isArray(stored) ? stored : []).filter((o) => o && o.id != null).map((o) => [String(o.id), o]));
+  for (const obj of Array.isArray(incoming) ? incoming : []) {
+    const was = obj && obj.id != null ? old.get(String(obj.id)) : null;
+    if (!was || !(Number(was.workTimerAt) > (Number(obj.workTimerAt) || 0))) continue;
+    for (const k of ["workTimer", "workTimerDone", "workTimerAt"]) { if (was[k] === undefined) delete obj[k]; else obj[k] = was[k]; }
+  }
+}
+
 // Молдинги, выставленные ИИ-агентом через API (PATCH …/rooms/<id>/molding), — новее копии на открытой странице:
 // страница, загрузившая объект раньше, при сохранении (например, пересчитав объёмы) прислала бы помещение
 // со старыми молдингами. Своё страница «видела», если у неё та же отметка moldingFrom.at или она вернула
@@ -1589,7 +1631,7 @@ const handler = {
           const cdOps = { objects: readOps(incoming, "objects"), history: readOps(incoming, "history") };
           const fields = ["services", "objects", "history"].filter((f) => Array.isArray(incoming[f]) && !cdOps[f]);
           if (baseRev !== null && hasConflict(record, key, baseRev, fields)) return conflictResponse();
-          if (cdOps.objects) { keepPurchaseLinkEdits(cd.objects, cdOps.objects.upsert); keepAgentMolding(cd.objects, cdOps.objects.upsert); cd.objects = applyOps(cd.objects, cdOps.objects, true); }
+          if (cdOps.objects) { keepPurchaseLinkEdits(cd.objects, cdOps.objects.upsert); keepAgentMolding(cd.objects, cdOps.objects.upsert); keepWorkTimer(cd.objects, cdOps.objects.upsert); cd.objects = applyOps(cd.objects, cdOps.objects, true); }
           if (cdOps.history) cd.history = applyOps(cd.history, cdOps.history, true);
           const opFields = ["objects", "history"].filter((f) => cdOps[f]);
           for (const f of fields) {
@@ -1698,7 +1740,7 @@ const handler = {
         };
         if (mainOps.history) record.history = applyOps(record.history, mainOps.history, true);
         else if (Array.isArray(incoming.history)) record.history = keepMissing(record.history, incoming.history);
-        if (mainOps.objects) { keepPurchaseLinkEdits(record.objects, mainOps.objects.upsert); keepAgentMolding(record.objects, mainOps.objects.upsert); record.objects = applyOps(record.objects, mainOps.objects, true); }
+        if (mainOps.objects) { keepPurchaseLinkEdits(record.objects, mainOps.objects.upsert); keepAgentMolding(record.objects, mainOps.objects.upsert); keepWorkTimer(record.objects, mainOps.objects.upsert); record.objects = applyOps(record.objects, mainOps.objects, true); }
         else if (Array.isArray(incoming.objects)) record.objects = keepMissing(record.objects, incoming.objects);
         if (Array.isArray(incoming.pirogHistory)) {
           // Как и с services: мастер обычно просто пересылает то, что получил
@@ -2905,6 +2947,12 @@ function apiGuide(base, key) {
   frames — ряд рамок, калькулятор раскладывает сам (один промежуток gap_m от углов, между рамками и у проёмов).
   line — горизонтальная линия на высоте y_m. walls: null — все стены. Размеры — в метрах.
   Сначала прочитай помещение (GET …/rooms/<roomId>) и проверь, что рамки не налезают на проёмы и помещаются на стене.
+- GET /api/v1/timer — таймер работ и заработок: {running:[{object_id, name, clock, minutes}], today, week:{earned, minutes, per_hour},
+  objects:[{id, name, running}] (недавние сверху), names — объекты без идущего таймера, text — готовый текст для уведомления}.
+  ?tz=<минуты от UTC> — часовой пояс для «сегодня» (по умолчанию 180, Москва).
+- POST /api/v1/timer/start — запустить таймер: {"object": "название"} или {"object_id": "..."}.
+- POST /api/v1/timer/stop — остановить: {"object": "..."} или без тела — все идущие. Минуты ждут в кабинете,
+  во вкладке «Работы» объекта: мастер допишет, что сделано (время станет общим на эти работы).
 - POST /api/v1/objects/<id>/plans — прислать замеры помещений объекта (формат ниже). Мастер увидит их
   у объекта («План от ИИ-агента»), проверит на экране проверки и добавит в замеры. Сразу в замеры они не попадают.
 - GET /api/v1/estimates[?docType=estimate|invoice] — последние 50 смет и счетов.
@@ -3553,6 +3601,52 @@ async function handleApi(request, env, url) {
     touch();
     await writeBin(env, record);
     return request.method === "DELETE" ? apiJson({ ok: true }) : apiJson(apiObjectDetail(obj));
+  }
+
+  // таймер работ — для виджета на телефоне («Команды» на iPhone): что идёт, заработок, запуск и стоп
+  const timerPath = path.match(/^\/api\/v1\/timer(?:\/(start|stop))?$/);
+  if (timerPath) {
+    const tz = Number.isFinite(Number(url.searchParams.get("tz"))) && url.searchParams.get("tz") !== null ? Number(url.searchParams.get("tz")) : 180;
+    const objs = visibleObjects().filter((o) => !o.archived);
+    if (!timerPath[1] && request.method === "GET") {
+      await touchIfOld();
+      return apiJson(apiTimerView(objs, Date.now(), tz));
+    }
+    if (timerPath[1] && request.method === "POST") {
+      if (await limited()) return apiJson({ error: "Не больше 10 изменений в минуту на один ключ" }, 429);
+      const read = await readApiBody(request, 5000);
+      const body = (read.body && typeof read.body === "object") ? read.body : {};
+      const want = str(body.object_id || body.object || url.searchParams.get("object") || "", 200);
+      const pick = want ? objs.find((o) => o.id === want) || objs.find((o) => String(o.name || "").trim().toLowerCase() === want.toLowerCase()) : null;
+      if (want && !pick) return apiJson({ error: "Объект не найден: " + want, text: "Объект «" + want + "» не найден" }, 404);
+      const space = apiSpace(record, user, entry, false), now = Date.now();
+      let text;
+      if (timerPath[1] === "start") {
+        if (!pick) return apiJson({ error: "Укажите объект: {\"object\": \"название\"} или object_id", text: "Не выбран объект" }, 400);
+        if (pick.workTimer && pick.workTimer.start) {
+          return apiJson({ ...apiTimerView(objs, now, tz), text: `Уже идёт: ${pick.name || "Объект"} · ${apiClock(now - pick.workTimer.start)}` });
+        }
+        pick.workTimer = { start: now, from: entry.name };
+        pick.workTimerAt = now;
+        text = `▶ Таймер пошёл: ${pick.name || "Объект"}`;
+      } else {
+        const run = pick ? [pick].filter((o) => o.workTimer && o.workTimer.start) : objs.filter((o) => o.workTimer && o.workTimer.start);
+        if (!run.length) return apiJson({ ...apiTimerView(objs, now, tz), text: "Таймер не запущен" });
+        text = "⏹ " + run.map((o) => {
+          const min = Math.max(1, Math.round((now - o.workTimer.start) / 60000));
+          const done = o.workTimerDone && Number(o.workTimerDone.min) > 0 ? o.workTimerDone : null;
+          o.workTimerDone = { min: (done ? Number(done.min) : 0) + min, start: done ? done.start : o.workTimer.start, end: now, from: entry.name };
+          delete o.workTimer;
+          o.workTimerAt = now;
+          return `${o.name || "Объект"}: ${apiDur(min)}`;
+        }).join(", ") + ". Работы допишите в кабинете — время уже стоит.";
+      }
+      bumpRev(record, space.key, ["objects"]);
+      touch();
+      await writeBin(env, record);
+      return apiJson({ ok: true, ...apiTimerView(objs, now, tz), text });
+    }
+    return apiJson({ error: "Такого запроса нет: GET /timer, POST /timer/start, POST /timer/stop" }, 405);
   }
 
   // помещение подробно (стены, проёмы, молдинги) и молдинги в его замер
