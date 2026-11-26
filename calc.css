@@ -1358,3 +1358,10 @@ body.assistant-open .add-toast { z-index: 99; }
 .work-all-row { display: flex; gap: 8px; }
 .work-all-row .work-all-btn { flex: 1 1 auto; }
 .work-all-row .work-q-btn { flex: 0 0 auto; text-align: center; }
+.work-done { margin: 10px 0; padding: 12px; border-radius: 12px; background: #e9f6ee; border: 1px solid #b9e2c8; font-size: 15px; }
+.work-q-done { border-color: #b9e2c8; background: #e9f6ee; margin-bottom: 6px; }
+.work-w-help { margin-top: 14px; padding: 10px 12px; border: 1px solid #e3e7ec; border-radius: 12px; font-size: 14px; line-height: 1.45; }
+.work-w-help summary { font-weight: 700; cursor: pointer; }
+.work-w-help ol { padding-left: 20px; margin: 8px 0; }
+.work-w-help li { margin-bottom: 6px; }
+.work-w-url { display: block; margin: 3px 0; padding: 4px 6px; background: #f3f5f8; border-radius: 6px; font-size: 12px; word-break: break-all; }

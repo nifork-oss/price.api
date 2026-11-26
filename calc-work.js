@@ -4,7 +4,9 @@
 // часы, заработок в час, выработка (сколько м² / пог. м в час) и сравнение со сметой/счётом объекта.
 // По всем объектам — кнопка «📈 Работы и заработок» над списком объектов.
 // Хранится в объекте: obj.works = [{ id, date: 'ГГГГ-ММ-ДД', name, unit, qty, price, sum, min, note }]
-// (sum пусто — считается price × qty; min — минуты), obj.workTimer = { start } — идущий таймер (виден на всех устройствах).
+// (sum пусто — считается price × qty; min — минуты), obj.workTimer = { start } — идущий таймер (виден на всех устройствах),
+// obj.workTimerDone = { min } — таймер, остановленный с виджета (API /api/v1/timer), ждёт записи работ;
+// obj.workTimerAt — когда таймер меняли последний раз (сервер не даёт старой копии страницы затереть таймер с виджета).
 // Подключается из calc.html после calc-purchases.js.
 
 const WORK_UNITS = ['м²', 'пог. м', 'шт.', 'компл.', 'час', 'усл.'];
@@ -156,9 +158,9 @@ r.min = Math.max(0, Math.min(left, part)); r.shared = true; left -= r.min;
 });
 return rows;
 }
-function workDraftOpen(min) {
+function workDraftOpen(min, fromDone) {
 workForm = null;
-workDraft = { date: workDay(), rows: [], min: min || 0 };
+workDraft = { date: workDay(), rows: [], min: min || 0, fromDone: !!fromDone };
 renderObjectDetail();
 const el = document.getElementById('workAdd'); if (el) el.focus();
 }
@@ -244,6 +246,7 @@ if (mi) d.min = workParseTime(mi.value);
 const recs = workDraftRecords(d, Date.now());
 if (!recs.length) { alert('Добавьте хотя бы одну работу'); return; }
 obj.works = [...workList(obj), ...recs];
+if (d.fromDone) { delete obj.workTimerDone; obj.workTimerAt = Date.now(); } // время с виджета записано
 workDraft = null;
 await workSave();
 if (typeof showAddToast === 'function') showAddToast(`Записано работ: ${recs.length} · ${workRub(recs.reduce((a, w) => a + workSum(w), 0))}`);
@@ -261,6 +264,8 @@ ${t ? `<div class="work-clock" id="workClock">${workClock(t)}</div><div class="w
 <button type="button" class="btn btn-primary" onclick="workTimerStop()">⏹ Стоп и записать</button><button type="button" class="hc-btn" onclick="workTimerCancel()">Сбросить</button>`
 : `<button type="button" class="btn btn-primary" onclick="workTimerStart()">▶ Запустить таймер</button><button type="button" class="hc-btn" onclick="workDraftOpen()">＋ Записать работы</button>`}
 </div>
+${obj.workTimerDone && Number(obj.workTimerDone.min) > 0 && !workDraft ? `<div class="work-done">⏹ Таймер остановлен с виджета: <b>${workTime(obj.workTimerDone.min)}</b> — впишите, что сделано
+<div class="work-q-btns"><button type="button" class="btn btn-primary" onclick="workDraftOpen(${Math.round(obj.workTimerDone.min)}, true)">＋ Записать работы</button><button type="button" class="hc-btn" onclick="workDoneDrop()">Убрать</button></div></div>` : ''}
 ${workDraft ? workDraftHtml() : ''}
 ${workForm ? workFormHtml() : ''}
 <h3 class="work-h">Статистика</h3>
@@ -289,23 +294,29 @@ function workSetPeriod(p) { workPeriod = p; renderObjectDetail(); }
 async function workTimerStart() {
 const obj = workObj();
 if (!obj) return;
-obj.workTimer = { start: Date.now() };
+obj.workTimer = { start: Date.now() }; obj.workTimerAt = Date.now();
 await workSave();
 workTickStart();
 }
 async function workTimerCancel() {
 const obj = workObj();
 if (!obj || !confirm('Сбросить таймер без записи?')) return;
-delete obj.workTimer;
+delete obj.workTimer; obj.workTimerAt = Date.now();
 await workSave();
 }
 async function workTimerStop() {
 const obj = workObj();
 if (!obj || !obj.workTimer) return;
 const min = Math.max(1, Math.round((Date.now() - obj.workTimer.start) / 60000));
-delete obj.workTimer;
+delete obj.workTimer; obj.workTimerAt = Date.now();
 await saveCloudData();
 workDraftOpen(min); // время с таймера — общим на работы, которые сейчас впишут
+}
+async function workDoneDrop() {
+const obj = workObj();
+if (!obj || !obj.workTimerDone || !confirm('Убрать время с виджета, не записывая работы?')) return;
+delete obj.workTimerDone; obj.workTimerAt = Date.now();
+await workSave();
 }
 function workFormOpen(id) {
 workDraft = null;
@@ -433,17 +444,19 @@ ${run.map(o => `<div class="work-q-run">
 <div class="work-clock" data-work-clock="${escapeHtml(o.id)}">${workClock(o.workTimer.start)}</div>
 <div class="work-q-btns"><button type="button" class="btn btn-primary" onclick="workQuickStop('${escapeHtml(o.id)}')">⏹ Стоп и записать</button><button type="button" class="hc-btn" onclick="workQuickCancel('${escapeHtml(o.id)}')">Сбросить</button></div>
 </div>`).join('')}
+${workQuickObjects().filter(o => o.workTimerDone && Number(o.workTimerDone.min) > 0).map(o => `<button type="button" class="work-q-start work-q-done" onclick="workQuickWrite('${escapeHtml(o.id)}')"><span>✎</span>${escapeHtml(o.name || 'Объект')}: не записано ${workTime(o.workTimerDone.min)}</button>`).join('')}
 <div class="work-q-stats">${stat('Сегодня', today)}${stat('7 дней', week)}</div>
 ${free.length ? `<h3 class="work-h">${run.length ? 'Запустить ещё' : 'Запустить таймер'}</h3>
 <div class="work-q-list">${free.slice(0, 12).map(o => `<button type="button" class="work-q-start" onclick="workQuickStart('${escapeHtml(o.id)}')"><span>▶</span>${escapeHtml(o.name || 'Объект')}</button>`).join('')}</div>`
 : run.length ? '' : '<div class="work-empty">Нет объектов. Создайте объект в кабинете.</div>'}
 <button type="button" class="work-all-btn work-q-more" onclick="workQuickClose(); openWorkAll()">📈 Вся статистика</button>
+${workWidgetHelp()}
 </div>`;
 }
 async function workQuickStart(id) {
 const o = (cloudData.objects || []).find(x => x.id === id);
 if (!o || o.workTimer) return;
-o.workTimer = { start: Date.now() };
+o.workTimer = { start: Date.now() }; o.workTimerAt = Date.now();
 workQuickRender(); workChipUpdate();
 if (currentObjectId === id && typeof renderObjectDetail === 'function') { renderObjectDetail(); workTickStart(); }
 await saveCloudData();
@@ -451,7 +464,7 @@ await saveCloudData();
 async function workQuickCancel(id) {
 const o = (cloudData.objects || []).find(x => x.id === id);
 if (!o || !o.workTimer || !confirm('Сбросить таймер без записи?')) return;
-delete o.workTimer;
+delete o.workTimer; o.workTimerAt = Date.now();
 workQuickRender(); workChipUpdate();
 if (currentObjectId === id && typeof renderObjectDetail === 'function') renderObjectDetail();
 await saveCloudData();
@@ -463,6 +476,34 @@ if (typeof openObjectDetail === 'function') openObjectDetail(id);
 objectHistorySubTab = 'work';
 currentObjectId = id;
 workTimerStop();
+}
+function workWidgetBase() { return (typeof WORKER_URL !== 'undefined' ? WORKER_URL : 'https://price-api.nifork.workers.dev') + '/api/v1/timer'; }
+function workWidgetCopy() { if (typeof copyApiText === 'function') copyApiText(workWidgetBase(), 'Адрес скопирован'); }
+// как поставить виджет на главный экран телефона: «Команды» на iPhone ходят в API по ключу
+function workWidgetHelp() {
+const base = workWidgetBase();
+const url = s => `<code class="work-w-url">${escapeHtml(base + s)}</code>`;
+return `<details class="work-w-help"><summary>📱 Виджет на главный экран телефона</summary>
+<p>Виджет запускает и останавливает таймер и показывает заработок, не открывая кабинет. Работает по ключу API.</p>
+<ol>
+<li>В профиле, в «Ключи API», создайте ключ «Виджет» и скопируйте его.</li>
+<li>iPhone: приложение «Команды» → ＋. В каждой команде действие <b>«Получить содержимое URL»</b>: «Показать ещё» → Заголовки: <b>X-API-Key</b> = ваш ключ.</li>
+<li><b>«Таймер ▶»</b>: «Получить содержимое URL» ${url('')} → «Получить значение словаря» <b>names</b> → «Выбрать из списка» → «Получить содержимое URL» ${url('/start')}, метод <b>POST</b>, тело <b>JSON</b>: поле <b>object</b> = «Выбранный объект» → «Получить значение словаря» <b>text</b> → «Показать уведомление».</li>
+<li><b>«Стоп ⏹»</b>: «Получить содержимое URL» ${url('/stop')}, метод <b>POST</b> → значение <b>text</b> → «Показать уведомление». Минуты будут ждать во вкладке «Работы» объекта — впишите, что сделано.</li>
+<li><b>«Заработок»</b>: «Получить содержимое URL» ${url('')} → значение <b>text</b> → «Показать уведомление»: что идёт, сегодня и за 7 дней.</li>
+<li>Зажмите главный экран → ＋ → «Команды» → виджет на 2 или 4 команды и выберите эти три.</li>
+</ol>
+<p>Android: то же — в приложении «HTTP Shortcuts» (кнопки-виджеты с запросом и заголовком X-API-Key).</p>
+<button type="button" class="hc-btn" onclick="workWidgetCopy()">Скопировать адрес</button>
+</details>`;
+}
+function workQuickWrite(id) {
+const o = (cloudData.objects || []).find(x => x.id === id);
+if (!o || !o.workTimerDone) return;
+workQuickClose();
+if (typeof openObjectDetail === 'function') openObjectDetail(id);
+objectHistorySubTab = 'work'; currentObjectId = id;
+workDraftOpen(Math.round(o.workTimerDone.min), true);
 }
 function workChipUpdate() {
 let chip = document.getElementById('workChip');

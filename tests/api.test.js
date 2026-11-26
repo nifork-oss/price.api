@@ -823,3 +823,52 @@ test('закупка по ссылке: изменить позицию, доб�
   assert.strictEqual(saved.items[2].by, 'link', 'добавленное по ссылке помечено');
   assert.strictEqual(saved.linkChanges.length, 3, 'мастер видит, что поменяли');
 });
+
+test('таймер работ через API (виджет): запуск по названию, стоп, заработок; старая копия страницы таймер не затирает', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Виджет' } });
+  const page = await call('GET', '/appdata', { token });
+  const day = new Date(Date.now() + 180 * 60000).toISOString().slice(0, 10);
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [
+    { id: 'o1', name: 'Горянка', works: [{ id: 'w1', at: 5, date: day, name: 'Шпаклёвка стен', qty: 20, price: 500, sum: '', min: 240 }, { id: 'w2', at: 6, date: day, name: 'Уборка', sum: '1 000', min: 0 }] },
+    { id: 'o2', name: 'Дача', works: [] }] } });
+
+  let v = await call('GET', '/api/v1/timer', { key });
+  assert.strictEqual(v.status, 200);
+  assert.deepStrictEqual(v.data.today, { earned: 11000, minutes: 240, per_hour: 2500 });
+  assert.deepStrictEqual(v.data.names, ['Горянка', 'Дача'], 'недавние сверху');
+  assert.match(v.data.text, /Сегодня: 11 000 ₽ · 4 ч · 2 500 ₽\/ч/);
+
+  assert.strictEqual((await call('POST', '/api/v1/timer/start', { key, body: { object: 'Нет такого' } })).status, 404);
+  const stale = await call('GET', '/appdata', { token }); // страница загрузила объекты до виджета
+  const st = await call('POST', '/api/v1/timer/start', { key, body: { object: 'дача' } });
+  assert.strictEqual(st.status, 200);
+  assert.match(st.data.text, /Таймер пошёл: Дача/);
+  assert.deepStrictEqual(st.data.names, ['Горянка']);
+  assert.strictEqual(st.data.running[0].object_id, 'o2');
+
+  // страница со старой копией сохраняет объект целиком — таймер с виджета остаётся
+  const fresh = await call('GET', '/appdata', { token });
+  const old = stale.data.data.objects.find(o => o.id === 'o2');
+  await call('PUT', '/appdata', { token, body: { baseRev: fresh.data.rev, ops: { objects: { upsert: [{ ...old, address: 'Лесная, 3' }], delete: [] } } } });
+  let o2 = (await call('GET', '/appdata', { token })).data.data.objects.find(o => o.id === 'o2');
+  assert.ok(o2.workTimer && o2.workTimer.start, 'таймер остался');
+  assert.strictEqual(o2.address, 'Лесная, 3', 'правка страницы тоже');
+
+  const sp = await call('POST', '/api/v1/timer/stop', { key });
+  assert.strictEqual(sp.status, 200);
+  assert.match(sp.data.text, /⏹ Дача: 1 мин/);
+  o2 = (await call('GET', '/appdata', { token })).data.data.objects.find(o => o.id === 'o2');
+  assert.strictEqual(o2.workTimer, undefined);
+  assert.strictEqual(o2.workTimerDone.min, 1, 'минуты ждут записи в кабинете');
+  assert.deepStrictEqual(sp.data.pending, [{ object_id: 'o2', name: 'Дача', minutes: 1 }]);
+  assert.match((await call('POST', '/api/v1/timer/stop', { key })).data.text, /не запущен/);
+
+  // страница, увидевшая остановку, записала работы и убрала минуты — её версия остаётся
+  const now = (await call('GET', '/appdata', { token })).data;
+  const seen = now.data.objects.find(o => o.id === 'o2');
+  delete seen.workTimerDone; seen.workTimerAt = Date.now() + 1;
+  await call('PUT', '/appdata', { token, body: { baseRev: now.rev, ops: { objects: { upsert: [seen], delete: [] } } } });
+  o2 = (await call('GET', '/appdata', { token })).data.data.objects.find(o => o.id === 'o2');
+  assert.strictEqual(o2.workTimerDone, undefined);
+});
