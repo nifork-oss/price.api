@@ -1275,3 +1275,49 @@ body.assistant-open .add-toast { z-index: 99; }
 .purchase-changes div span { color: #8d97a5; margin-right: 4px; }
 .purchase-changes .link-text { display: inline-block; margin-top: 6px; font-size: 13px; }
 .purchase-row.by-link .purchase-name { border-color: #f1dc9b; background: #fffaf0; }
+/* учёт работ: таймер, записи, статистика (calc-work.js) */
+.work-timer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; padding: 12px; border: 1px solid #dfe4ea; border-radius: 12px; background: #f7f9fb; }
+.work-timer .btn { flex: 1 1 auto; margin: 0; }
+.work-timer.on { background: #eef6f1; border-color: #b9dcc8; }
+.work-clock { width: 100%; text-align: center; font-size: 34px; font-weight: 800; color: #1d7a4c; font-variant-numeric: tabular-nums; }
+.work-timer-sub { width: 100%; text-align: center; font-size: 13px; color: #5b6573; margin-top: -4px; }
+.work-form { margin: 8px 0 14px; padding: 12px; border: 1px solid #dfe4ea; border-radius: 12px; background: #fff; display: grid; gap: 8px; }
+.work-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #5b6573; min-width: 0; }
+.work-form input, .work-form select { width: 100%; min-width: 0; box-sizing: border-box; padding: 9px 10px; border: 1px solid #d5dbe2; border-radius: 8px; font-size: 16px; background: #fff; color: #14181f; }
+.work-form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.work-form-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.work-form-btns .btn { flex: 1; margin: 0; }
+.work-del { color: #c2361f; }
+.work-hint { font-size: 12px; color: #8d97a5; }
+.work-h { margin: 18px 0 6px; font-size: 15px; }
+.work-periods { margin: 4px 0 8px; flex-wrap: wrap; }
+.work-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 6px 0 8px; }
+.work-totals div { padding: 8px 10px; border-radius: 10px; background: #f6effc; }
+.work-totals span { display: block; font-size: 12px; color: #7a3fb0; }
+.work-totals b { font-size: 17px; color: #14181f; }
+.work-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.work-table th { text-align: left; font-size: 11px; color: #8d97a5; font-weight: 600; padding: 4px 4px 4px 0; border-bottom: 1px solid #e8ecf0; }
+.work-table td { padding: 6px 4px 6px 0; border-bottom: 1px solid #f0f2f5; color: #33404f; vertical-align: top; }
+.work-table td:last-child, .work-table th:last-child { text-align: right; padding-right: 0; }
+.work-table td small { display: block; color: #8d97a5; font-size: 11px; }
+.work-table tr.done td { color: #1d7a4c; }
+.work-cmp { margin-top: 12px; }
+.work-cmp summary { cursor: pointer; font-weight: 700; color: #485566; padding: 6px 0; }
+.work-progress { margin: 6px 0 8px; }
+.work-progress div { display: flex; justify-content: space-between; font-size: 13px; color: #485566; }
+.work-progress i { display: block; height: 8px; border-radius: 6px; background: #e8ecf0; margin: 4px 0; overflow: hidden; }
+.work-progress u { display: block; height: 100%; background: #1d7a4c; }
+.work-progress small { font-size: 12px; color: #5b6573; }
+.work-day { display: flex; justify-content: space-between; margin: 12px 0 4px; font-size: 13px; color: #5b6573; }
+.work-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; margin-bottom: 6px; border: 1px solid #e8ecf0; border-radius: 10px; background: #fff; text-align: left; cursor: pointer; font: inherit; }
+.work-row-name { flex: 1; min-width: 0; color: #14181f; font-weight: 600; }
+.work-row-name small { display: block; font-weight: 400; color: #8d97a5; font-size: 12px; }
+.work-empty { font-size: 13px; color: #8d97a5; padding: 8px 0; }
+.work-all-btn { width: 100%; margin: 4px 0 10px; padding: 11px 14px; border-radius: 12px; border: 1px solid #d9c3ef; background: #f6effc; color: #5b2a86; font-weight: 700; font-size: 15px; cursor: pointer; text-align: left; }
+.work-all { position: fixed; inset: 0; z-index: 9000; background: rgba(20, 24, 31, .45); overflow-y: auto; display: none; }
+.work-all-in { max-width: 640px; margin: 0 auto; min-height: 100%; background: #fff; padding: 16px; box-sizing: border-box; }
+.work-all-head { display: flex; align-items: center; justify-content: space-between; }
+.work-all-head h2 { margin: 0; }
+.work-timer > .btn, .work-timer > .hc-btn { flex: 1 1 40%; min-height: 46px; }
+.work-table td:nth-child(n+2) { white-space: nowrap; }
+.work-table td:first-child { white-space: normal; }
