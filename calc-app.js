@@ -3364,6 +3364,8 @@ renderObjects();
 function renderObjects() {
 const container = document.getElementById('objectsListContainer');
 if (!container) return;
+const workBtn = document.querySelector('.work-all-btn');
+if (workBtn) workBtn.style.display = typeof isCurrentClient === 'function' && isCurrentClient() ? 'none' : '';
 const all = getVisibleObjects();
 const archivedCount = all.filter(o => o && o.archived).length;
 if (!archivedCount) showObjectArchive = false;
@@ -3529,11 +3531,14 @@ ${(obj.measurements || []).length ? `<details style="margin:8px 0;"><summary sty
 <button type="button" class="tab-btn ${objectHistorySubTab === 'invoice' ? 'active' : ''}" onclick="switchObjectHistoryTab('invoice')">Счета (${invoiceRecords.length})</button>
 <button type="button" class="tab-btn ${objectHistorySubTab === 'estimate' ? 'active' : ''}" onclick="switchObjectHistoryTab('estimate')">Расчёты (${estimateRecords.length})</button>
 ${typeof purchasesTabHtml === 'function' && !isCurrentClient() ? `<button type="button" class="tab-btn ${objectHistorySubTab === 'purchase' ? 'active' : ''}" id="objectPurchasesTabBtn" onclick="switchObjectHistoryTab('purchase')">Закупки (${(obj.purchases || []).length})</button>` : ''}
+${typeof workTabHtml === 'function' && !isCurrentClient() ? `<button type="button" class="tab-btn ${objectHistorySubTab === 'work' ? 'active' : ''}" id="objectWorkTabBtn" onclick="switchObjectHistoryTab('work')">Работы${obj.workTimer ? ' ⏱' : (obj.works || []).length ? ` (${obj.works.length})` : ''}</button>` : ''}
 </div>
 <div id="objectHistoryList" style="display:${objectHistorySubTab === 'invoice' ? 'block' : 'none'};">${invoiceHtml}</div>
 <div id="objectEstimateList" style="display:${objectHistorySubTab === 'estimate' ? 'block' : 'none'};">${estimateHtml}</div>
 ${typeof purchasesTabHtml === 'function' && !isCurrentClient() && objectHistorySubTab === 'purchase' ? `<div id="objectPurchaseList">${purchasesTabHtml(obj)}</div>` : ''}
+${typeof workTabHtml === 'function' && !isCurrentClient() && objectHistorySubTab === 'work' ? `<div id="objectWorkList">${workTabHtml(obj)}</div>` : ''}
 `;
+if (typeof workTickStart === 'function' && objectHistorySubTab === 'work' && obj.workTimer) workTickStart();
 }
 
 function switchObjectHistoryTab(type) {
