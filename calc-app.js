@@ -676,6 +676,7 @@ document.getElementById('editPriceListLink').style.display = isCompanyMode() ? '
 updateModeSwitch();
 document.getElementById('tabCalcBtn').style.display = isCurrentClient() ? 'none' : 'block';
 document.getElementById('tabHistoryBtn').style.display = isCurrentClient() ? 'none' : 'block';
+if (document.getElementById('tabTimerBtn')) document.getElementById('tabTimerBtn').style.display = isCurrentClient() ? 'none' : 'block';
 document.getElementById('tabProfileBtn').style.display = isCurrentClient() ? 'none' : 'block';
 updateNavigation();
 if (isCurrentClient()) {
@@ -3366,6 +3367,8 @@ const container = document.getElementById('objectsListContainer');
 if (!container) return;
 const workBtn = document.querySelector('.work-all-row');
 if (workBtn) workBtn.style.display = typeof isCurrentClient === 'function' && isCurrentClient() ? 'none' : '';
+const timerTab = document.getElementById('tabTimerBtn');
+if (timerTab) timerTab.style.display = typeof isCurrentClient === 'function' && isCurrentClient() ? 'none' : '';
 const all = getVisibleObjects();
 const archivedCount = all.filter(o => o && o.archived).length;
 if (!archivedCount) showObjectArchive = false;
