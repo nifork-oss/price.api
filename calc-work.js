@@ -402,3 +402,92 @@ ${objs.length ? '' : '<div class="work-empty">Пока нет записей о 
 </div>`;
 workPeriod = saved;
 }
+
+/* ---------- виджет таймера: плашка поверх кабинета и быстрая панель (calc.html?w=timer, ярлык на иконке) ---------- */
+function workQuickObjects() {
+const objs = (typeof getVisibleObjects === 'function' ? getVisibleObjects() : cloudData.objects || []).filter(o => o && !o.archived);
+const last = o => Math.max(o.workTimer ? o.workTimer.start : 0, ...workList(o).map(w => w.at || 0), 0);
+return objs.slice().sort((a, b) => last(b) - last(a));
+}
+function workRunning() { return ((cloudData && cloudData.objects) || []).filter(o => o && o.workTimer && o.workTimer.start && !o.archived); }
+function workQuickAllowed() { return !(typeof isCurrentClient === 'function' && isCurrentClient()) && typeof cloudData !== 'undefined' && cloudData && Array.isArray(cloudData.objects); }
+function workQuickOpen() {
+if (!workQuickAllowed()) return;
+let box = document.getElementById('workQuick');
+if (!box) { box = document.createElement('div'); box.id = 'workQuick'; box.className = 'work-all work-quick'; box.onclick = e => { if (e.target === box) workQuickClose(); }; document.body.appendChild(box); }
+box.style.display = 'block';
+workQuickRender();
+}
+function workQuickClose() { const box = document.getElementById('workQuick'); if (box) box.style.display = 'none'; workChipUpdate(); }
+function workQuickRender() {
+const box = document.getElementById('workQuick');
+if (!box || box.style.display === 'none') return;
+const run = workRunning(), all = workQuickObjects().flatMap(o => workList(o));
+const today = workStats(workInPeriod(all, 'today')), week = workStats(workInPeriod(all, 'week'));
+const stat = (t, st) => `<div class="work-q-stat"><span>${t}</span><b>${workRub(st.total)}</b><small>${st.min ? workTime(st.min) : 'без времени'}${st.perHour ? ' · ' + workRub(Math.round(st.perHour)) + '/ч' : ''}</small></div>`;
+const free = workQuickObjects().filter(o => !o.workTimer);
+box.innerHTML = `<div class="work-all-in work-q-in">
+<div class="work-all-head"><h2>⏱ Таймер работ</h2><button type="button" class="hc-btn" onclick="workQuickClose()" aria-label="Закрыть">✕</button></div>
+${run.map(o => `<div class="work-q-run">
+<div class="work-q-obj">${escapeHtml(o.name || 'Объект')}</div>
+<div class="work-clock" data-work-clock="${escapeHtml(o.id)}">${workClock(o.workTimer.start)}</div>
+<div class="work-q-btns"><button type="button" class="btn btn-primary" onclick="workQuickStop('${escapeHtml(o.id)}')">⏹ Стоп и записать</button><button type="button" class="hc-btn" onclick="workQuickCancel('${escapeHtml(o.id)}')">Сбросить</button></div>
+</div>`).join('')}
+<div class="work-q-stats">${stat('Сегодня', today)}${stat('7 дней', week)}</div>
+${free.length ? `<h3 class="work-h">${run.length ? 'Запустить ещё' : 'Запустить таймер'}</h3>
+<div class="work-q-list">${free.slice(0, 12).map(o => `<button type="button" class="work-q-start" onclick="workQuickStart('${escapeHtml(o.id)}')"><span>▶</span>${escapeHtml(o.name || 'Объект')}</button>`).join('')}</div>`
+: run.length ? '' : '<div class="work-empty">Нет объектов. Создайте объект в кабинете.</div>'}
+<button type="button" class="work-all-btn work-q-more" onclick="workQuickClose(); openWorkAll()">📈 Вся статистика</button>
+</div>`;
+}
+async function workQuickStart(id) {
+const o = (cloudData.objects || []).find(x => x.id === id);
+if (!o || o.workTimer) return;
+o.workTimer = { start: Date.now() };
+workQuickRender(); workChipUpdate();
+if (currentObjectId === id && typeof renderObjectDetail === 'function') { renderObjectDetail(); workTickStart(); }
+await saveCloudData();
+}
+async function workQuickCancel(id) {
+const o = (cloudData.objects || []).find(x => x.id === id);
+if (!o || !o.workTimer || !confirm('Сбросить таймер без записи?')) return;
+delete o.workTimer;
+workQuickRender(); workChipUpdate();
+if (currentObjectId === id && typeof renderObjectDetail === 'function') renderObjectDetail();
+await saveCloudData();
+}
+// стоп: открываем объект на вкладке «Работы» со списком, время таймера — общим
+function workQuickStop(id) {
+workQuickClose();
+if (typeof openObjectDetail === 'function') openObjectDetail(id);
+objectHistorySubTab = 'work';
+currentObjectId = id;
+workTimerStop();
+}
+function workChipUpdate() {
+let chip = document.getElementById('workChip');
+const run = workQuickAllowed() ? workRunning() : [];
+const app = document.getElementById('appScreen'), q = document.getElementById('workQuick');
+const show = run.length && (!app || app.style.display !== 'none') && !(q && q.style.display === 'block');
+if (!show) { if (chip) chip.style.display = 'none'; return; }
+if (!chip) { chip = document.createElement('button'); chip.type = 'button'; chip.id = 'workChip'; chip.className = 'work-chip'; chip.onclick = workQuickOpen; document.body.appendChild(chip); }
+const o = run[0];
+chip.style.display = '';
+chip.innerHTML = `<span class="work-chip-dot"></span><b>${workClock(o.workTimer.start)}</b><span class="work-chip-name">${escapeHtml(o.name || 'Объект')}${run.length > 1 ? ' +' + (run.length - 1) : ''}</span>`;
+}
+if (typeof document !== 'undefined' && typeof setInterval === 'function') setInterval(() => {
+workChipUpdate();
+document.querySelectorAll('#workQuick [data-work-clock]').forEach(el => {
+const o = (cloudData.objects || []).find(x => x.id === el.dataset.workClock);
+if (o && o.workTimer) el.textContent = workClock(o.workTimer.start);
+});
+}, 1000);
+// calc.html?w=timer — открыть панель сразу (ярлык на иконке, «Быстрая команда» на iPhone)
+(function workQuickFromUrl() {
+if (typeof location === 'undefined' || typeof setInterval !== 'function' || !/[?&]w=timer\b/.test(location.search)) return;
+let n = 0;
+const wait = setInterval(() => {
+if (workQuickAllowed() && document.getElementById('appScreen') && document.getElementById('appScreen').style.display !== 'none') { clearInterval(wait); workQuickOpen(); history.replaceState(null, '', location.pathname + location.hash); }
+else if (++n > 60) clearInterval(wait);
+}, 250);
+})();

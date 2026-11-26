@@ -78,3 +78,14 @@ test('список: общее время делится по суммам ме�
   // без сумм — поровну, остаток минут — последней
   assert.deepStrictEqual(run('workShareTime([{ min: 0 }, { min: 0 }, { min: 0 }], 100).map(r => r.min)'), [33, 33, 34]);
 });
+
+test('виджет таймера: идущие таймеры и порядок объектов — недавние сверху, без архива', () => {
+  const run = setup();
+  const c = `cloudData.objects = [
+    { id: "a", name: "А", works: [{ at: 100 }] },
+    { id: "b", name: "Б", workTimer: { start: 500 } },
+    { id: "c", name: "В", archived: 1, workTimer: { start: 900 } },
+    { id: "d", name: "Г", works: [{ at: 300 }] }]`;
+  assert.deepStrictEqual(run(`(${c}, workQuickObjects().map(o => o.id))`), ['b', 'd', 'a']);
+  assert.deepStrictEqual(run('workRunning().map(o => o.id)'), ['b']);
+});

@@ -3364,7 +3364,7 @@ renderObjects();
 function renderObjects() {
 const container = document.getElementById('objectsListContainer');
 if (!container) return;
-const workBtn = document.querySelector('.work-all-btn');
+const workBtn = document.querySelector('.work-all-row');
 if (workBtn) workBtn.style.display = typeof isCurrentClient === 'function' && isCurrentClient() ? 'none' : '';
 const all = getVisibleObjects();
 const archivedCount = all.filter(o => o && o.archived).length;
