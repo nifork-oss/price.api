@@ -1356,8 +1356,8 @@ body.assistant-open .add-toast { z-index: 99; }
 .work-q-start span { color: #1d8a4e; }
 .work-q-more { margin-top: 14px; }
 .work-all-row { display: flex; gap: 8px; }
-.work-all-row .work-all-btn { flex: 1 1 auto; }
-.work-all-row .work-q-btn { flex: 0 0 auto; text-align: center; }
+.work-all-row .work-all-btn { flex: 1 1 0; width: auto; min-width: 0; }
+.work-all-row .work-q-btn { flex: 0 0 auto; white-space: nowrap; text-align: center; }
 .work-done { margin: 10px 0; padding: 12px; border-radius: 12px; background: #e9f6ee; border: 1px solid #b9e2c8; font-size: 15px; }
 .work-q-done { border-color: #b9e2c8; background: #e9f6ee; margin-bottom: 6px; }
 .work-w-help { margin-top: 14px; padding: 10px 12px; border: 1px solid #e3e7ec; border-radius: 12px; font-size: 14px; line-height: 1.45; }
