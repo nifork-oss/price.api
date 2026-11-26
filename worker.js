@@ -697,6 +697,41 @@ function keepPurchaseLinkEdits(stored, incoming) {
   }
 }
 
+// Готовые кнопки таймера для Android-приложения HTTP Shortcuts: импорт по ссылке GET /api/v1/widget/http-shortcuts.json
+// (без ключа — кнопки берут ключ из переменной Calc в самом приложении). Скрипты ходят в /api/v1/timer.
+const WIDGET_SHORTCUTS = [
+  {
+    "id": "baa7d247-e38f-437a-9b5f-ea2818a9f6e7",
+    "name": "▶ Таймер",
+    "bg": "1d8a4e",
+    "code": "const BASE = '__BASE__';\nconst KEY = getVariable('Calc');\nfunction api(path, method, body) {\n  const opts = { method: method || 'GET', headers: { 'X-API-Key': KEY, 'Content-Type': 'application/json' } };\n  if (body) opts.body = JSON.stringify(body);\n  const r = sendHttpRequest(BASE + path, opts);\n  if (r.status === 'networkError') { showDialog('Нет связи с сервером: ' + r.networkError, 'Таймер'); abort(); }\n  let d = {};\n  try { d = JSON.parse(r.response.body); } catch (e) {}\n  if (r.status !== 'success') { showDialog((d.error || ('Ошибка ' + r.response.statusCode)) + (r.response.statusCode === 401 ? '\\n\\nПроверьте ключ в переменной Calc.' : ''), 'Таймер'); abort(); }\n  return d;\n}\nconst now = api('', 'GET');\nconst names = now.names || [];\nif (!names.length) { showDialog(now.text || 'Нет объектов', 'Таймер'); abort(); }\nconst pick = showSelection(names, 'Запустить таймер');\nif (!pick) abort();\nshowDialog(api('/start', 'POST', { object: pick }).text, 'Таймер');\n"
+  },
+  {
+    "id": "6c6eca6c-b197-4bb8-be0b-36eb5b773bb6",
+    "name": "⏹ Стоп",
+    "bg": "c2361f",
+    "code": "const BASE = '__BASE__';\nconst KEY = getVariable('Calc');\nfunction api(path, method, body) {\n  const opts = { method: method || 'GET', headers: { 'X-API-Key': KEY, 'Content-Type': 'application/json' } };\n  if (body) opts.body = JSON.stringify(body);\n  const r = sendHttpRequest(BASE + path, opts);\n  if (r.status === 'networkError') { showDialog('Нет связи с сервером: ' + r.networkError, 'Таймер'); abort(); }\n  let d = {};\n  try { d = JSON.parse(r.response.body); } catch (e) {}\n  if (r.status !== 'success') { showDialog((d.error || ('Ошибка ' + r.response.statusCode)) + (r.response.statusCode === 401 ? '\\n\\nПроверьте ключ в переменной Calc.' : ''), 'Таймер'); abort(); }\n  return d;\n}\nconst now = api('', 'GET');\nlet body = null;\nif ((now.running || []).length > 1) {\n  const pick = showSelection(now.running.map(r => r.name + ' · ' + r.clock), 'Какой остановить?');\n  if (!pick) abort();\n  body = { object: now.running.find(r => pick.indexOf(r.name + ' · ') === 0).object_id };\n}\nshowDialog(api('/stop', 'POST', body).text, 'Таймер');\n"
+  },
+  {
+    "id": "1cffd211-0973-441c-99ee-a4327bb383c3",
+    "name": "₽ Заработок",
+    "bg": "5b2a86",
+    "code": "const BASE = '__BASE__';\nconst KEY = getVariable('Calc');\nfunction api(path, method, body) {\n  const opts = { method: method || 'GET', headers: { 'X-API-Key': KEY, 'Content-Type': 'application/json' } };\n  if (body) opts.body = JSON.stringify(body);\n  const r = sendHttpRequest(BASE + path, opts);\n  if (r.status === 'networkError') { showDialog('Нет связи с сервером: ' + r.networkError, 'Таймер'); abort(); }\n  let d = {};\n  try { d = JSON.parse(r.response.body); } catch (e) {}\n  if (r.status !== 'success') { showDialog((d.error || ('Ошибка ' + r.response.statusCode)) + (r.response.statusCode === 401 ? '\\n\\nПроверьте ключ в переменной Calc.' : ''), 'Таймер'); abort(); }\n  return d;\n}\nshowDialog(api('', 'GET').text, 'Заработок');\n"
+  }
+];
+function widgetShortcutsFile(base) {
+  return {
+    version: 92,
+    compatibilityVersion: 90,
+    categories: [{
+      id: "0949a6f7-df01-4b17-a9e2-93560e9ea74c",
+      name: "Таймер работ",
+      layoutType: "linear_list",
+      shortcuts: WIDGET_SHORTCUTS.map((s) => ({ id: s.id, executionType: "scripting", name: s.name, iconBackground: s.bg, timeout: 15000, method: "GET", url: "https://", codeOnPrepare: s.code.replace("__BASE__", base) })),
+    }],
+  };
+}
+
 // Таймер работ и заработок (как во вкладке «Работы» кабинета) — для GET /api/v1/timer и виджета.
 const apiWorkNum = (v) => { const n = Number(String(v ?? "").replace(/\s/g, "").replace(",", ".")); return Number.isFinite(n) && n > 0 ? n : 0; };
 const apiWorkSum = (w) => (w.sum !== "" && w.sum != null && apiWorkNum(w.sum) ? apiWorkNum(w.sum) : Math.round(apiWorkNum(w.price) * apiWorkNum(w.qty) * 100) / 100);
@@ -3338,6 +3373,10 @@ async function handleApi(request, env, url) {
   const path = url.pathname;
   if ((path === "/api/v1" || path === "/api/v1/help") && request.method === "GET") {
     return new Response(apiGuide(url.origin), { headers: { "Content-Type": "text/plain; charset=utf-8", ...apiCorsHeaders() } });
+  }
+  if (path === "/api/v1/widget/http-shortcuts.json" && request.method === "GET") {
+    const base = url.searchParams.get("direct") ? "https://price-api.nifork.workers.dev/api/v1/timer" : "https://moysite.duckdns.org/price-api/api/v1/timer";
+    return new Response(JSON.stringify(widgetShortcutsFile(base), null, 2), { headers: { "Content-Type": "application/json; charset=utf-8", ...apiCorsHeaders() } });
   }
   const record = await readBin(env);
   const found = await findApiKey(record, request);
