@@ -872,3 +872,20 @@ test('таймер работ через API (виджет): запуск по �
   o2 = (await call('GET', '/appdata', { token })).data.data.objects.find(o => o.id === 'o2');
   assert.strictEqual(o2.workTimerDone, undefined);
 });
+
+test('кнопки для HTTP Shortcuts: файл импорта по ссылке без ключа, скрипты ходят в /api/v1/timer', async () => {
+  const { call } = await setup();
+  const r = await call('GET', '/api/v1/widget/http-shortcuts.json');
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(r.data.version, 92);
+  const sc = r.data.categories[0].shortcuts;
+  assert.deepStrictEqual(sc.map(s => s.name), ['▶ Таймер', '⏹ Стоп', '₽ Заработок']);
+  for (const s of sc) {
+    assert.strictEqual(s.executionType, 'scripting');
+    assert.match(s.codeOnPrepare, /const BASE = 'https:\/\/moysite\.duckdns\.org\/price-api\/api\/v1\/timer'/);
+    assert.match(s.codeOnPrepare, /getVariable\('Calc'\)/);
+    assert.ok(!/sk_[0-9a-f]/.test(s.codeOnPrepare), 'ключа в файле нет');
+    new Function('getVariable', 'sendHttpRequest', 'showDialog', 'showSelection', 'abort', s.codeOnPrepare);
+  }
+  assert.match((await call('GET', '/api/v1/widget/http-shortcuts.json?direct=1')).data.categories[0].shortcuts[0].codeOnPrepare, /workers\.dev/);
+});
