@@ -857,7 +857,7 @@ test('таймер работ через API (виджет): запуск по �
 
   const sp = await call('POST', '/api/v1/timer/stop', { key });
   assert.strictEqual(sp.status, 200);
-  assert.match(sp.data.text, /⏹ Дача: 1 мин/);
+  assert.match(sp.data.text, /⏹ Дача, \d\d:\d\d–\d\d:\d\d: 1 мин/);
   o2 = (await call('GET', '/appdata', { token })).data.data.objects.find(o => o.id === 'o2');
   assert.strictEqual(o2.workTimer, undefined);
   assert.strictEqual(o2.workTimerDone.min, 1, 'минуты ждут записи в кабинете');
@@ -879,13 +879,52 @@ test('кнопки для HTTP Shortcuts: файл импорта по ссыл�
   assert.strictEqual(r.status, 200);
   assert.strictEqual(r.data.version, 92);
   const sc = r.data.categories[0].shortcuts;
-  assert.deepStrictEqual(sc.map(s => s.name), ['▶ Таймер', '⏹ Стоп', '₽ Заработок']);
+  assert.deepStrictEqual(sc.map(s => s.name), ['▶ Таймер', '＋ Сделано', '⏹ Стоп', '₽ Заработок']);
   for (const s of sc) {
     assert.strictEqual(s.executionType, 'scripting');
     assert.match(s.codeOnPrepare, /const BASE = 'https:\/\/moysite\.duckdns\.org\/price-api\/api\/v1\/timer'/);
     assert.match(s.codeOnPrepare, /getVariable\('Calc'\)/);
     assert.ok(!/sk_[0-9a-f]/.test(s.codeOnPrepare), 'ключа в файле нет');
-    new Function('getVariable', 'sendHttpRequest', 'showDialog', 'showSelection', 'abort', s.codeOnPrepare);
+    new Function('getVariable', 'sendHttpRequest', 'showDialog', 'showSelection', 'abort', 'prompt', s.codeOnPrepare);
   }
   assert.match((await call('GET', '/api/v1/widget/http-shortcuts.json?direct=1')).data.categories[0].shortcuts[0].codeOnPrepare, /workers\.dev/);
+});
+
+test('таймер: работы по ходу («круги») — отрезки между работами, смена с временем «с — до», остаток после последней', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Виджет' } });
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, objects: [{ id: 'o1', name: 'Горянка', works: [] }], services: [{ name: 'Шпаклёвка стен', price: 450 }, { name: 'Покраска стен', price: 300 }] } });
+  const realNow = Date.now, t0 = Date.UTC(2026, 10, 27, 6, 0); // 9:00 по Москве
+  const at = min => { Date.now = () => t0 + min * 60000; };
+  try {
+    at(0); await call('POST', '/api/v1/timer/start', { key, body: { object: 'Горянка' } });
+    assert.strictEqual((await call('POST', '/api/v1/timer/work', { key, body: { text: '   ' } })).status, 400);
+    at(70); const w1 = await call('POST', '/api/v1/timer/work', { key, body: { text: 'Шпаклёвка стен 12 м²' } });
+    assert.strictEqual(w1.status, 200);
+    assert.match(w1.data.text, /✓ Шпаклёвка стен 12 м² · 1 ч 10 мин · 5 400 ₽/);
+    assert.match(w1.data.text, /Таймер идёт: 1:10 · работ: 1/);
+    // страница со старой копией (до работы с виджета) сохраняет объект — работа с виджета остаётся
+    const stale = (await call('GET', '/appdata', { token })).data;
+    at(100); await call('POST', '/api/v1/timer/work', { key, body: { text: 'Покраска стен 10 м²\nУборка 30 мин' } });
+    const fresh = await call('GET', '/appdata', { token });
+    await call('PUT', '/appdata', { token, body: { baseRev: fresh.data.rev, ops: { objects: { upsert: [{ ...stale.data.objects[0], address: 'Горянка, 1' }], delete: [] } } } });
+    at(130);
+    const v = await call('GET', '/api/v1/timer', { key });
+    assert.match(v.data.text, /⏱ Горянка — 2:10 · работ: 3 на 8 400 ₽ · после последней 0:30/);
+    at(145); const sp = await call('POST', '/api/v1/timer/stop', { key });
+    assert.match(sp.data.text, /⏹ Горянка, 09:00–11:25: 2 ч 25 мин, работ: 3 на 8 400 ₽\. После последней работы 45 мин/);
+    const o = (await call('GET', '/appdata', { token })).data.data.objects[0];
+    assert.strictEqual(o.address, 'Горянка, 1');
+    const ws = o.works.map(w => [w.name, w.min, w.sid, new Date(w.from).toISOString().slice(11, 16), new Date(w.to).toISOString().slice(11, 16)]);
+    const sid = o.workSessions[0].id;
+    assert.deepStrictEqual(ws, [
+      ['Шпаклёвка стен', 70, sid, '06:00', '07:10'],
+      ['Покраска стен', 0, sid, '07:10', '07:40'], // 30 мин отрезка: у «Уборки» своё время 30 мин, «Покраске» — остаток
+      ['Уборка', 30, sid, '07:10', '07:40'],
+    ]);
+    assert.deepStrictEqual([o.workSessions[0].from, o.workSessions[0].to], [t0, t0 + 145 * 60000]);
+    assert.deepStrictEqual([o.workTimerDone.min, o.workTimerDone.sid], [45, sid], 'остаток ждёт записи в той же смене');
+    assert.strictEqual(o.workTimer, undefined);
+  } finally { Date.now = realNow; }
 });

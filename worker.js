@@ -707,6 +707,12 @@ const WIDGET_SHORTCUTS = [
     "code": "const BASE = '__BASE__';\nconst KEY = getVariable('Calc');\nfunction api(path, method, body) {\n  const opts = { method: method || 'GET', headers: { 'X-API-Key': KEY, 'Content-Type': 'application/json' } };\n  if (body) opts.body = JSON.stringify(body);\n  const r = sendHttpRequest(BASE + path, opts);\n  if (r.status === 'networkError') { showDialog('Нет связи с сервером: ' + r.networkError, 'Таймер'); abort(); }\n  let d = {};\n  try { d = JSON.parse(r.response.body); } catch (e) {}\n  if (r.status !== 'success') { showDialog((d.error || ('Ошибка ' + r.response.statusCode)) + (r.response.statusCode === 401 ? '\\n\\nПроверьте ключ в переменной Calc.' : ''), 'Таймер'); abort(); }\n  return d;\n}\nconst now = api('', 'GET');\nconst names = now.names || [];\nif (!names.length) { showDialog(now.text || 'Нет объектов', 'Таймер'); abort(); }\nconst pick = showSelection(names, 'Запустить таймер');\nif (!pick) abort();\nshowDialog(api('/start', 'POST', { object: pick }).text, 'Таймер');\n"
   },
   {
+    "id": "4f0b7c62-3c1e-4a8e-9d55-7a2f1e6b9c10",
+    "name": "＋ Сделано",
+    "bg": "d9890b",
+    "code": "const BASE = '__BASE__';\nconst KEY = getVariable('Calc');\nfunction api(path, method, body) {\n  const opts = { method: method || 'GET', headers: { 'X-API-Key': KEY, 'Content-Type': 'application/json' } };\n  if (body) opts.body = JSON.stringify(body);\n  const r = sendHttpRequest(BASE + path, opts);\n  if (r.status === 'networkError') { showDialog('Нет связи с сервером: ' + r.networkError, 'Таймер'); abort(); }\n  let d = {};\n  try { d = JSON.parse(r.response.body); } catch (e) {}\n  if (r.status !== 'success') { showDialog((d.error || ('Ошибка ' + r.response.statusCode)) + (r.response.statusCode === 401 ? '\\n\\nПроверьте ключ в переменной Calc.' : ''), 'Таймер'); abort(); }\n  return d;\n}\nconst now = api('', 'GET');\nconst run = now.running || [];\nif (!run.length) { showDialog('Таймер не запущен — сначала «▶ Таймер»', 'Сделано'); abort(); }\nlet obj = run[0];\nif (run.length > 1) {\n  const pick = showSelection(run.map(r => r.name + ' · ' + r.clock), 'Какой объект?');\n  if (!pick) abort();\n  obj = run.find(r => pick.indexOf(r.name + ' · ') === 0);\n}\nconst text = prompt('Что сделано? Работа и количество, например «Шпаклёвка стен 12 м²». Несколько работ — с новой строки.', '', { multiline: true });\nif (!text || !text.trim()) abort();\nshowDialog(api('/work', 'POST', { object_id: obj.object_id, text: text }).text, 'Сделано');\n"
+  },
+  {
     "id": "6c6eca6c-b197-4bb8-be0b-36eb5b773bb6",
     "name": "⏹ Стоп",
     "bg": "c2361f",
@@ -751,17 +757,90 @@ function apiTimerView(objs, now, tz) {
   const works = objs.flatMap((o) => (Array.isArray(o.works) ? o.works : []).filter((w) => w && w.date));
   const today = apiLocalDay(now, tz), weekFrom = apiLocalDay(now - 6 * 86400000, tz);
   const t = apiWorkPeriod(works.filter((w) => w.date === today)), wk = apiWorkPeriod(works.filter((w) => w.date >= weekFrom && w.date <= today));
-  const running = objs.filter((o) => o.workTimer && o.workTimer.start).map((o) => ({ object_id: o.id, name: o.name || "Объект", started_at: o.workTimer.start, minutes: Math.floor((now - o.workTimer.start) / 60000), clock: apiClock(now - o.workTimer.start) }));
+  const running = objs.filter((o) => o.workTimer && o.workTimer.start).map((o) => {
+    const laps = apiSessionWorks(o, o.workTimer.sid), last = Number(o.workTimer.last) || Number(o.workTimer.start);
+    return { object_id: o.id, name: o.name || "Объект", started_at: o.workTimer.start, minutes: Math.floor((now - o.workTimer.start) / 60000), clock: apiClock(now - o.workTimer.start),
+      works: laps.length, earned: Math.round(laps.reduce((a, w) => a + apiWorkSum(w), 0)), since_last: apiClock(now - last) };
+  });
   const pending = objs.filter((o) => o.workTimerDone && Number(o.workTimerDone.min) > 0).map((o) => ({ object_id: o.id, name: o.name || "Объект", minutes: Number(o.workTimerDone.min) }));
   const per = (p) => `${apiRub(p.earned)}${p.minutes ? " · " + apiDur(p.minutes) : ""}${p.per_hour ? " · " + apiRub(p.per_hour) + "/ч" : ""}`;
   const lines = [
-    ...running.map((r) => `⏱ ${r.name} — ${r.clock}`),
+    ...running.map((r) => `⏱ ${r.name} — ${r.clock}${r.works ? ` · работ: ${r.works} на ${apiRub(r.earned)} · после последней ${r.since_last}` : ""}`),
     `Сегодня: ${per(t)}`,
     `7 дней: ${per(wk)}`,
     ...pending.map((p) => `Не записано: ${p.name}, ${apiDur(p.minutes)}`),
   ];
   return { running, today: t, week: wk, pending, objects: sorted.map((o) => ({ id: o.id, name: o.name || "Объект", running: !!(o.workTimer && o.workTimer.start) })), names: sorted.filter((o) => !(o.workTimer && o.workTimer.start)).map((o) => o.name || "Объект"), text: lines.join("\n") };
 }
+
+// Работа, вписанная при идущем таймере («круг»): строка «Шпаклёвка стен 12 м² 1:30» → работа, количество, единица
+// (как workParseLine в calc-work.js), цена — из прайса. Время — отрезок от прошлой работы (или от запуска) до сейчас.
+const API_WORK_UNITS = [[/^(м²|м2|кв\.?\s?м\.?|квм)$/i, "м²"], [/^(пог\.?\s?м\.?|п\.?\s?м\.?|м\.?\s?п\.?|пм|мп)$/i, "пог. м"], [/^шт\.?$/i, "шт."], [/^компл\.?$/i, "компл."], [/^усл\.?$/i, "усл."]];
+function apiWorkService(name, services) {
+  const low = String(name || "").trim().toLowerCase();
+  if (low.length < 3) return null;
+  const list = (Array.isArray(services) ? services : []).filter((x) => x && !x.isCategory && x.name);
+  return list.find((x) => x.name.toLowerCase() === low)
+    || list.filter((x) => low.includes(x.name.toLowerCase()) || x.name.toLowerCase().includes(low)).sort((a, b) => b.name.length - a.name.length)[0] || null;
+}
+function apiWorkParseLine(text, services) {
+  let t = " " + String(text || "").replace(/\s+/g, " ").trim().replace(/^(?:[-•*]\s*|\d+[.)]\s+)/, "") + " ";
+  if (!t.trim()) return null;
+  let min = 0;
+  t = t.replace(/[\s,;](\d{1,2}):(\d{2})(?=[\s,;])/, (m, h, mm) => { min += Number(h) * 60 + Number(mm); return " "; });
+  t = t.replace(/[\s,;](\d+(?:[.,]\d+)?)\s*(?:ч|час|часа|часов)\.?(?=[\s,;])/i, (m, h) => { min += Math.round(Number(h.replace(",", ".")) * 60); return " "; });
+  t = t.replace(/[\s,;](\d+)\s*(?:мин|минут|минуты)\.?(?=[\s,;])/i, (m, mm) => { min += Number(mm); return " "; });
+  t = t.replace(/\s+/g, " ").trim().replace(/[\s,;:—–-]+$/, "");
+  if (!t) return null;
+  const m = /^(.*?)[\s,;:—–-]+(\d+(?:[.,]\d+)?)\s*([^\d\s][^\d]{0,9})?$/.exec(t);
+  let name = t, qty = "", unit = "";
+  if (m && m[1].trim()) {
+    name = m[1].trim(); qty = m[2].replace(",", ".");
+    const u = String(m[3] || "").trim(), hit = API_WORK_UNITS.find(([re]) => re.test(u));
+    unit = hit ? hit[1] : u.slice(0, 10);
+  }
+  const srv = apiWorkService(name, services);
+  return { name: name.slice(0, 120), qty, unit: unit || (srv && srv.unit) || "м²", price: srv ? Number(srv.price) || "" : "", min };
+}
+// общее время — работам без своего: по долям сумм (нет сумм — поровну), итог сходится до минуты
+function apiShareTime(rows, total) {
+  const free = rows.filter((r) => !(Number(r.min) > 0));
+  if (!(total > 0) || !free.length) return rows;
+  const sums = free.map(apiWorkSum), all = sums.reduce((a, v) => a + v, 0);
+  let left = Math.round(total);
+  free.forEach((r, i) => {
+    const part = i === free.length - 1 ? left : Math.round(total * (all ? sums[i] / all : 1 / free.length));
+    r.min = Math.max(0, Math.min(left, part)); r.shared = true; left -= r.min;
+  });
+  return rows;
+}
+function apiWorkLap(obj, text, services, now, tz) {
+  const t = obj.workTimer;
+  const rows = String(text || "").split("\n").map((l) => apiWorkParseLine(l, services)).filter(Boolean).slice(0, 30);
+  if (!t || !t.start || !rows.length) return [];
+  if (!t.sid) apiSessionOpen(obj, t.start);
+  const last = Number(t.last) || Number(t.start), seg = Math.max(0, Math.round((now - last) / 60000)), date = apiLocalDay(now, tz);
+  const recs = rows.map((r, i) => ({ id: "w" + now.toString(36) + i + Math.random().toString(36).slice(2, 5), at: now + i, date, name: r.name, unit: r.unit,
+    qty: apiWorkNum(r.qty) || "", price: r.price === "" ? "" : apiWorkNum(r.price), sum: "", min: r.min, note: "", sid: t.sid, from: last, to: now }));
+  apiShareTime(recs, Math.max(0, seg - recs.reduce((a, w) => a + (Number(w.min) || 0), 0))); // своё время из строки — из отрезка, остаток — остальным
+  recs.forEach((w) => { if (!w.shared) delete w.shared; });
+  obj.works = [...(Array.isArray(obj.works) ? obj.works : []), ...recs];
+  t.last = now;
+  return recs;
+}
+// смена: работы одного запуска таймера — с какого и до какого времени
+function apiSessionOpen(obj, start) {
+  const sid = "s" + Number(start).toString(36);
+  obj.workSessions = [...(Array.isArray(obj.workSessions) ? obj.workSessions : []).filter((s) => s && s.id !== sid), { id: sid, from: Number(start), to: null }].slice(-300);
+  if (obj.workTimer) obj.workTimer.sid = sid;
+  return sid;
+}
+function apiSessionClose(obj, sid, to) {
+  const s = (Array.isArray(obj.workSessions) ? obj.workSessions : []).find((x) => x && x.id === sid);
+  if (s) s.to = to;
+}
+function apiSessionWorks(obj, sid) { return (Array.isArray(obj.works) ? obj.works : []).filter((w) => w && sid && w.sid === sid); }
+function apiTimeOfDay(ms, tz) { return new Date(ms + tz * 60000).toISOString().slice(11, 16); }
 
 // Таймер, запущенный или остановленный с виджета (через API), новее копии на открытой странице: страница с
 // более старой отметкой workTimerAt при сохранении вернула бы прежнее состояние таймера — оставляем то, что на сервере.
@@ -770,7 +849,12 @@ function keepWorkTimer(stored, incoming) {
   for (const obj of Array.isArray(incoming) ? incoming : []) {
     const was = obj && obj.id != null ? old.get(String(obj.id)) : null;
     if (!was || !(Number(was.workTimerAt) > (Number(obj.workTimerAt) || 0))) continue;
-    for (const k of ["workTimer", "workTimerDone", "workTimerAt"]) { if (was[k] === undefined) delete obj[k]; else obj[k] = was[k]; }
+    const seenAt = Number(obj.workTimerAt) || 0;
+    for (const k of ["workTimer", "workTimerDone", "workTimerAt", "workSessions"]) { if (was[k] === undefined) delete obj[k]; else obj[k] = was[k]; }
+    // работы, вписанные с виджета после того, как страница загрузила объект, — дописываем
+    const have = new Set((Array.isArray(obj.works) ? obj.works : []).map((w) => w && w.id));
+    const fresh = (Array.isArray(was.works) ? was.works : []).filter((w) => w && w.sid && !have.has(w.id) && Number(w.at) > seenAt);
+    if (fresh.length) obj.works = [...(Array.isArray(obj.works) ? obj.works : []), ...fresh];
   }
 }
 
@@ -2986,6 +3070,8 @@ function apiGuide(base, key) {
   objects:[{id, name, running}] (недавние сверху), names — объекты без идущего таймера, text — готовый текст для уведомления}.
   ?tz=<минуты от UTC> — часовой пояс для «сегодня» (по умолчанию 180, Москва).
 - POST /api/v1/timer/start — запустить таймер: {"object": "название"} или {"object_id": "..."}.
+- POST /api/v1/timer/work — при идущем таймере вписать сделанное: {"text": "Шпаклёвка стен 12 м²"} (несколько строк —
+  несколько работ). Работа записывается сразу, со временем от прошлой работы (или от запуска); таймер идёт дальше.
 - POST /api/v1/timer/stop — остановить: {"object": "..."} или без тела — все идущие. Минуты ждут в кабинете,
   во вкладке «Работы» объекта: мастер допишет, что сделано (время станет общим на эти работы).
 - POST /api/v1/objects/<id>/plans — прислать замеры помещений объекта (формат ниже). Мастер увидит их
@@ -3643,7 +3729,7 @@ async function handleApi(request, env, url) {
   }
 
   // таймер работ — для виджета на телефоне («Команды» на iPhone): что идёт, заработок, запуск и стоп
-  const timerPath = path.match(/^\/api\/v1\/timer(?:\/(start|stop))?$/);
+  const timerPath = path.match(/^\/api\/v1\/timer(?:\/(start|stop|work))?$/);
   if (timerPath) {
     const tz = Number.isFinite(Number(url.searchParams.get("tz"))) && url.searchParams.get("tz") !== null ? Number(url.searchParams.get("tz")) : 180;
     const objs = visibleObjects().filter((o) => !o.archived);
@@ -3665,27 +3751,46 @@ async function handleApi(request, env, url) {
         if (pick.workTimer && pick.workTimer.start) {
           return apiJson({ ...apiTimerView(objs, now, tz), text: `Уже идёт: ${pick.name || "Объект"} · ${apiClock(now - pick.workTimer.start)}` });
         }
-        pick.workTimer = { start: now, from: entry.name };
+        pick.workTimer = { start: now, last: now, from: entry.name };
+        apiSessionOpen(pick, now);
         pick.workTimerAt = now;
         text = `▶ Таймер пошёл: ${pick.name || "Объект"}`;
+      } else if (timerPath[1] === "work") {
+        const run = pick ? [pick].filter((o) => o.workTimer && o.workTimer.start) : objs.filter((o) => o.workTimer && o.workTimer.start);
+        if (!run.length) return apiJson({ ...apiTimerView(objs, now, tz), error: "Таймер не запущен", text: "Таймер не запущен — сначала «▶ Таймер»" }, 409);
+        if (run.length > 1) return apiJson({ ...apiTimerView(objs, now, tz), error: "Идут несколько таймеров — укажите object_id", text: "Идут несколько таймеров — выберите объект" }, 409);
+        const o = run[0], recs = apiWorkLap(o, str(body.text || "", 3000), space.data.services, now, tz);
+        if (!recs.length) return apiJson({ error: "Пустая строка: напишите работу и количество, например «Шпаклёвка стен 12 м²»", text: "Не понял, что записать" }, 400);
+        o.workTimerAt = now;
+        const all = apiSessionWorks(o, o.workTimer.sid);
+        text = recs.map((w) => `✓ ${w.name}${w.qty ? " " + String(w.qty).replace(".", ",") + " " + w.unit : ""} · ${apiDur(w.min)}${apiWorkSum(w) ? " · " + apiRub(apiWorkSum(w)) : ""}`).join("\n")
+          + `\nТаймер идёт: ${apiClock(now - o.workTimer.start)} · работ: ${all.length} на ${apiRub(all.reduce((a, w) => a + apiWorkSum(w), 0))}`;
       } else {
         const run = pick ? [pick].filter((o) => o.workTimer && o.workTimer.start) : objs.filter((o) => o.workTimer && o.workTimer.start);
         if (!run.length) return apiJson({ ...apiTimerView(objs, now, tz), text: "Таймер не запущен" });
         text = "⏹ " + run.map((o) => {
-          const min = Math.max(1, Math.round((now - o.workTimer.start) / 60000));
-          const done = o.workTimerDone && Number(o.workTimerDone.min) > 0 ? o.workTimerDone : null;
-          o.workTimerDone = { min: (done ? Number(done.min) : 0) + min, start: done ? done.start : o.workTimer.start, end: now, from: entry.name };
+          const t = o.workTimer, sid = t.sid || apiSessionOpen(o, t.start), laps = apiSessionWorks(o, sid);
+          const last = Number(t.last) || Number(t.start), rest = Math.round((now - last) / 60000), total = Math.max(1, Math.round((now - t.start) / 60000));
+          apiSessionClose(o, sid, now);
+          // время без записанной работы (после последней или весь запуск) — ждёт в кабинете
+          if (rest >= 1 || !laps.length) {
+            const done = o.workTimerDone && Number(o.workTimerDone.min) > 0 ? o.workTimerDone : null;
+            const min = laps.length ? rest : total;
+            o.workTimerDone = { min: (done ? Number(done.min) : 0) + min, start: done ? done.start : last, end: now, from: entry.name, sid: done && done.sid ? done.sid : sid };
+          }
           delete o.workTimer;
           o.workTimerAt = now;
-          return `${o.name || "Объект"}: ${apiDur(min)}`;
-        }).join(", ") + ". Работы допишите в кабинете — время уже стоит.";
+          const sum = laps.reduce((a, w) => a + apiWorkSum(w), 0);
+          return `${o.name || "Объект"}, ${apiTimeOfDay(t.start, tz)}–${apiTimeOfDay(now, tz)}: ${apiDur(total)}`
+            + (laps.length ? `, работ: ${laps.length} на ${apiRub(sum)}` + (rest >= 1 ? `. После последней работы ${apiDur(rest)} — допишите в кабинете` : "") : ". Работы допишите в кабинете — время уже стоит");
+        }).join("\n");
       }
       bumpRev(record, space.key, ["objects"]);
       touch();
       await writeBin(env, record);
       return apiJson({ ok: true, ...apiTimerView(objs, now, tz), text });
     }
-    return apiJson({ error: "Такого запроса нет: GET /timer, POST /timer/start, POST /timer/stop" }, 405);
+    return apiJson({ error: "Такого запроса нет: GET /timer, POST /timer/start, POST /timer/work, POST /timer/stop" }, 405);
   }
 
   // помещение подробно (стены, проёмы, молдинги) и молдинги в его замер

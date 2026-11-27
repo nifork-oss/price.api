@@ -158,9 +158,10 @@ r.min = Math.max(0, Math.min(left, part)); r.shared = true; left -= r.min;
 });
 return rows;
 }
-function workDraftOpen(min, fromDone) {
+function workDraftOpen(min, fromDone, sid) {
 workForm = null;
-workDraft = { date: workDay(), rows: [], min: min || 0, fromDone: !!fromDone };
+const o = typeof workObj === 'function' ? workObj() : null;
+workDraft = { date: workDay(), rows: [], min: min || 0, fromDone: !!fromDone, sid: sid || (fromDone && o && o.workTimerDone && o.workTimerDone.sid) || '' };
 renderObjectDetail();
 const el = document.getElementById('workAdd'); if (el) el.focus();
 }
@@ -230,7 +231,7 @@ const date = /^\d{4}-\d{2}-\d{2}$/.test(d.date || '') ? d.date : workDay();
 const recs = d.rows.filter(r => String(r.name || '').trim()).map((r, i) => ({
 id: 'w' + at.toString(36) + i + Math.random().toString(36).slice(2, 5), at: at + i, date, name: String(r.name).trim().slice(0, 120), unit: r.unit || '',
 qty: workNum(r.qty) || '', price: r.price === '' ? '' : workNum(r.price), sum: String(r.sum ?? '').trim() === '' ? '' : workNum(r.sum),
-min: Math.max(0, Math.round(Number(r.min) || 0)), note: ''
+min: Math.max(0, Math.round(Number(r.min) || 0)), note: '', ...(d.sid ? { sid: d.sid } : {})
 }));
 workShareTime(recs, Number(d.min) || 0);
 recs.forEach(w => { if (!w.shared) delete w.shared; });
@@ -252,6 +253,78 @@ await workSave();
 if (typeof showAddToast === 'function') showAddToast(`Записано работ: ${recs.length} · ${workRub(recs.reduce((a, w) => a + workSum(w), 0))}`);
 }
 
+/* ---------- работы по ходу таймера («круги») и смены ---------- */
+// Пока таймер идёт, вписанная работа записывается сразу: время — отрезок от прошлой работы (или от запуска) до сейчас.
+// Все работы одного запуска — смена: obj.workSessions = [{ id, from, to }], у работы sid, from, to.
+function workSessionOpen(obj, start) {
+const sid = 's' + Number(start).toString(36);
+obj.workSessions = [...(Array.isArray(obj.workSessions) ? obj.workSessions : []).filter(s => s && s.id !== sid), { id: sid, from: Number(start), to: null }].slice(-300);
+if (obj.workTimer) obj.workTimer.sid = sid;
+return sid;
+}
+function workSessionOf(obj, sid) { return (Array.isArray(obj.workSessions) ? obj.workSessions : []).find(s => s && s.id === sid) || null; }
+function workSessionWorks(obj, sid) { return workList(obj).filter(w => w && sid && w.sid === sid); }
+// строки → записи с отрезком времени [last, now]; своё время из строки вычитается из отрезка, остаток — остальным по суммам
+function workLapRecords(timer, text, now) {
+const rows = String(text || '').split('\n').map(workParseLine).filter(Boolean).slice(0, 30);
+if (!timer || !timer.start || !rows.length) return [];
+const last = Number(timer.last) || Number(timer.start), seg = Math.max(0, Math.round((now - last) / 60000)), date = workDay(new Date(now));
+const recs = rows.map((r, i) => ({ id: 'w' + now.toString(36) + i + Math.random().toString(36).slice(2, 5), at: now + i, date, name: r.name, unit: r.unit,
+qty: workNum(r.qty) || '', price: r.price === '' ? '' : workNum(r.price), sum: '', min: r.min, note: '', sid: timer.sid, from: last, to: now }));
+workShareTime(recs, Math.max(0, seg - recs.reduce((a, w) => a + (Number(w.min) || 0), 0)));
+recs.forEach(w => { if (!w.shared) delete w.shared; });
+return recs;
+}
+async function workLap(id, inputId) {
+const obj = (cloudData.objects || []).find(o => o.id === id), inp = document.getElementById(inputId);
+if (!obj || !obj.workTimer || !inp) return;
+if (!obj.workTimer.sid) workSessionOpen(obj, obj.workTimer.start);
+const now = Date.now(), recs = workLapRecords(obj.workTimer, inp.value, now);
+if (!recs.length) { inp.focus(); return; }
+obj.works = [...workList(obj), ...recs];
+obj.workTimer.last = now; obj.workTimerAt = now;
+inp.value = '';
+if (currentObjectId === id && typeof renderObjectDetail === 'function') renderObjectDetail();
+workQuickRender();
+const again = document.getElementById(inputId); if (again) again.focus();
+if (typeof showAddToast === 'function') showAddToast(recs.map(w => `✓ ${w.name} · ${workTime(w.min)}`).join(', ') + ' — таймер идёт');
+await saveCloudData();
+}
+function workHm(ms) { const d = new Date(ms); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function workLapPaste(e, id, inputId) { // вставили список — сразу записать
+const txt = e.clipboardData && e.clipboardData.getData('text');
+if (!txt || !/\n/.test(txt.trim())) return;
+e.preventDefault();
+e.target.value = (e.target.value ? e.target.value + '\n' : '') + txt;
+workLap(id, inputId);
+}
+// поле «Что сделано?» и работы этой смены — под идущим таймером (во вкладке и в быстрой панели)
+function workLapHtml(obj, inputId) {
+const t = obj.workTimer, laps = workSessionWorks(obj, t.sid).sort((a, b) => (a.at || 0) - (b.at || 0));
+const last = Number(t.last) || Number(t.start);
+return `<div class="work-lap">
+${laps.length ? `<div class="work-lap-list">${laps.map(w => `<div class="work-lap-row"><span class="work-lap-t">${w.from ? workHm(w.from) + '–' + workHm(w.to) : ''}</span><span class="work-lap-n">${escapeHtml(w.name)}${w.qty ? ' · ' + workQty(workNum(w.qty)) + ' ' + escapeHtml(w.unit || '') : ''}</span><span class="work-lap-m">${workTime(w.min)}</span></div>`).join('')}
+<div class="work-lap-row work-lap-now"><span class="work-lap-t">${workHm(last)}–…</span><span class="work-lap-n">после последней работы</span><span class="work-lap-m" data-work-since="${escapeHtml(obj.id)}">${workClock(last)}</span></div></div>` : ''}
+<div class="purchase-add"><textarea id="${inputId}" rows="1" placeholder="Что сделано? Шпаклёвка стен 12 м²" onkeydown="if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); workLap('${escapeHtml(obj.id)}', '${inputId}'); }" onpaste="workLapPaste(event, '${escapeHtml(obj.id)}', '${inputId}')"></textarea><button type="button" class="hc-btn" onclick="workLap('${escapeHtml(obj.id)}', '${inputId}')">Записать</button></div>
+<div class="work-hint">Enter — работа записана со временем ${laps.length ? 'от прошлой работы' : 'от запуска'}, таймер идёт дальше. По «Стоп» все работы соберутся в одну смену.</div>
+</div>`;
+}
+// записи дня: работы одной смены — блоком «9:10–15:40 · 6 ч 30 мин · сумма»
+function workDayRowsHtml(obj, ws) {
+const row = w => `<button type="button" class="work-row" onclick="workFormOpen('${w.id}')"><span class="work-row-name">${escapeHtml(w.name || 'Без названия')}<small>${[w.from && w.to ? workHm(w.from) + '–' + workHm(w.to) : '', w.qty ? workQty(workNum(w.qty)) + ' ' + escapeHtml(w.unit || '') : '', w.min ? workTime(w.min) : '', w.note ? escapeHtml(w.note) : ''].filter(Boolean).join(' · ')}</small></span><b>${workRub(workSum(w))}</b></button>`;
+const done = new Set(), out = [];
+ws.forEach(w => {
+if (!w.sid) { out.push(row(w)); return; }
+if (done.has(w.sid)) return;
+done.add(w.sid);
+const list = ws.filter(x => x.sid === w.sid).sort((a, b) => (a.at || 0) - (b.at || 0)), s = workSessionOf(obj, w.sid);
+const from = s ? s.from : Math.min(...list.map(x => Number(x.from) || Number(x.at))), to = s && s.to ? s.to : (obj.workTimer && obj.workTimer.sid === w.sid ? 0 : Math.max(...list.map(x => Number(x.to) || Number(x.at))));
+const min = to ? Math.round((to - from) / 60000) : 0;
+out.push(`<div class="work-sess"><div class="work-sess-head"><span>🕘 ${workHm(from)}–${to ? workHm(to) : 'идёт'}${min ? ' · ' + workTime(min) : ''} · работ: ${list.length}</span><b>${workRub(list.reduce((a, x) => a + workSum(x), 0))}</b></div>${list.map(row).join('')}</div>`);
+});
+return out.join('');
+}
+
 /* ---------- вкладка «Работы» у объекта ---------- */
 function workObj() { return (cloudData.objects || []).find(o => o.id === currentObjectId) || null; }
 function workTabHtml(obj) {
@@ -261,7 +334,7 @@ const days = new Map();
 list.forEach(w => { if (!days.has(w.date)) days.set(w.date, []); days.get(w.date).push(w); });
 return `<div class="work-timer${t ? ' on' : ''}">
 ${t ? `<div class="work-clock" id="workClock">${workClock(t)}</div><div class="work-timer-sub">Таймер идёт${obj.workTimer.name ? ': ' + escapeHtml(obj.workTimer.name) : ''}</div>
-<button type="button" class="btn btn-primary" onclick="workTimerStop()">⏹ Стоп и записать</button><button type="button" class="hc-btn" onclick="workTimerCancel()">Сбросить</button>`
+<button type="button" class="btn btn-primary" onclick="workTimerStop()">⏹ Стоп</button><button type="button" class="hc-btn" onclick="workTimerCancel()">Сбросить</button>${workLapHtml(obj, 'workLapIn')}`
 : `<button type="button" class="btn btn-primary" onclick="workTimerStart()">▶ Запустить таймер</button><button type="button" class="hc-btn" onclick="workDraftOpen()">＋ Записать работы</button>`}
 </div>
 ${obj.workTimerDone && Number(obj.workTimerDone.min) > 0 && !workDraft ? `<div class="work-done">⏹ Таймер остановлен с виджета: <b>${workTime(obj.workTimerDone.min)}</b> — впишите, что сделано
@@ -274,7 +347,7 @@ ${workStatsHtml(workInPeriod(workList(obj), workPeriod))}
 <details class="work-cmp"><summary>Сравнение со сметой</summary>${workCompareHtml(obj)}</details>
 <h3 class="work-h">Записи${list.length ? ` (${list.length})` : ''}</h3>
 ${list.length ? [...days.entries()].map(([d, ws]) => `<div class="work-day"><b>${new Date(d + 'T12:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', weekday: 'short' })}</b><span>${workRub(ws.reduce((a, w) => a + workSum(w), 0))}</span></div>
-${ws.map(w => `<button type="button" class="work-row" onclick="workFormOpen('${w.id}')"><span class="work-row-name">${escapeHtml(w.name || 'Без названия')}<small>${w.qty ? workQty(workNum(w.qty)) + ' ' + escapeHtml(w.unit || '') : ''}${w.min ? ' · ' + workTime(w.min) : ''}${w.note ? ' · ' + escapeHtml(w.note) : ''}</small></span><b>${workRub(workSum(w))}</b></button>`).join('')}`).join('')
+${workDayRowsHtml(obj, ws)}`).join('')
 : '<div class="work-empty">Записей пока нет. Запустите таймер, когда начинаете работу, или запишите сделанное вручную.</div>'}`;
 }
 function workClock(start) {
@@ -294,23 +367,37 @@ function workSetPeriod(p) { workPeriod = p; renderObjectDetail(); }
 async function workTimerStart() {
 const obj = workObj();
 if (!obj) return;
-obj.workTimer = { start: Date.now() }; obj.workTimerAt = Date.now();
+const now = Date.now();
+obj.workTimer = { start: now, last: now }; workSessionOpen(obj, now); obj.workTimerAt = now;
 await workSave();
 workTickStart();
 }
 async function workTimerCancel() {
 const obj = workObj();
-if (!obj || !confirm('Сбросить таймер без записи?')) return;
-delete obj.workTimer; obj.workTimerAt = Date.now();
+if (!obj || !obj.workTimer) return;
+const sid = obj.workTimer.sid, laps = workSessionWorks(obj, sid);
+if (!confirm(laps.length ? 'Остановить таймер без записи времени после последней работы? Записанные работы останутся.' : 'Сбросить таймер без записи?')) return;
+workTimerEnd(obj, laps.length ? Number(obj.workTimer.last) : 0);
 await workSave();
+}
+// конец смены: to — время окончания (0 — смена без работ убирается)
+function workTimerEnd(obj, to) {
+const sid = obj.workTimer && obj.workTimer.sid, s = workSessionOf(obj, sid);
+if (s) { if (to) s.to = to; else obj.workSessions = obj.workSessions.filter(x => x !== s); }
+delete obj.workTimer; obj.workTimerAt = Date.now();
 }
 async function workTimerStop() {
 const obj = workObj();
 if (!obj || !obj.workTimer) return;
-const min = Math.max(1, Math.round((Date.now() - obj.workTimer.start) / 60000));
-delete obj.workTimer; obj.workTimerAt = Date.now();
-await saveCloudData();
-workDraftOpen(min); // время с таймера — общим на работы, которые сейчас впишут
+const now = Date.now(), t = obj.workTimer, sid = t.sid || workSessionOpen(obj, t.start), laps = workSessionWorks(obj, sid);
+const rest = Math.round((now - (Number(t.last) || Number(t.start))) / 60000), total = Math.max(1, Math.round((now - t.start) / 60000));
+workTimerEnd(obj, now);
+await workSave();
+const sum = laps.reduce((a, w) => a + workSum(w), 0);
+if (laps.length && typeof showAddToast === 'function') showAddToast(`Смена ${workHm(t.start)}–${workHm(now)}: ${workTime(total)}, работ: ${laps.length} · ${workRub(sum)}`);
+// время без записанной работы — общим на работы, которые сейчас впишут (в ту же смену)
+if (!laps.length) workDraftOpen(total, false, sid);
+else if (rest >= 1) workDraftOpen(rest, false, sid);
 }
 async function workDoneDrop() {
 const obj = workObj();
@@ -442,7 +529,8 @@ box.innerHTML = `<div class="work-all-in work-q-in">
 ${run.map(o => `<div class="work-q-run">
 <div class="work-q-obj">${escapeHtml(o.name || 'Объект')}</div>
 <div class="work-clock" data-work-clock="${escapeHtml(o.id)}">${workClock(o.workTimer.start)}</div>
-<div class="work-q-btns"><button type="button" class="btn btn-primary" onclick="workQuickStop('${escapeHtml(o.id)}')">⏹ Стоп и записать</button><button type="button" class="hc-btn" onclick="workQuickCancel('${escapeHtml(o.id)}')">Сбросить</button></div>
+<div class="work-q-btns"><button type="button" class="btn btn-primary" onclick="workQuickStop('${escapeHtml(o.id)}')">⏹ Стоп</button><button type="button" class="hc-btn" onclick="workQuickCancel('${escapeHtml(o.id)}')">Сбросить</button></div>
+${workLapHtml(o, 'workLapQ_' + o.id)}
 </div>`).join('')}
 ${workQuickObjects().filter(o => o.workTimerDone && Number(o.workTimerDone.min) > 0).map(o => `<button type="button" class="work-q-start work-q-done" onclick="workQuickWrite('${escapeHtml(o.id)}')"><span>✎</span>${escapeHtml(o.name || 'Объект')}: не записано ${workTime(o.workTimerDone.min)}</button>`).join('')}
 <div class="work-q-stats">${stat('Сегодня', today)}${stat('7 дней', week)}</div>
@@ -456,15 +544,17 @@ ${workWidgetHelp()}
 async function workQuickStart(id) {
 const o = (cloudData.objects || []).find(x => x.id === id);
 if (!o || o.workTimer) return;
-o.workTimer = { start: Date.now() }; o.workTimerAt = Date.now();
+const now = Date.now(); o.workTimer = { start: now, last: now }; workSessionOpen(o, now); o.workTimerAt = now;
 workQuickRender(); workChipUpdate();
 if (currentObjectId === id && typeof renderObjectDetail === 'function') { renderObjectDetail(); workTickStart(); }
 await saveCloudData();
 }
 async function workQuickCancel(id) {
 const o = (cloudData.objects || []).find(x => x.id === id);
-if (!o || !o.workTimer || !confirm('Сбросить таймер без записи?')) return;
-delete o.workTimer; o.workTimerAt = Date.now();
+if (!o || !o.workTimer) return;
+const laps = workSessionWorks(o, o.workTimer.sid);
+if (!confirm(laps.length ? 'Остановить таймер без записи времени после последней работы? Записанные работы останутся.' : 'Сбросить таймер без записи?')) return;
+workTimerEnd(o, laps.length ? Number(o.workTimer.last) : 0);
 workQuickRender(); workChipUpdate();
 if (currentObjectId === id && typeof renderObjectDetail === 'function') renderObjectDetail();
 await saveCloudData();
@@ -518,6 +608,10 @@ chip.innerHTML = `<span class="work-chip-dot"></span><b>${workClock(o.workTimer.
 }
 if (typeof document !== 'undefined' && typeof setInterval === 'function') setInterval(() => {
 workChipUpdate();
+document.querySelectorAll('[data-work-since]').forEach(el => {
+const o = (cloudData.objects || []).find(x => x.id === el.dataset.workSince);
+if (o && o.workTimer) el.textContent = workClock(Number(o.workTimer.last) || Number(o.workTimer.start));
+});
 document.querySelectorAll('#workQuick [data-work-clock]').forEach(el => {
 const o = (cloudData.objects || []).find(x => x.id === el.dataset.workClock);
 if (o && o.workTimer) el.textContent = workClock(o.workTimer.start);
