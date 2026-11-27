@@ -127,3 +127,14 @@ test('бригада: доход поровну, по процентам и сд
   const recs = run('workLapRecords({ start: 1, last: 1, sid: "s1", who: "p1" }, "Шпаклёвка стен 2 м²", 600000)');
   assert.strictEqual(recs[0].who, 'p1');
 });
+
+test('бригада: параллельные отсчёты и общее время по людям в списке', () => {
+  const run = setup();
+  const m = 60000;
+  const recs = run(`workLapRecords({ start: 1, last: ${1 + 60 * m}, lasts: { p1: ${1 + 20 * m} }, sid: "s1" }, "Шпаклёвка стен 2 м²", ${1 + 90 * m}, "p1")`);
+  assert.deepStrictEqual([recs[0].who, recs[0].min], ['p1', 70]);
+  const d = run(`workDraftRecords({ date: "2026-11-27", min: 30, minBy: { p1: 40 }, rows: [
+    { name: "Шпаклёвка стен", qty: "2", unit: "м²", price: 500, sum: "", min: 0 },
+    { name: "Монтаж молдингов", qty: "4", unit: "пог. м", price: 500, sum: "", min: 0, who: "p1" }] }, 1000)`);
+  assert.deepStrictEqual(d.map(w => [w.who || '', w.min]), [['', 30], ['p1', 40]]);
+});

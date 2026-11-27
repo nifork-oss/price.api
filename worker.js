@@ -760,12 +760,13 @@ function apiTimerView(objs, now, tz) {
   const tl = works.filter((w) => w.date === today), wl = works.filter((w) => w.date >= weekFrom && w.date <= today);
   const t = { ...apiWorkPeriod(tl), mine: Math.round(tl.reduce((a, w) => a + w.mine, 0)) }, wk = { ...apiWorkPeriod(wl), mine: Math.round(wl.reduce((a, w) => a + w.mine, 0)) };
   const running = objs.filter((o) => o.workTimer && o.workTimer.start).map((o) => {
-    const laps = apiSessionWorks(o, o.workTimer.sid), last = Number(o.workTimer.last) || Number(o.workTimer.start);
+    const laps = apiSessionWorks(o, o.workTimer.sid), last = apiLastOf(o.workTimer, o.workTimer.who || "");
     return { object_id: o.id, name: o.name || "Объект", started_at: o.workTimer.start, minutes: Math.floor((now - o.workTimer.start) / 60000), clock: apiClock(now - o.workTimer.start),
       works: laps.length, earned: Math.round(laps.reduce((a, w) => a + apiWorkSum(w), 0)), since_last: apiClock(now - last),
       team: ["Я", ...apiTeam(o).members.map((m) => m.name)], who: apiWhoName(o, o.workTimer.who) };
   });
-  const pending = objs.filter((o) => o.workTimerDone && Number(o.workTimerDone.min) > 0).map((o) => ({ object_id: o.id, name: o.name || "Объект", minutes: Number(o.workTimerDone.min) }));
+  const doneMin = (o) => (o.workTimerDone ? (Number(o.workTimerDone.min) || 0) + Object.values(o.workTimerDone.minBy || {}).reduce((a, v) => a + (Number(v) || 0), 0) : 0);
+  const pending = objs.filter((o) => doneMin(o) > 0).map((o) => ({ object_id: o.id, name: o.name || "Объект", minutes: doneMin(o) }));
   const per = (p) => `${apiRub(p.earned)}${withTeam && p.mine !== p.earned ? " (мне " + apiRub(p.mine) + ")" : ""}${p.minutes ? " · " + apiDur(p.minutes) : ""}${p.per_hour ? " · " + apiRub(p.per_hour) + "/ч" : ""}`;
   const lines = [
     ...running.map((r) => `⏱ ${r.name} — ${r.clock}${r.team.length > 1 ? ` · делает: ${r.who}` : ""}${r.works ? ` · работ: ${r.works} на ${apiRub(r.earned)} · после последней ${r.since_last}` : ""}`),
@@ -817,18 +818,21 @@ function apiShareTime(rows, total) {
   });
   return rows;
 }
-function apiWorkLap(obj, text, services, now, tz) {
+// у каждого в бригаде свой отсчёт (работа идёт параллельно): last — мой, lasts[id] — напарника
+function apiLastOf(t, who) { return who ? Number(t.lasts && t.lasts[who]) || Number(t.start) : Number(t.last) || Number(t.start); }
+function apiWorkLap(obj, text, services, now, tz, who) {
   const t = obj.workTimer;
+  if (who === undefined) who = (t && t.who) || "";
   const rows = String(text || "").split("\n").map((l) => apiWorkParseLine(l, services)).filter(Boolean).slice(0, 30);
   if (!t || !t.start || !rows.length) return [];
   if (!t.sid) apiSessionOpen(obj, t.start);
-  const last = Number(t.last) || Number(t.start), seg = Math.max(0, Math.round((now - last) / 60000)), date = apiLocalDay(now, tz);
+  const last = apiLastOf(t, who), seg = Math.max(0, Math.round((now - last) / 60000)), date = apiLocalDay(now, tz);
   const recs = rows.map((r, i) => ({ id: "w" + now.toString(36) + i + Math.random().toString(36).slice(2, 5), at: now + i, date, name: r.name, unit: r.unit,
-    qty: apiWorkNum(r.qty) || "", price: r.price === "" ? "" : apiWorkNum(r.price), sum: "", min: r.min, note: "", sid: t.sid, from: last, to: now, ...(t.who ? { who: t.who } : {}) }));
+    qty: apiWorkNum(r.qty) || "", price: r.price === "" ? "" : apiWorkNum(r.price), sum: "", min: r.min, note: "", sid: t.sid, from: last, to: now, ...(who ? { who } : {}) }));
   apiShareTime(recs, Math.max(0, seg - recs.reduce((a, w) => a + (Number(w.min) || 0), 0))); // своё время из строки — из отрезка, остаток — остальным
   recs.forEach((w) => { if (!w.shared) delete w.shared; });
   obj.works = [...(Array.isArray(obj.works) ? obj.works : []), ...recs];
-  t.last = now;
+  if (who) t.lasts = { ...(t.lasts || {}), [who]: now }; else t.last = now;
   return recs;
 }
 // смена: работы одного запуска таймера — с какого и до какого времени
@@ -3782,7 +3786,7 @@ async function handleApi(request, env, url) {
           if (!m && w && w !== "я") return apiJson({ error: "Нет такого напарника: " + body.who, text: "Нет напарника «" + body.who + "»" }, 404);
           o.workTimer.who = m ? m.id : "";
         }
-        const recs = apiWorkLap(o, str(body.text || "", 3000), space.data.services, now, tz);
+        const recs = apiWorkLap(o, str(body.text || "", 3000), space.data.services, now, tz, o.workTimer.who || "");
         if (!recs.length) return apiJson({ error: "Пустая строка: напишите работу и количество, например «Шпаклёвка стен 12 м²»", text: "Не понял, что записать" }, 400);
         o.workTimerAt = now;
         const all = apiSessionWorks(o, o.workTimer.sid);
@@ -3793,19 +3797,24 @@ async function handleApi(request, env, url) {
         if (!run.length) return apiJson({ ...apiTimerView(objs, now, tz), text: "Таймер не запущен" });
         text = "⏹ " + run.map((o) => {
           const t = o.workTimer, sid = t.sid || apiSessionOpen(o, t.start), laps = apiSessionWorks(o, sid);
-          const last = Number(t.last) || Number(t.start), rest = Math.round((now - last) / 60000), total = Math.max(1, Math.round((now - t.start) / 60000));
+          const total = Math.max(1, Math.round((now - t.start) / 60000));
+          // время без записанной работы у каждого, кто работал (я — всегда): после его последней работы, а без работ — весь запуск
+          const restBy = {};
+          new Set(["", ...laps.map((w) => w.who || "")]).forEach((id) => { const m = Math.round((now - apiLastOf(t, id)) / 60000); if (m >= 1) restBy[id] = m; });
+          const rest = restBy[""] || 0, partners = Object.entries(restBy).filter(([id]) => id);
           apiSessionClose(o, sid, now);
-          // время без записанной работы (после последней или весь запуск) — ждёт в кабинете
-          if (rest >= 1 || !laps.length) {
-            const done = o.workTimerDone && Number(o.workTimerDone.min) > 0 ? o.workTimerDone : null;
-            const min = laps.length ? rest : total;
-            o.workTimerDone = { min: (done ? Number(done.min) : 0) + min, start: done ? done.start : last, end: now, from: entry.name, sid: done && done.sid ? done.sid : sid };
+          if (Object.keys(restBy).length || !laps.length) {
+            const done = o.workTimerDone && typeof o.workTimerDone === "object" ? o.workTimerDone : null;
+            const minBy = { ...((done && done.minBy) || {}) };
+            partners.forEach(([id, m]) => { minBy[id] = (Number(minBy[id]) || 0) + m; });
+            o.workTimerDone = { min: (done ? Number(done.min) || 0 : 0) + (laps.length ? rest : total), ...(Object.keys(minBy).length ? { minBy } : {}),
+              start: done ? done.start : t.start, end: now, from: entry.name, sid: done && done.sid ? done.sid : sid };
           }
           delete o.workTimer;
           o.workTimerAt = now;
           const sum = laps.reduce((a, w) => a + apiWorkSum(w), 0);
           return `${o.name || "Объект"}, ${apiTimeOfDay(t.start, tz)}–${apiTimeOfDay(now, tz)}: ${apiDur(total)}`
-            + (laps.length ? `, работ: ${laps.length} на ${apiRub(sum)}` + (rest >= 1 ? `. После последней работы ${apiDur(rest)} — допишите в кабинете` : "") : ". Работы допишите в кабинете — время уже стоит");
+            + (laps.length ? `, работ: ${laps.length} на ${apiRub(sum)}` + (Object.keys(restBy).length ? `. Не записано после последней работы: ${Object.entries(restBy).map(([id, m]) => (partners.length ? apiWhoName(o, id) + " — " : "") + apiDur(m)).join(", ")} — допишите в кабинете` : "") : ". Работы допишите в кабинете — время уже стоит");
         }).join("\n");
       }
       bumpRev(record, space.key, ["objects"]);

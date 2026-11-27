@@ -1396,3 +1396,8 @@ body.assistant-open .add-toast { z-index: 99; }
 .work-share-row { display: flex; justify-content: space-between; padding: 4px 0; }
 .work-share-row.me b { color: #3d1a5e; }
 .work-form select { width: 100%; }
+.work-lap-person { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #cfe3d6; }
+.work-lap-person:last-of-type { border-bottom: 0; }
+.work-lap-who { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.work-lap-who b { font-size: 16px; }
+.work-lap-who span { font-size: 13px; color: #5d6878; }

@@ -913,7 +913,7 @@ test('таймер: работы по ходу («круги») — отрезк
     const v = await call('GET', '/api/v1/timer', { key });
     assert.match(v.data.text, /⏱ Горянка — 2:10 · работ: 3 на 8 400 ₽ · после последней 0:30/);
     at(145); const sp = await call('POST', '/api/v1/timer/stop', { key });
-    assert.match(sp.data.text, /⏹ Горянка, 09:00–11:25: 2 ч 25 мин, работ: 3 на 8 400 ₽\. После последней работы 45 мин/);
+    assert.match(sp.data.text, /⏹ Горянка, 09:00–11:25: 2 ч 25 мин, работ: 3 на 8 400 ₽\. Не записано после последней работы: 45 мин/);
     const o = (await call('GET', '/appdata', { token })).data.data.objects[0];
     assert.strictEqual(o.address, 'Горянка, 1');
     const ws = o.works.map(w => [w.name, w.min, w.sid, new Date(w.from).toISOString().slice(11, 16), new Date(w.to).toISOString().slice(11, 16)]);
@@ -950,4 +950,24 @@ test('таймер с бригадой: кто делает работу по х
   assert.strictEqual(v.data.today.mine, 3000, 'сдельно: мне — только мои работы');
   assert.match(v.data.text, /Сегодня: 6 000 ₽ \(мне 3 000 ₽\)/);
   assert.match(v.data.text, /делает: Я/);
+});
+
+test('таймер с бригадой: параллельные списки — у каждого свой отсчёт, на «Стоп» — остаток по людям', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Виджет' } });
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, services: [{ name: 'Шпаклёвка стен', price: 500 }],
+    objects: [{ id: 'o1', name: 'Горянка', works: [], workTeam: { mode: 'piece', members: [{ id: 'p1', name: 'Саша' }] } }] } });
+  const realNow = Date.now, t0 = Date.UTC(2026, 10, 27, 6, 0), at = m => { Date.now = () => t0 + m * 60000; };
+  try {
+    at(0); await call('POST', '/api/v1/timer/start', { key, body: { object: 'Горянка' } });
+    at(60); await call('POST', '/api/v1/timer/work', { key, body: { text: 'Шпаклёвка стен 6 м²', who: 'Я' } });
+    at(90); await call('POST', '/api/v1/timer/work', { key, body: { text: 'Шпаклёвка стен 8 м²', who: 'Саша' } });
+    at(100); await call('POST', '/api/v1/timer/work', { key, body: { text: 'Шпаклёвка стен 2 м²', who: 'Я' } });
+    at(130); const sp = await call('POST', '/api/v1/timer/stop', { key });
+    assert.match(sp.data.text, /Не записано после последней работы: Я — 30 мин, Саша — 40 мин/);
+    const o = (await call('GET', '/appdata', { token })).data.data.objects[0];
+    assert.deepStrictEqual(o.works.map(w => [w.who || '', w.min]), [['', 60], ['p1', 90], ['', 40]], 'у Саши отсчёт от запуска, у меня — от моей прошлой');
+    assert.deepStrictEqual([o.workTimerDone.min, o.workTimerDone.minBy], [30, { p1: 40 }]);
+  } finally { Date.now = realNow; }
 });
