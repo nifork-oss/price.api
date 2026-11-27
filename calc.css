@@ -1365,3 +1365,39 @@ body.assistant-open .add-toast { z-index: 99; }
 .work-w-help ol { padding-left: 20px; margin: 8px 0; }
 .work-w-help li { margin-bottom: 6px; }
 .work-w-url { display: block; margin: 3px 0; padding: 4px 6px; background: #f3f5f8; border-radius: 6px; font-size: 12px; word-break: break-all; }
+/* работы по ходу таймера и смены */
+.work-lap { flex: 1 1 100%; margin-top: 8px; text-align: left; }
+.work-lap-list { background: #fff; border: 1px solid #ece3c2; border-radius: 10px; padding: 4px 10px; margin-bottom: 6px; }
+.work-lap-row { display: grid; grid-template-columns: 6.6em minmax(0, 1fr) auto; gap: 8px; padding: 5px 0; font-size: 14px; border-bottom: 1px solid #f3efe0; }
+.work-lap-row:last-child { border-bottom: 0; }
+.work-lap-t { color: #6b7280; font-variant-numeric: tabular-nums; }
+.work-lap-m { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.work-lap-now { color: #8a6d00; }
+.work-lap textarea { padding: 10px; border: 1px solid #d5dbe2; border-radius: 8px; font: inherit; font-size: 16px; box-sizing: border-box; }
+.work-lap .hc-btn { min-height: 42px; }
+.work-sess { margin: 6px 0 10px; border-left: 3px solid #f2c230; padding-left: 8px; }
+.work-sess-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: #5d6878; padding: 4px 0; }
+/* бригада */
+.work-drow.has-who { grid-template-areas: "n n n del" "q u t t" "s s w w"; }
+.work-drow .work-dwho { grid-area: w; }
+.work-team { margin: 12px 0; padding: 10px 12px; border: 1px solid #e3e7ec; border-radius: 12px; }
+.work-team summary { font-weight: 700; cursor: pointer; }
+.work-team-modes { margin: 10px 0 4px; }
+.work-team-list { margin: 8px 0; }
+.work-team-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f2f5; }
+.work-team-row span { flex: 1; font-weight: 600; }
+.work-team-row input { width: 4.5em; padding: 6px 8px; border: 1px solid #d5dbe2; border-radius: 8px; font-size: 16px; }
+.work-team-row .work-ddel { width: 34px; height: 34px; }
+.work-team .purchase-add input { flex: 1; min-width: 0; padding: 10px; border: 1px solid #d5dbe2; border-radius: 8px; font-size: 16px; }
+.work-who { align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.work-who > span { font-size: 13px; color: #5d6878; margin-right: 4px; }
+.work-shares { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: #f6effc; }
+.work-shares h4 { margin: 0 0 6px; font-size: 14px; color: #5b2a86; }
+.work-share-row { display: flex; justify-content: space-between; padding: 4px 0; }
+.work-share-row.me b { color: #3d1a5e; }
+.work-form select { width: 100%; }
+.work-lap-person { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dashed #cfe3d6; }
+.work-lap-person:last-of-type { border-bottom: 0; }
+.work-lap-who { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.work-lap-who b { font-size: 16px; }
+.work-lap-who span { font-size: 13px; color: #5d6878; }

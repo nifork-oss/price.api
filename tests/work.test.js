@@ -89,3 +89,52 @@ test('виджет таймера: идущие таймеры и порядок
   assert.deepStrictEqual(run(`(${c}, workQuickObjects().map(o => o.id))`), ['b', 'd', 'a']);
   assert.deepStrictEqual(run('workRunning().map(o => o.id)'), ['b']);
 });
+
+test('работа по ходу таймера: отрезок от прошлой работы, своё время из строки — из отрезка', () => {
+  const run = setup();
+  const t0 = Date.UTC(2026, 10, 27, 6, 0);
+  const recs = run(`workLapRecords({ start: ${t0}, last: ${t0 + 70 * 60000}, sid: 's1' }, "Шпаклёвка стен 10 м²\\nУборка 20 мин", ${t0 + 130 * 60000})`);
+  assert.deepStrictEqual(recs.map(w => [w.name, w.min, w.sid, w.from, w.to]), [
+    ['Шпаклёвка стен', 40, 's1', t0 + 70 * 60000, t0 + 130 * 60000],
+    ['Уборка', 20, 's1', t0 + 70 * 60000, t0 + 130 * 60000]]);
+  assert.deepStrictEqual(run('workLapRecords({ start: 1, sid: "s1" }, "  ", 100)'), []);
+});
+
+test('записи дня: работы смены — блоком с временем «с — до» и суммой', () => {
+  const run = setup();
+  const t0 = new Date(2026, 10, 27, 9, 0).getTime(), m = 60000;
+  const html = run(`workDayRowsHtml({ id: "o1", workSessions: [{ id: "s1", from: ${t0}, to: ${t0 + 390 * m} }] }, [
+    { id: "a", sid: "s1", at: 2, name: "Покраска стен", qty: 10, unit: "м²", price: 300, sum: "", min: 60, from: ${t0 + 70 * m}, to: ${t0 + 130 * m} },
+    { id: "b", sid: "s1", at: 1, name: "Шпаклёвка стен", qty: 12, unit: "м²", price: 500, sum: "", min: 70, from: ${t0}, to: ${t0 + 70 * m} },
+    { id: "c", at: 3, name: "Уборка", sum: 1000, min: 0 }])`);
+  assert.match(html, /🕘 09:00–15:30 · 6 ч 30 мин · работ: 2<\/span><b>9[\s ]000 ₽/);
+  assert.ok(html.indexOf('Шпаклёвка') < html.indexOf('Покраска'), 'внутри смены — по порядку');
+  assert.match(html, /09:00–10:10 · 12 м² · 1 ч 10 мин/);
+  assert.match(html, /Уборка/);
+});
+
+test('бригада: доход поровну, по процентам и сдельно', () => {
+  const run = setup();
+  const obj = mode => `({ id: "o1", workTeam: { mode: "${mode}", members: [{ id: "p1", name: "Саша", pct: 30 }, { id: "p2", name: "Миша", pct: 20 }] } })`;
+  const w = '{ price: 500, qty: 12, sum: "" }', w2 = '{ price: 300, qty: 10, sum: "", who: "p1" }';
+  assert.deepStrictEqual(run(`workShares(${obj('equal')}, ${w})`), { '': 2000, p1: 2000, p2: 2000 });
+  assert.deepStrictEqual(run(`workShares(${obj('pct')}, ${w})`), { '': 3000, p1: 1800, p2: 1200 });
+  assert.deepStrictEqual(run(`workShares(${obj('piece')}, ${w2})`), { p1: 3000 });
+  assert.deepStrictEqual(run(`workShares({ id: "o1" }, ${w})`), { '': 6000 }, 'без бригады — всё мне');
+  const rows = run(`(() => { const o = ${obj('piece')}; return workSharesTotal([${w}, ${w2}], () => o); })()`);
+  assert.deepStrictEqual(rows.map(r => [r.name, r.sum]), [['Я', 6000], ['Саша', 3000]]);
+  // работа по ходу записывается на того, кто сейчас делает
+  const recs = run('workLapRecords({ start: 1, last: 1, sid: "s1", who: "p1" }, "Шпаклёвка стен 2 м²", 600000)');
+  assert.strictEqual(recs[0].who, 'p1');
+});
+
+test('бригада: параллельные отсчёты и общее время по людям в списке', () => {
+  const run = setup();
+  const m = 60000;
+  const recs = run(`workLapRecords({ start: 1, last: ${1 + 60 * m}, lasts: { p1: ${1 + 20 * m} }, sid: "s1" }, "Шпаклёвка стен 2 м²", ${1 + 90 * m}, "p1")`);
+  assert.deepStrictEqual([recs[0].who, recs[0].min], ['p1', 70]);
+  const d = run(`workDraftRecords({ date: "2026-11-27", min: 30, minBy: { p1: 40 }, rows: [
+    { name: "Шпаклёвка стен", qty: "2", unit: "м²", price: 500, sum: "", min: 0 },
+    { name: "Монтаж молдингов", qty: "4", unit: "пог. м", price: 500, sum: "", min: 0, who: "p1" }] }, 1000)`);
+  assert.deepStrictEqual(d.map(w => [w.who || '', w.min]), [['', 30], ['p1', 40]]);
+});
