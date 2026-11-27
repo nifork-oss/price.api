@@ -112,3 +112,18 @@ test('записи дня: работы смены — блоком с врем�
   assert.match(html, /09:00–10:10 · 12 м² · 1 ч 10 мин/);
   assert.match(html, /Уборка/);
 });
+
+test('бригада: доход поровну, по процентам и сдельно', () => {
+  const run = setup();
+  const obj = mode => `({ id: "o1", workTeam: { mode: "${mode}", members: [{ id: "p1", name: "Саша", pct: 30 }, { id: "p2", name: "Миша", pct: 20 }] } })`;
+  const w = '{ price: 500, qty: 12, sum: "" }', w2 = '{ price: 300, qty: 10, sum: "", who: "p1" }';
+  assert.deepStrictEqual(run(`workShares(${obj('equal')}, ${w})`), { '': 2000, p1: 2000, p2: 2000 });
+  assert.deepStrictEqual(run(`workShares(${obj('pct')}, ${w})`), { '': 3000, p1: 1800, p2: 1200 });
+  assert.deepStrictEqual(run(`workShares(${obj('piece')}, ${w2})`), { p1: 3000 });
+  assert.deepStrictEqual(run(`workShares({ id: "o1" }, ${w})`), { '': 6000 }, 'без бригады — всё мне');
+  const rows = run(`(() => { const o = ${obj('piece')}; return workSharesTotal([${w}, ${w2}], () => o); })()`);
+  assert.deepStrictEqual(rows.map(r => [r.name, r.sum]), [['Я', 6000], ['Саша', 3000]]);
+  // работа по ходу записывается на того, кто сейчас делает
+  const recs = run('workLapRecords({ start: 1, last: 1, sid: "s1", who: "p1" }, "Шпаклёвка стен 2 м²", 600000)');
+  assert.strictEqual(recs[0].who, 'p1');
+});

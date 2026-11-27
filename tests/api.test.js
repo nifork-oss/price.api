@@ -835,7 +835,7 @@ test('таймер работ через API (виджет): запуск по �
 
   let v = await call('GET', '/api/v1/timer', { key });
   assert.strictEqual(v.status, 200);
-  assert.deepStrictEqual(v.data.today, { earned: 11000, minutes: 240, per_hour: 2500 });
+  assert.deepStrictEqual(v.data.today, { earned: 11000, minutes: 240, per_hour: 2500, mine: 11000 });
   assert.deepStrictEqual(v.data.names, ['Горянка', 'Дача'], 'недавние сверху');
   assert.match(v.data.text, /Сегодня: 11 000 ₽ · 4 ч · 2 500 ₽\/ч/);
 
@@ -927,4 +927,27 @@ test('таймер: работы по ходу («круги») — отрезк
     assert.deepStrictEqual([o.workTimerDone.min, o.workTimerDone.sid], [45, sid], 'остаток ждёт записи в той же смене');
     assert.strictEqual(o.workTimer, undefined);
   } finally { Date.now = realNow; }
+});
+
+test('таймер с бригадой: кто делает работу по ходу, «мне» в заработке', async () => {
+  const { call, token } = await setup();
+  const { data: { key } } = await call('POST', '/api-keys', { token, body: { name: 'Виджет' } });
+  const page = await call('GET', '/appdata', { token });
+  await call('PUT', '/appdata', { token, body: { baseRev: page.data.rev, services: [{ name: 'Шпаклёвка стен', price: 500 }],
+    objects: [{ id: 'o1', name: 'Горянка', works: [], workTeam: { mode: 'piece', members: [{ id: 'p1', name: 'Саша' }] } }] } });
+  await call('POST', '/api/v1/timer/start', { key, body: { object: 'Горянка' } });
+  let v = await call('GET', '/api/v1/timer', { key });
+  assert.deepStrictEqual([v.data.running[0].team, v.data.running[0].who], [['Я', 'Саша'], 'Я']);
+  assert.strictEqual((await call('POST', '/api/v1/timer/work', { key, body: { text: 'Шпаклёвка стен 2 м²', who: 'Петя' } })).status, 404);
+  const w = await call('POST', '/api/v1/timer/work', { key, body: { text: 'Шпаклёвка стен 2 м²', who: 'саша' } });
+  assert.match(w.data.text, /👤 Саша/);
+  await call('POST', '/api/v1/timer/work', { key, body: { text: 'Шпаклёвка стен 4 м²' } }); // остаётся Саша
+  await call('POST', '/api/v1/timer/work', { key, body: { text: 'Шпаклёвка стен 6 м²', who: 'Я' } });
+  const o = (await call('GET', '/appdata', { token })).data.data.objects[0];
+  assert.deepStrictEqual(o.works.map(x => x.who || ''), ['p1', 'p1', '']);
+  v = await call('GET', '/api/v1/timer', { key });
+  assert.strictEqual(v.data.today.earned, 6000);
+  assert.strictEqual(v.data.today.mine, 3000, 'сдельно: мне — только мои работы');
+  assert.match(v.data.text, /Сегодня: 6 000 ₽ \(мне 3 000 ₽\)/);
+  assert.match(v.data.text, /делает: Я/);
 });

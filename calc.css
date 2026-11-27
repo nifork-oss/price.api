@@ -1377,3 +1377,22 @@ body.assistant-open .add-toast { z-index: 99; }
 .work-lap .hc-btn { min-height: 42px; }
 .work-sess { margin: 6px 0 10px; border-left: 3px solid #f2c230; padding-left: 8px; }
 .work-sess-head { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: #5d6878; padding: 4px 0; }
+/* бригада */
+.work-drow.has-who { grid-template-areas: "n n n del" "q u t t" "s s w w"; }
+.work-drow .work-dwho { grid-area: w; }
+.work-team { margin: 12px 0; padding: 10px 12px; border: 1px solid #e3e7ec; border-radius: 12px; }
+.work-team summary { font-weight: 700; cursor: pointer; }
+.work-team-modes { margin: 10px 0 4px; }
+.work-team-list { margin: 8px 0; }
+.work-team-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f0f2f5; }
+.work-team-row span { flex: 1; font-weight: 600; }
+.work-team-row input { width: 4.5em; padding: 6px 8px; border: 1px solid #d5dbe2; border-radius: 8px; font-size: 16px; }
+.work-team-row .work-ddel { width: 34px; height: 34px; }
+.work-team .purchase-add input { flex: 1; min-width: 0; padding: 10px; border: 1px solid #d5dbe2; border-radius: 8px; font-size: 16px; }
+.work-who { align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.work-who > span { font-size: 13px; color: #5d6878; margin-right: 4px; }
+.work-shares { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: #f6effc; }
+.work-shares h4 { margin: 0 0 6px; font-size: 14px; color: #5b2a86; }
+.work-share-row { display: flex; justify-content: space-between; padding: 4px 0; }
+.work-share-row.me b { color: #3d1a5e; }
+.work-form select { width: 100%; }
